@@ -6,6 +6,9 @@ import polars as pl
 
 from geopolars.geometry import affine, centroid, construct
 
+# bound directly: `geopolars.geometry.area` is the function, not the module.
+from geopolars.geometry.area import area as _area
+
 
 @pl.api.register_expr_namespace("geometry")
 class Geometry:
@@ -32,3 +35,6 @@ class Geometry:
 
     def coordinate_centroid(self) -> pl.Expr:
         return centroid.coordinate_centroid(self._expr)
+
+    def area(self) -> pl.Expr:
+        return _area(self._expr)

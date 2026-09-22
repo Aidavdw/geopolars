@@ -5,6 +5,7 @@ here
 """
 
 from geopolars.geometry.affine import translate
+from geopolars.geometry.area import area
 from geopolars.geometry.centroid import coordinate_centroid
 from geopolars.geometry.construct import (
     linestring,
@@ -24,6 +25,7 @@ from geopolars.geometry.construct import (
 )
 
 __all__ = [
+    "area",
     "coordinate_centroid",
     "linestring",
     "linestring_from_columns",

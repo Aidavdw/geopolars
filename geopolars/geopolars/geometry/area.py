@@ -1,0 +1,87 @@
+"""The area a geometry encloses.
+
+Planar area, in whatever units the coordinates are in. Nothing here knows about
+a CRS, so this is the area on the flat plane the coordinates lie in, not the
+area on the ellipsoid: for degrees (EPSG:4326) the number comes out in square
+degrees, which is not a unit anyone wants. Project first.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import polars as pl
+
+from geopolars.datatypes import GEOMETRIES, GeoPolygon
+from geopolars.geometry._dispatch import by_geometry
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from geopolars._typing import IntoExprColumn
+    from geopolars.datatypes import GeoArrowType
+    from geopolars.geometry._dispatch import Where
+
+
+def _twice_signed(ring: pl.Expr) -> pl.Expr:
+    """Twice the signed area of one closed ring, positive when it runs CCW."""
+    # Use shift(-1) so we don't count the repeated last coordinate
+    x = pl.element().struct.field("x")
+    y = pl.element().struct.field("y")
+    dx, dy = x - x.first(), y - y.first()
+    return ring.list.eval(dx * dy.shift(-1) - dx.shift(-1) * dy).list.sum()
+
+
+def _polygon(column: pl.Expr) -> pl.Expr:
+    """A polygon's area: its exterior ring, less the holes inside it."""
+    # Per ring, unsigned
+    # First ring is the 'positive' area,
+    # everything after that is a hole.
+    rings = column.ext.storage().list.eval(_twice_signed(pl.element()).abs())
+
+    # exterior - holes == first - (sum - first).
+    return (2 * rings.list.first().fill_null(0.0) - rings.list.sum()) / 2
+
+
+def _branches(where: Where) -> Iterator[pl.Expr]:
+    """One area per geometry the column could turn out to hold."""
+    column = where(*GeoPolygon.dimensions())
+    if column is not None:
+        yield _polygon(column)
+
+    # Everything else has no defined area.
+    flat: list[type[GeoArrowType]] = [g for g in GEOMETRIES if g is not GeoPolygon]
+    column = where(*(concrete for g in flat for concrete in g.dimensions()))
+    if column is not None:
+        yield pl.when(column.is_not_null()).then(pl.lit(0.0, dtype=pl.Float64))
+
+
+def area(geometry: IntoExprColumn) -> pl.Expr:
+    """The planar area a geometry encloses, as an `f64`.
+
+
+    Only a polygon actually encloses something.
+    This also considers its holes.
+    'z' and 'm' are ignored.
+
+    This calculation assumes that the (closed) polygon is not self-intersecting.
+
+    An empty polygon, as well as other types
+    (that do not have an 'area') return '0.0'.
+
+    | in                     | out          |
+    |------------------------|--------------|
+    | `PolygonXY`            | `0.0` and up |
+    | `PolygonXYZ`           | `0.0` and up |
+    | `LineStringXY`         | `0.0`        |
+    | `PointXYZM`            | `0.0`        |
+
+    A self-intersecting ring is not a valid polygon, and the parts of it that
+    wind the other way will cancel rather than add.
+
+    ```python
+    df.select(geometry.area("parcel"))
+    ```
+    """
+    # CHECK: CCW/CW orientation of polygon should not matter, area should be positive only.
+    return by_geometry(geometry, _branches)
