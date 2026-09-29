@@ -8,7 +8,7 @@ from polars.exceptions import ColumnNotFoundError, StructFieldNotFoundError
 from polars.testing import assert_frame_equal
 
 import geopolars as gpl
-from geopolars import geometry
+from geopolars import geo
 from geopolars.datatypes import (
     GeoPoint,
     LineStringXY,
@@ -48,7 +48,7 @@ def test_a_point_is_its_own_centroid(
     coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = coords.select(dimension.point())
-    out = df.select(geometry.coordinate_centroid("point"))
+    out = df.select(geo.coordinate_centroid("point"))
 
     assert out.schema["point"] == dimension.point_dtype()
     assert_frame_equal(coordinates(out), coordinates(df))
@@ -58,7 +58,7 @@ def test_a_linestring_averages_its_vertices(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.lines(line_coords)
-    out = df.select(geometry.coordinate_centroid("line"))
+    out = df.select(geo.coordinate_centroid("line"))
 
     assert_frame_equal(
         coordinates(out, "line"), _mean_per(line_coords, "line", dimension)
@@ -70,7 +70,7 @@ def test_a_polygon_averages_the_vertices_of_all_its_rings(
 ) -> None:
     """Holes count as much as the exterior ring: every coordinate counts once."""
     df = dimension.polygons(ring_coords)
-    out = df.select(geometry.coordinate_centroid("polygon"))
+    out = df.select(geo.coordinate_centroid("polygon"))
 
     assert_frame_equal(
         coordinates(out, "polygon"),
@@ -82,9 +82,9 @@ def test_the_coordinate_that_closes_a_ring_is_left_out() -> None:
     """A square's four corners average to its middle. Counting the repeat that
     closes the ring would pull the centroid towards wherever it starts."""
     df = pl.DataFrame({"rings": [[_SQUARE]]}, schema={"rings": _XY_RINGS}).select(
-        geometry.polygon("rings").alias("polygon")
+        geo.polygon("rings").alias("polygon")
     )
-    out = df.select(geometry.coordinate_centroid("polygon"))
+    out = df.select(geo.coordinate_centroid("polygon"))
 
     assert_frame_equal(
         coordinates(out, "polygon"), pl.DataFrame({"x": [2.0], "y": [2.0]})
@@ -96,8 +96,8 @@ def test_a_closed_linestring_keeps_every_vertex() -> None:
     vertex is there to close it, so all five are averaged."""
     df = pl.DataFrame(
         {"vertices": [_SQUARE]}, schema={"vertices": _XY_VERTICES}
-    ).select(geometry.linestring("vertices").alias("line"))
-    out = df.select(geometry.coordinate_centroid("line"))
+    ).select(geo.linestring("vertices").alias("line"))
+    out = df.select(geo.coordinate_centroid("line"))
 
     assert_frame_equal(coordinates(out, "line"), pl.DataFrame({"x": [1.6], "y": [1.6]}))
 
@@ -105,8 +105,8 @@ def test_a_closed_linestring_keeps_every_vertex() -> None:
 def test_an_empty_ring_takes_nothing_with_it() -> None:
     df = pl.DataFrame(
         {"rings": [[_SQUARE, []], [[], _SQUARE]]}, schema={"rings": _XY_RINGS}
-    ).select(geometry.polygon("rings").alias("polygon"))
-    out = df.select(geometry.coordinate_centroid("polygon"))
+    ).select(geo.polygon("rings").alias("polygon"))
+    out = df.select(geo.coordinate_centroid("polygon"))
 
     # The square's four corners, whichever side of it the empty ring is on.
     assert_frame_equal(
@@ -119,8 +119,8 @@ def test_a_missing_ring_takes_the_whole_centroid_with_it() -> None:
     df = pl.DataFrame(
         {"polygon": [[_SQUARE, None]]}, schema={"polygon": _XY_RINGS}
     ).select(pl.col("polygon").ext.to(PolygonXY()))
-    whole = df.select(geometry.validate("polygon"))
-    out = whole.select(geometry.coordinate_centroid("polygon"))
+    whole = df.select(geo.validate("polygon"))
+    out = whole.select(geo.coordinate_centroid("polygon"))
 
     assert out["polygon"].is_null().to_list() == [True]
 
@@ -129,7 +129,7 @@ def test_a_multipoint_averages_its_points(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.multipoints(line_coords)
-    out = df.select(geometry.coordinate_centroid("multipoint"))
+    out = df.select(geo.coordinate_centroid("multipoint"))
 
     assert_frame_equal(
         coordinates(out, "multipoint"), _mean_per(line_coords, "line", dimension)
@@ -140,9 +140,9 @@ def test_a_multipoint_and_a_linestring_of_the_same_points_agree(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     multipoints = dimension.multipoints(line_coords).select(
-        geometry.coordinate_centroid("multipoint")
+        geo.coordinate_centroid("multipoint")
     )
-    lines = dimension.lines(line_coords).select(geometry.coordinate_centroid("line"))
+    lines = dimension.lines(line_coords).select(geo.coordinate_centroid("line"))
 
     assert_frame_equal(
         coordinates(multipoints, "multipoint"), coordinates(lines, "line")
@@ -153,9 +153,9 @@ def test_a_closed_multipoint_keeps_every_point() -> None:
     """A multipoint is not a ring: a repeated point is a point that is there
     twice, and it counts twice."""
     df = pl.DataFrame({"points": [_SQUARE]}, schema={"points": _XY_VERTICES}).select(
-        geometry.multipoint("points").alias("multipoint")
+        geo.multipoint("points").alias("multipoint")
     )
-    out = df.select(geometry.coordinate_centroid("multipoint"))
+    out = df.select(geo.coordinate_centroid("multipoint"))
 
     assert_frame_equal(
         coordinates(out, "multipoint"), pl.DataFrame({"x": [1.6], "y": [1.6]})
@@ -168,9 +168,9 @@ def test_an_empty_or_missing_multipoint_has_no_centroid(dimension: Dimension) ->
         schema={
             "points": pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
         },
-    ).select(geometry.multipoint("points").alias("multipoint"))
+    ).select(geo.multipoint("points").alias("multipoint"))
 
-    out = df.select(geometry.coordinate_centroid("multipoint"))
+    out = df.select(geo.coordinate_centroid("multipoint"))
 
     assert out["multipoint"].is_null().to_list() == [True, True]
 
@@ -179,7 +179,7 @@ def test_a_multilinestring_averages_the_vertices_of_all_its_parts(
     ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.multilinestrings(ring_coords)
-    out = df.select(geometry.coordinate_centroid("multilinestring"))
+    out = df.select(geo.coordinate_centroid("multilinestring"))
 
     assert_frame_equal(
         coordinates(out, "multilinestring"),
@@ -192,9 +192,9 @@ def test_a_multilinestrings_parts_are_not_rings(ring_coords: pl.DataFrame) -> No
     but a polygon drops the coordinate that closes each ring
     and a multilinestring keeps it."""
     multilines = XY.multilinestrings(ring_coords).select(
-        geometry.coordinate_centroid("multilinestring")
+        geo.coordinate_centroid("multilinestring")
     )
-    polygons = XY.polygons(ring_coords).select(geometry.coordinate_centroid("polygon"))
+    polygons = XY.polygons(ring_coords).select(geo.coordinate_centroid("polygon"))
 
     assert (
         coordinates(multilines, "multilinestring").rows()
@@ -206,9 +206,9 @@ def test_a_closed_multilinestring_keeps_every_vertex() -> None:
     """A part that happens to close is still a linestring:
     all five of the square's vertices are averaged"""
     df = pl.DataFrame({"lines": [[_SQUARE]]}, schema={"lines": _XY_RINGS}).select(
-        geometry.multilinestring("lines").alias("multilinestring")
+        geo.multilinestring("lines").alias("multilinestring")
     )
-    out = df.select(geometry.coordinate_centroid("multilinestring"))
+    out = df.select(geo.coordinate_centroid("multilinestring"))
 
     assert_frame_equal(
         coordinates(out, "multilinestring"), pl.DataFrame({"x": [1.6], "y": [1.6]})
@@ -225,9 +225,9 @@ def test_an_empty_or_missing_multilinestring_has_no_centroid(
                 pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
             )
         },
-    ).select(geometry.multilinestring("lines").alias("multilinestring"))
+    ).select(geo.multilinestring("lines").alias("multilinestring"))
 
-    out = df.select(geometry.coordinate_centroid("multilinestring"))
+    out = df.select(geo.coordinate_centroid("multilinestring"))
 
     assert out["multilinestring"].is_null().to_list() == [True, True, True]
 
@@ -255,7 +255,7 @@ def test_the_result_is_a_point_of_the_same_dimension(
         df = dimension.polygons(ring_coords)
     name = df.columns[0]
 
-    out = df.select(geometry.coordinate_centroid(name))
+    out = df.select(geo.coordinate_centroid(name))
 
     assert out.schema[name] == GeoPoint.of_dimension(dimension.coords)()
 
@@ -265,7 +265,7 @@ def test_m_is_averaged_like_any_other_coordinate(line_coords: pl.DataFrame) -> N
     to carry through here: the centroid of a trajectory carries the mean of the
     measures its vertices hold."""
     df = XYZM.lines(line_coords)
-    out = df.select(geometry.coordinate_centroid("line"))
+    out = df.select(geo.coordinate_centroid("line"))
 
     assert_frame_equal(
         coordinates(out, "line").select("m"),
@@ -281,9 +281,9 @@ def test_an_empty_or_missing_linestring_has_no_centroid(dimension: Dimension) ->
         schema={
             "vertices": pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
         },
-    ).select(geometry.linestring("vertices").alias("line"))
+    ).select(geo.linestring("vertices").alias("line"))
 
-    out = df.select(geometry.coordinate_centroid("line"))
+    out = df.select(geo.coordinate_centroid("line"))
 
     assert out["line"].is_null().to_list() == [True, True]
 
@@ -298,19 +298,19 @@ def test_an_empty_or_missing_polygon_has_no_centroid(dimension: Dimension) -> No
                 pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
             )
         },
-    ).select(geometry.polygon("rings").alias("polygon"))
+    ).select(geo.polygon("rings").alias("polygon"))
 
-    out = df.select(geometry.coordinate_centroid("polygon"))
+    out = df.select(geo.coordinate_centroid("polygon"))
 
     assert out["polygon"].is_null().to_list() == [True, True, True]
 
 
 def test_a_missing_point_has_no_centroid() -> None:
     df = pl.DataFrame({"x": [None, 1.0], "y": [2.0, 2.0]}).select(
-        geometry.point("x", "y").alias("point")
+        geo.point("x", "y").alias("point")
     )
 
-    out = df.select(geometry.coordinate_centroid("point"))
+    out = df.select(geo.coordinate_centroid("point"))
 
     assert out["point"].is_null().to_list() == [True, False]
 
@@ -323,9 +323,9 @@ def test_a_missing_coordinate_takes_the_whole_centroid_with_it() -> None:
         {"line": [[{"x": 0.0, "y": 0.0}, {"x": 2.0, "y": None}]]},
         schema={"line": _XY_VERTICES},
     ).select(pl.col("line").ext.to(LineStringXY()))
-    whole = df.select(geometry.validate("line"))
+    whole = df.select(geo.validate("line"))
 
-    out = whole.select(geometry.coordinate_centroid("line"))
+    out = whole.select(geo.coordinate_centroid("line"))
 
     assert out["line"].is_null().to_list() == [True]
 
@@ -336,36 +336,36 @@ def test_a_geometry_from_a_constructor_needs_no_validating(
     df = XY.lines(line_coords)
 
     assert_frame_equal(
-        df.select(geometry.validate("line")).select(
-            geometry.coordinate_centroid("line")
+        df.select(geo.validate("line")).select(
+            geo.coordinate_centroid("line")
         ),
-        df.select(geometry.coordinate_centroid("line")),
+        df.select(geo.coordinate_centroid("line")),
     )
 
 
 def test_every_form_of_column_gives_the_same_answer(line_coords: pl.DataFrame) -> None:
     """A name, a `pl.col(...)` and a `Series` are the same column."""
     df = XY.lines(line_coords)
-    expected = df.select(geometry.coordinate_centroid("line"))
+    expected = df.select(geo.coordinate_centroid("line"))
 
     assert_frame_equal(
-        df.select(geometry.coordinate_centroid(pl.col("line"))), expected
+        df.select(geo.coordinate_centroid(pl.col("line"))), expected
     )
-    assert_frame_equal(pl.select(geometry.coordinate_centroid(df["line"])), expected)
+    assert_frame_equal(pl.select(geo.coordinate_centroid(df["line"])), expected)
 
 
 def test_namespace_matches_the_functional_api(line_coords: pl.DataFrame) -> None:
     df = XY.lines(line_coords)
 
     assert_frame_equal(
-        df.select(gpl.col("line").geometry.coordinate_centroid()),
-        df.select(geometry.coordinate_centroid("line")),
+        df.select(gpl.col("line").geo.coordinate_centroid()),
+        df.select(geo.coordinate_centroid("line")),
     )
 
 
 def test_it_runs_on_the_streaming_engine(line_coords: pl.DataFrame) -> None:
     """The point of building this out of ordinary expressions."""
-    lf = XY.lines(line_coords).lazy().select(geometry.coordinate_centroid("line"))
+    lf = XY.lines(line_coords).lazy().select(geo.coordinate_centroid("line"))
 
     assert_frame_equal(lf.collect(engine="streaming"), lf.collect())
 
@@ -374,7 +374,7 @@ def test_rejects_a_plain_float_column() -> None:
     df = pl.DataFrame({"line": [1.0, 2.0]})
 
     with pytest.raises(StructFieldNotFoundError, match="expected a `geoarrow.point`"):
-        df.select(geometry.coordinate_centroid("line"))
+        df.select(geo.coordinate_centroid("line"))
 
 
 def test_rejects_a_bare_coordinate_struct() -> None:
@@ -382,13 +382,13 @@ def test_rejects_a_bare_coordinate_struct() -> None:
     df = pl.DataFrame({"point": [{"x": 1.0, "y": 2.0}]})
 
     with pytest.raises(StructFieldNotFoundError, match="expected a `geoarrow.point`"):
-        df.select(geometry.coordinate_centroid("point"))
+        df.select(geo.coordinate_centroid("point"))
 
 
 def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
     """The geometry is read off the dtype, so a bad column is a schema error and
     not something that waits until the data is there."""
-    lf = pl.LazyFrame({"lon": [1.0]}).select(geometry.coordinate_centroid("lon"))
+    lf = pl.LazyFrame({"lon": [1.0]}).select(geo.coordinate_centroid("lon"))
 
     with pytest.raises(StructFieldNotFoundError, match="expected a `geoarrow.point`"):
         lf.collect_schema()
@@ -406,25 +406,25 @@ def test_rejects_a_geometry_carrying_extension_metadata() -> None:
     )
 
     with pytest.raises(StructFieldNotFoundError, match="no extension metadata"):
-        df.select(geometry.coordinate_centroid("point"))
+        df.select(geo.coordinate_centroid("point"))
 
 
 def test_rejects_an_expression_that_is_not_a_column(line_coords: pl.DataFrame) -> None:
     """A chained expression has no dtype until the plan is resolved, and by then
     the expression has to have been built."""
-    translated = gpl.col("line").geometry.translate(1.0, 1.0)
+    translated = gpl.col("line").geo.translate(1.0, 1.0)
 
     with pytest.raises(TypeError, match="expected a column name"):
-        XY.lines(line_coords).select(geometry.coordinate_centroid(translated))
+        XY.lines(line_coords).select(geo.coordinate_centroid(translated))
 
 
 def test_rejects_a_series_that_is_not_a_geometry() -> None:
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
-        pl.select(geometry.coordinate_centroid(pl.Series("line", [1.0])))
+        pl.select(geo.coordinate_centroid(pl.Series("line", [1.0])))
 
 
 def test_rejects_a_column_that_is_not_there() -> None:
     df = pl.DataFrame({"a": [1.0]})
 
     with pytest.raises(ColumnNotFoundError, match="line"):
-        df.select(geometry.coordinate_centroid("line"))
+        df.select(geo.coordinate_centroid("line"))

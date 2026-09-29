@@ -1,16 +1,16 @@
-"""The `geometry` expression namespace."""
+"""The `geo` expression namespace."""
 
 from __future__ import annotations
 
 import polars as pl
 
-from geopolars.geometry import affine, centroid, construct
+from geopolars.geo import affine, centroid, construct
 
-# bound directly: `geopolars.geometry.area` is the function, not the module.
-from geopolars.geometry.area import area as _area
+# bound directly: `geopolars.geo.area` is the function, not the module.
+from geopolars.geo.area import area as _area
 
 
-@pl.api.register_expr_namespace("geometry")
+@pl.api.register_expr_namespace("geo")
 class Geometry:
     def __init__(self, expr: pl.Expr):
         self._expr = expr

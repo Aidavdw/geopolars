@@ -11,7 +11,7 @@ from geopolars import (
     LineStringXYZ,
     LineStringXYZM,
     PolygonXY,
-    geometry,
+    geo,
 )
 
 df = pl.DataFrame(
@@ -35,15 +35,15 @@ print(f"We start with one row per vertex: {df}")
 # `.implode()` inside it is what hands a whole group over as the one list a
 # linestring is made of.
 lines = df.group_by("route", maintain_order=True).agg(
-    xy=geometry.linestring_from_vertices(geometry.point("lon", "lat").implode()),
-    xyz=geometry.linestring_from_vertices(
-        geometry.point("lon", "lat", z="elevation").implode()
+    xy=geo.linestring_from_vertices(geo.point("lon", "lat").implode()),
+    xyz=geo.linestring_from_vertices(
+        geo.point("lon", "lat", z="elevation").implode()
     ),
-    xym=geometry.linestring_from_vertices(
-        geometry.point("lon", "lat", m="distance").implode()
+    xym=geo.linestring_from_vertices(
+        geo.point("lon", "lat", m="distance").implode()
     ),
-    xyzm=geometry.linestring_from_vertices(
-        geometry.point("lon", "lat", z="elevation", m="distance").implode()
+    xyzm=geo.linestring_from_vertices(
+        geo.point("lon", "lat", z="elevation", m="distance").implode()
     ),
 )
 print(f"Grouping the vertices gives linestrings: {lines}")
@@ -64,13 +64,13 @@ print("  a list of PointXYZ ->", repr(lines.schema["xyz"]), "\n")
 
 print("Vertices are one way in. Coordinates that are already grouped are another:")
 print("pass a column per axis, exactly as to `point`, and skip the vertices.")
-print("`geometry.linestring` picks between the two by how you call it.")
+print("`geo.linestring` picks between the two by how you call it.")
 grouped = df.group_by("route", maintain_order=True).agg("lon", "lat", "elevation")
 print(grouped)
 direct = grouped.select(
     "route",
-    xy=geometry.linestring_from_columns("lon", "lat"),
-    xyz=geometry.linestring_from_columns("lon", "lat", z="elevation"),
+    xy=geo.linestring_from_columns("lon", "lat"),
+    xyz=geo.linestring_from_columns("lon", "lat", z="elevation"),
 )
 print(direct)
 print("the same lines:", direct["xy"].equals(lines["xy"]), "\n")
@@ -81,7 +81,7 @@ print("  ", repr(direct.schema["xy"]), "vs", repr(direct.schema["xyz"]), "\n")
 print("The coordinate columns have to nest the same way, or there are no")
 print("vertices to be had.")
 try:
-    grouped.select(geometry.linestring_from_columns("lon", pl.col("lat").list.head(1)))
+    grouped.select(geo.linestring_from_columns("lon", pl.col("lat").list.head(1)))
 except Exception as e:
     detail = next(l for l in str(e).splitlines() if "nest the same way" in l)
     print(f"  {type(e).__name__}: {detail.strip()}")
@@ -97,10 +97,10 @@ print("Translating moves every vertex and leaves the routes as they were.")
 moved = lines.select(
     "route",
     *[
-        gpl.col(name).geometry.translate(dx=1.0, dy=-1.0, dz=10.0).alias(name)
+        gpl.col(name).geo.translate(dx=1.0, dy=-1.0, dz=10.0).alias(name)
         # dz only applies where there is a z to shift.
         if name in ("xyz", "xyzm")
-        else gpl.col(name).geometry.translate(dx=1.0, dy=-1.0).alias(name)
+        else gpl.col(name).geo.translate(dx=1.0, dy=-1.0).alias(name)
         for name in ("xy", "xyz", "xym", "xyzm")
     ],
 )
@@ -133,7 +133,7 @@ edge_cases = pl.DataFrame(
         ]
     },
     schema={"vertices": vertex_list},
-).select(line=geometry.linestring_from_vertices("vertices"))
+).select(line=geo.linestring_from_vertices("vertices"))
 print(edge_cases)
 print("null:", edge_cases["line"].is_null().to_list(), "\n")
 
@@ -152,7 +152,7 @@ print("identical:", back.schema == moved.schema, "\n")
 print("Wrong input is reported while building the expression, before collecting.")
 for column in ("route", "xy"):
     try:
-        lines.lazy().select(geometry.linestring_from_vertices(column)).collect_schema()
+        lines.lazy().select(geo.linestring_from_vertices(column)).collect_schema()
     except Exception as e:
         detail = next(l for l in str(e).splitlines() if "expected" in l)
         print(f"  {column:>5} -> {type(e).__name__}: {detail.strip()}")
@@ -179,7 +179,7 @@ spherical = GeoPoint.ext_from_params(
 carried = (
     df.select(vertex=pl.struct(x=pl.col("lon"), y=pl.col("lat")).ext.to(spherical))
     .select(pl.col("vertex").implode())
-    .select(line=geometry.linestring_from_vertices("vertex"))
+    .select(line=geo.linestring_from_vertices("vertex"))
 )
 print("vertices:", repr(spherical), spherical.ext_metadata())
 print("line:    ", repr(carried.schema["line"]), carried.schema["line"].ext_metadata())
@@ -201,12 +201,12 @@ print(f"One row per vertex, now with a ring to belong to: {rings}")
 
 # Two groupings: vertices into rings, then rings into polygons.
 boundaries = rings.group_by("plot", "ring", maintain_order=True).agg(
-    boundary=geometry.linestring_from_vertices(geometry.point("lon", "lat").implode())
+    boundary=geo.linestring_from_vertices(geo.point("lon", "lat").implode())
 )
 print(f"The rings are ordinary linestrings: {boundaries}")
 
 plots = boundaries.group_by("plot", maintain_order=True).agg(
-    boundary=geometry.polygon_from_rings(pl.col("boundary").implode())
+    boundary=geo.polygon_from_rings(pl.col("boundary").implode())
 )
 print(f"Which a second grouping turns into polygons: {plots}")
 print("A polygon stores `List<List<Coordinate>>`: the same coordinates, twice nested.")
@@ -232,7 +232,7 @@ direct_plots = (
     .agg("lon", "lat")
     .group_by("plot", maintain_order=True)
     .agg("lon", "lat")
-    .select("plot", boundary=geometry.polygon_from_columns("lon", "lat"))
+    .select("plot", boundary=geo.polygon_from_columns("lon", "lat"))
 )
 print(direct_plots)
 print("the same polygons:", direct_plots["boundary"].equals(plots["boundary"]))

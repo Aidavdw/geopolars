@@ -5,7 +5,7 @@ import polars as pl
 from geopolars.datatypes import GeoPoint
 
 import geopolars as gpl
-from geopolars import PointXY, PointXYM, PointXYZ, PointXYZM, geometry
+from geopolars import PointXY, PointXYM, PointXYZ, PointXYZM, geo
 
 df = pl.DataFrame(
     {
@@ -21,7 +21,6 @@ df = pl.DataFrame(
 )
 
 # TODO: Nice to have: allow direct instantiation of points with literals.
-# TODO: put everything under 'geo' namespace insted of geometry.
 
 print(f"We start with individual columns per axis: {df}")
 
@@ -31,10 +30,10 @@ print(f"We start with individual columns per axis: {df}")
 # Which of z and m you pass is what decides the dimension.
 points = df.select(
     "city",
-    xy=geometry.point("lon", "lat"),
-    xyz=geometry.point("lon", "lat", z="elevation"),
-    xym=geometry.point("lon", "lat", m="distance"),
-    xyzm=geometry.point("lon", "lat", z="elevation", m="distance"),
+    xy=geo.point("lon", "lat"),
+    xyz=geo.point("lon", "lat", z="elevation"),
+    xym=geo.point("lon", "lat", m="distance"),
+    xyzm=geo.point("lon", "lat", z="elevation", m="distance"),
 )
 print(f"We turn those into points! {points}")
 print("Points are represented internally as structs.")
@@ -68,10 +67,10 @@ print("Round trip through the plugin: the dtype has to survive, in every dimensi
 moved = points.select(
     "city",
     *[
-        gpl.col(name).geometry.translate(dx=1.0, dy=-1.0, dz=10.0).alias(name)
+        gpl.col(name).geo.translate(dx=1.0, dy=-1.0, dz=10.0).alias(name)
         # dz only applies where there is a z to shift.
         if name in ("xyz", "xyzm")
-        else gpl.col(name).geometry.translate(dx=1.0, dy=-1.0).alias(name)
+        else gpl.col(name).geo.translate(dx=1.0, dy=-1.0).alias(name)
         for name in ("xy", "xyz", "xym", "xyzm")
     ],
 )
@@ -87,7 +86,7 @@ print(
 print("A dz that could not do anything is an error, not a silent no-op.")
 for name in ("xy", "xym"):
     try:
-        points.select(gpl.col(name).geometry.translate(dx=0.0, dy=0.0, dz=1.0))
+        points.select(gpl.col(name).geo.translate(dx=0.0, dy=0.0, dz=1.0))
     except Exception as e:
         detail = next(l for l in str(e).splitlines() if "no z coordinate" in l)
         print(f"  {name:>5} -> {type(e).__name__}: {detail.strip()}")
@@ -111,7 +110,7 @@ print(
         before collecting the data"
 )
 try:
-    df.lazy().select(gpl.col("lon").geometry.translate(dx=1.0, dy=1.0)).collect_schema()
+    df.lazy().select(gpl.col("lon").geo.translate(dx=1.0, dy=1.0)).collect_schema()
 except Exception as e:
     detail = next(l for l in str(e).splitlines() if "geoarrow.point" in l)
     print(f"non-point input -> {type(e).__name__}: {detail.strip()}")

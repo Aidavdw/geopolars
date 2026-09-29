@@ -12,14 +12,14 @@ import polars as pl
 from geopolars.datatypes import GEOMETRIES, GeoPoint
 from geopolars.datatypes.dimension import ALL as DIMENSIONS
 from geopolars.datatypes.dimension import XYZM
-from geopolars.geometry._dispatch import by_geometry
+from geopolars.geo._dispatch import by_geometry
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
-    from geopolars.geometry._dispatch import Where
+    from geopolars.geo._dispatch import Where
 
 # A reduction over the coordinates of one innermost part of a geometry.
 Reduce = Callable[[pl.Expr, bool], pl.Expr]
@@ -155,7 +155,7 @@ def coordinate_centroid(geometry: IntoExprColumn) -> pl.Expr:
     A null geometry, and a geometry with no coordinates at all, has no centroid.
 
     ```python
-    df.select(geometry.coordinate_centroid("route"))
+    df.select(geo.coordinate_centroid("route"))
     ```
     """
     return by_geometry(geometry, _branches)

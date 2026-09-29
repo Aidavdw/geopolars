@@ -22,9 +22,9 @@ import time
 import polars as pl
 
 import geopolars as gpl
-from geopolars import geometry
+from geopolars import geo
 from geopolars.datatypes import GeoLineString
-from geopolars.geometry import centroid as impl
+from geopolars.geo import centroid as impl
 
 AXES = ("x", "y", "m")
 SAMPLES = pl.col("samples")
@@ -46,8 +46,8 @@ def frames(rows: int, vertices: int) -> tuple[pl.DataFrame, pl.DataFrame]:
         .select("samples")
         .collect()
     )
-    geo = plain.lazy().select(SAMPLES.ext.to(gpl.LineStringXYM())).collect()
-    return plain, geo
+    geo_df = plain.lazy().select(SAMPLES.ext.to(gpl.LineStringXYM())).collect()
+    return plain, geo_df
 
 
 def fastest(frame: pl.LazyFrame, runs: int = 9) -> float:
@@ -71,7 +71,7 @@ def means(column: pl.Expr) -> list[pl.Expr]:
     return [(axis(column, a).list.sum() / column.list.len()).alias(a) for a in AXES]
 
 
-def layers(plain: pl.DataFrame, geo: pl.DataFrame) -> dict[str, pl.LazyFrame]:
+def layers(plain: pl.DataFrame, geo_df: pl.DataFrame) -> dict[str, pl.LazyFrame]:
     """The same centroid, with one more layer of abstraction each time."""
     nothing = pl.lit(None, dtype=pl.Float64)
 
@@ -104,7 +104,7 @@ def layers(plain: pl.DataFrame, geo: pl.DataFrame) -> dict[str, pl.LazyFrame]:
     intact = storage.list.len() > 0
     for a in AXES:
         intact = intact & (axis(storage, a).list.count_matches(None) == 0)
-    typed = geo.lazy().select(
+    typed = geo_df.lazy().select(
         centre=pl.coalesce(
             [
                 pl.when(pl.coalesce([SAMPLES.is_not_null() & intact, pl.lit(False)]))
@@ -119,18 +119,18 @@ def layers(plain: pl.DataFrame, geo: pl.DataFrame) -> dict[str, pl.LazyFrame]:
         "2.  + the validity checks": checked,
         "3.  + the dispatch coalesces": wrapped,
         "4.  + ext.storage() / ext.to()": typed,
-        "5. geometry.coordinate_centroid": geo.lazy().select(
-            centre=geometry.coordinate_centroid("samples")
+        "5. geo.coordinate_centroid": geo_df.lazy().select(
+            centre=geo.coordinate_centroid("samples")
         ),
     }
 
 
 def report(rows: int, vertices: int) -> None:
-    plain, geo = frames(rows, vertices)
+    plain, geo_df = frames(rows, vertices)
     print(f"\n{rows:,} linestrings of {vertices} coordinates ({rows * vertices:,} total)")
     print("-" * 62)
     base = None
-    for name, frame in layers(plain, geo).items():
+    for name, frame in layers(plain, geo_df).items():
         ms = fastest(frame)
         base = base if base is not None else ms
         print(f"  {name:<40}{ms:7.1f} ms   {ms / base:4.2f}x")
@@ -138,7 +138,7 @@ def report(rows: int, vertices: int) -> None:
 
 def breakdown(rows: int, vertices: int) -> None:
     """The real expression, piece by piece, against the two bounds around it."""
-    _, geo = frames(rows, vertices)
+    _, geo_df = frames(rows, vertices)
     column, storage = pl.col("samples"), pl.col("samples").ext.storage()
     dtype = GeoLineString.of_dimension(AXES)
 
@@ -156,13 +156,13 @@ def breakdown(rows: int, vertices: int) -> None:
         "...of which is axis extraction": pl.struct(
             [storage.list.eval(pl.element().struct.field(a)).alias(a) for a in AXES]
         ),
-        "coordinate_centroid (all of it)": geometry.coordinate_centroid("samples"),
+        "coordinate_centroid (all of it)": geo.coordinate_centroid("samples"),
     }
 
     print(f"\n{rows:,} linestrings of {vertices} coordinates, {''.join(AXES)}")
     print("-" * 62)
     for name, piece in pieces.items():
-        print(f"  {name:<40}{fastest(geo.lazy().select(out=piece)):7.1f} ms")
+        print(f"  {name:<40}{fastest(geo_df.lazy().select(out=piece)):7.1f} ms")
 
 
 # Short geometries are the worst case: the per-row wrappers are paid over and
@@ -178,9 +178,9 @@ breakdown(rows=200_000, vertices=20)
 # `run_centroid.py` falls back to an in-memory node -- but that node is the
 # `implode()` that gathers the rows into one geometry, not the centroid.
 # Plain Polars does exactly the same thing, with no geometry in sight:
-plain, geo = frames(rows=1_000, vertices=4)
+plain, geo_df = frames(rows=1_000, vertices=4)
 print("\nThe centroid alone, given a geometry column that already exists:")
-centre = geo.lazy().select(centre=geometry.coordinate_centroid("samples"))
+centre = geo_df.lazy().select(centre=geo.coordinate_centroid("samples"))
 print(centre.explain(engine="streaming"))
 centre.show_graph(plan_stage="physical", engine="streaming", optimized=True)
 

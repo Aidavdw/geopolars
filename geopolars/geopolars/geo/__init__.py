@@ -1,13 +1,13 @@
 """Expressions over GeoArrow geometry columns.
 
-The functional API: every `geometry` namespace method forwards to a function
+The functional API: every `geo` namespace method forwards to a function
 here
 """
 
-from geopolars.geometry.affine import translate
-from geopolars.geometry.area import area
-from geopolars.geometry.centroid import coordinate_centroid
-from geopolars.geometry.construct import (
+from geopolars.geo.affine import translate
+from geopolars.geo.area import area
+from geopolars.geo.centroid import coordinate_centroid
+from geopolars.geo.construct import (
     linestring,
     linestring_from_columns,
     linestring_from_vertices,

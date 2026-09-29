@@ -2,13 +2,13 @@
 
 Two equivalent APIs:
 
-    from geopolars import geometry
-    geometry.translate("route", dx=1.0, dy=2.0)      # functional
+    from geopolars import geo
+    geo.translate("route", dx=1.0, dy=2.0)      # functional
 
     import geopolars as gp
-    gpl.col("route").geometry.translate(1.0, 2.0)     # namespace
+    gpl.col("route").geo.translate(1.0, 2.0)     # namespace
 
-Both are fully type-checked. Plain `pl.col("route").geometry...` also works at
+Both are fully type-checked. Plain `pl.col("route").geo...` also works at
 runtime, but a checker cannot see namespaces that `register_expr_namespace`
 patches onto `pl.Expr`, so prefer `gpl.col` to keep static typing.
 
@@ -17,7 +17,7 @@ In code organisation, the layering is one-directional:
 There should be no links the other direction.
 """
 
-from geopolars import datatypes, date_util, dist, geometry, language, panic
+from geopolars import datatypes, date_util, dist, geo, language, panic
 from geopolars.datatypes import (
     GeoLineString,
     GeoMultiLineString,
@@ -95,7 +95,7 @@ __all__ = [
     "datatypes",
     "date_util",
     "dist",
-    "geometry",
+    "geo",
     "language",
     "panic",
 ]

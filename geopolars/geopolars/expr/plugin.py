@@ -1,7 +1,7 @@
 """A `pl.Expr` that a type checker can see this package's namespaces on.
 
 `pl.api.register_expr_namespace` patches a namespace onto `pl.Expr` at runtime,
-which a type checker cannot follow. `pl.col("a").geometry...` works regardless;
+which a type checker cannot follow. `pl.col("a").geo...` works regardless;
 `gpl.col("a")` is the same thing with the namespaces declared ahead of time.
 """
 
@@ -12,15 +12,15 @@ from typing import cast
 import polars as pl
 
 from geopolars.expr.example import DateUtil, Distance, Language, Panic
-from geopolars.expr.geometry import Geometry
+from geopolars.expr.geo import Geometry
 
 
 class PluginExpr(pl.Expr):
     """A `pl.Expr` that declares this package's namespaces for type checkers.
-    The subclass exists so a checker can resolve `.geometry`, `.dist`, etc.
+    The subclass exists so a checker can resolve `.geo`, `.dist`, etc.
     """
 
-    geometry: Geometry
+    geo: Geometry
     language: Language
     dist: Distance
     date_util: DateUtil

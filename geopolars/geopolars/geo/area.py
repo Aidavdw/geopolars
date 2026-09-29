@@ -13,14 +13,14 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 from geopolars.datatypes import GEOMETRIES, GeoPolygon
-from geopolars.geometry._dispatch import by_geometry
+from geopolars.geo._dispatch import by_geometry
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
-    from geopolars.geometry._dispatch import Where
+    from geopolars.geo._dispatch import Where
 
 
 def _twice_signed(ring: pl.Expr) -> pl.Expr:
@@ -80,7 +80,7 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     wind the other way will cancel rather than add.
 
     ```python
-    df.select(geometry.area("parcel"))
+    df.select(geo.area("parcel"))
     ```
     """
     # CHECK: CCW/CW orientation of polygon should not matter, area should be positive only.

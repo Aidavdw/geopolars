@@ -1,4 +1,4 @@
-"""Building `geoarrow.multilinestring` columns with `geometry.multilinestring`."""
+"""Building `geoarrow.multilinestring` columns with `geo.multilinestring`."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import pytest
 from polars.exceptions import ComputeError
 from polars.testing import assert_frame_equal
 
-from geopolars import geometry
+from geopolars import geo
 from geopolars.datatypes import (
     GeoLineString,
     LineStringXY,
@@ -45,7 +45,7 @@ def test_accepts_bare_lists_of_coordinate_structs() -> None:
     """The parts do not have to be linestrings already:
     a list of the vertex lists a linestring wraps is the same storage."""
     df = pl.DataFrame({"lines": [_SEGMENT]}, schema={"lines": _XY_LINES}).select(
-        geometry.multilinestring("lines").alias("multilinestring")
+        geo.multilinestring("lines").alias("multilinestring")
     )
 
     assert df.schema["multilinestring"] == MultiLineStringXY()
@@ -72,7 +72,7 @@ def test_a_part_need_not_be_closed() -> None:
     """A polygon's rings have to close; a multilinestring's parts are lines,
     so an open one is left exactly as it came in."""
     df = pl.DataFrame({"lines": [_SEGMENT]}, schema={"lines": _XY_LINES}).select(
-        geometry.multilinestring("lines").alias("multilinestring")
+        geo.multilinestring("lines").alias("multilinestring")
     )
     parts = pl.col("multilinestring").ext.storage()
 
@@ -84,7 +84,7 @@ def test_a_part_need_not_be_closed() -> None:
 def test_an_empty_list_is_an_empty_multilinestring() -> None:
     """See https://geoarrow.org/format.html#empty-geometries"""
     df = pl.DataFrame({"lines": [[]]}, schema={"lines": _XY_LINES}).select(
-        geometry.multilinestring("lines").alias("multilinestring")
+        geo.multilinestring("lines").alias("multilinestring")
     )
 
     assert df.schema["multilinestring"] == MultiLineStringXY()
@@ -96,7 +96,7 @@ def test_an_empty_list_is_an_empty_multilinestring() -> None:
 
 def test_a_single_linestring_is_a_valid_multilinestring() -> None:
     df = pl.DataFrame({"lines": [_SEGMENT]}, schema={"lines": _XY_LINES}).select(
-        geometry.multilinestring("lines").alias("multilinestring")
+        geo.multilinestring("lines").alias("multilinestring")
     )
 
     assert df.schema["multilinestring"] == MultiLineStringXY()
@@ -109,7 +109,7 @@ def test_a_missing_linestring_invalidates_the_whole_multilinestring() -> None:
     df = pl.DataFrame(
         {"lines": [[*_SEGMENT, None], _SEGMENT, None]},
         schema={"lines": _XY_LINES},
-    ).select(geometry.multilinestring("lines").alias("multilinestring"))
+    ).select(geo.multilinestring("lines").alias("multilinestring"))
 
     assert df["multilinestring"].is_null().to_list() == [True, False, True]
 
@@ -118,7 +118,7 @@ def test_a_missing_vertex_invalidates_the_whole_multilinestring() -> None:
     df = pl.DataFrame(
         {"lines": [[[{"x": 1.0, "y": 2.0}, None]], _SEGMENT]},
         schema={"lines": _XY_LINES},
-    ).select(geometry.multilinestring("lines").alias("multilinestring"))
+    ).select(geo.multilinestring("lines").alias("multilinestring"))
 
     assert df["multilinestring"].is_null().to_list() == [True, False]
 
@@ -127,7 +127,7 @@ def test_a_missing_coordinate_invalidates_the_whole_multilinestring() -> None:
     df = pl.DataFrame(
         {"lines": [[[{"x": 1.0, "y": None}]], _SEGMENT]},
         schema={"lines": _XY_LINES},
-    ).select(geometry.multilinestring("lines").alias("multilinestring"))
+    ).select(geo.multilinestring("lines").alias("multilinestring"))
 
     assert df["multilinestring"].is_null().to_list() == [True, False]
 
@@ -141,7 +141,7 @@ def test_metadata_is_carried_over_from_the_linestrings() -> None:
         pl.DataFrame({"vertices": _SEGMENT}, schema={"vertices": _XY_VERTICES})
         .select(line=pl.col("vertices").ext.to(spherical))
         .select(pl.col("line").implode())
-        .select(geometry.multilinestring("line").alias("multilinestring"))
+        .select(geo.multilinestring("line").alias("multilinestring"))
     )
 
     assert df.schema["multilinestring"].ext_metadata() == metadata
@@ -154,17 +154,17 @@ def test_rejects_linestrings_that_are_not_coordinates() -> None:
     df = pl.DataFrame({"lines": [[[1.0, 2.0]]]})
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geometry.multilinestring("lines"))
+        df.select(geo.multilinestring("lines"))
 
 
 def test_rejects_a_column_that_is_not_a_list() -> None:
     """A linestring column is a part per row, not a multilinestring per row."""
     df = pl.DataFrame({"vertices": _SEGMENT}, schema={"vertices": _XY_VERTICES}).select(
-        geometry.linestring("vertices").alias("line")
+        geo.linestring("vertices").alias("line")
     )
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geometry.multilinestring("line"))
+        df.select(geo.multilinestring("line"))
 
 
 def test_rejects_a_list_of_points() -> None:
@@ -172,18 +172,18 @@ def test_rejects_a_list_of_points() -> None:
     That gather is a multipoint."""
     df = (
         pl.DataFrame({"x": [1.0], "y": [2.0]})
-        .select(geometry.point("x", "y").alias("point"))
+        .select(geo.point("x", "y").alias("point"))
         .select(pl.col("point").implode())
     )
 
     with pytest.raises(ComputeError, match="expected a list of `geoarrow.linestring`s"):
-        df.select(geometry.multilinestring("point"))
+        df.select(geo.multilinestring("point"))
 
 
 def test_rejects_bad_linestrings_while_resolving_the_schema() -> None:
     """The dimension is read off the input's dtype,
     so parts that are not coordinates are a schema error."""
-    lf = pl.LazyFrame({"river": ["rhine"]}).select(geometry.multilinestring("river"))
+    lf = pl.LazyFrame({"river": ["rhine"]}).select(geo.multilinestring("river"))
 
     with pytest.raises(ComputeError, match="expected a list of"):
         lf.collect_schema()
@@ -192,7 +192,7 @@ def test_rejects_bad_linestrings_while_resolving_the_schema() -> None:
 def test_empty_frame_keeps_its_dtype() -> None:
     """A zero-row build still produces a multilinestring column."""
     df = pl.DataFrame(schema={"lines": _XY_LINES}).select(
-        geometry.multilinestring("lines").alias("multilinestring")
+        geo.multilinestring("lines").alias("multilinestring")
     )
 
     assert df.height == 0
@@ -211,10 +211,10 @@ def test_measures_stay_per_vertex() -> None:
     )
     multilines = (
         df.group_by("river", maintain_order=True)
-        .agg(geometry.point("x", "y", m="m").alias("point"))
-        .select(geometry.linestring("point").alias("line"))
+        .agg(geo.point("x", "y", m="m").alias("point"))
+        .select(geo.linestring("point").alias("line"))
         .select(pl.col("line").implode())
-        .select(geometry.multilinestring("line").alias("multilinestring"))
+        .select(geo.multilinestring("line").alias("multilinestring"))
     )
 
     assert multilines.schema["multilinestring"] == MultiLineStringXYM()
@@ -247,7 +247,7 @@ def test_coordinate_columns_keep_their_parts_in_order() -> None:
             "lon": [[[0.0, 1.0], [2.0, 3.0, 4.0]]],
             "lat": [[[5.0, 6.0], [7.0, 8.0, 9.0]]],
         }
-    ).select(geometry.multilinestring("lon", "lat").alias("multilinestring"))
+    ).select(geo.multilinestring("lon", "lat").alias("multilinestring"))
 
     assert df.select(pl.col("multilinestring").ext.storage().list.len())[
         "multilinestring"
@@ -267,7 +267,7 @@ def test_coordinate_columns_are_cast_to_f64() -> None:
     """Coordinates are doubles.
     integer columns are widened rather than refused."""
     df = pl.DataFrame({"lon": [[[1, 3]]], "lat": [[[2, 4]]]}).select(
-        geometry.multilinestring("lon", "lat").alias("multilinestring")
+        geo.multilinestring("lon", "lat").alias("multilinestring")
     )
 
     assert df.schema["multilinestring"] == MultiLineStringXY()
@@ -280,7 +280,7 @@ def test_coordinate_columns_are_cast_to_f64() -> None:
 def test_a_missing_coordinate_invalidates_the_multilinestring_of_coords() -> None:
     df = pl.DataFrame(
         {"lon": [[[1.0]], [[1.0]]], "lat": [[[None]], [[2.0]]]}, schema=_XY_COORDS
-    ).select(geometry.multilinestring("lon", "lat").alias("multilinestring"))
+    ).select(geo.multilinestring("lon", "lat").alias("multilinestring"))
 
     assert df["multilinestring"].is_null().to_list() == [True, False]
 
@@ -300,14 +300,14 @@ def test_rejects_coordinate_columns_that_nest_differently(
     df = pl.DataFrame({"lon": lon, "lat": lat}, schema=_XY_COORDS)
 
     with pytest.raises(ComputeError, match="do not nest the same way"):
-        df.select(geometry.multilinestring("lon", "lat"))
+        df.select(geo.multilinestring("lon", "lat"))
 
 
 def test_rejects_coordinate_columns_nested_only_once() -> None:
     """One list per geometry is a linestring's shape;
     a multilinestring needs the parts inside it too."""
     lf = pl.LazyFrame({"lon": [[1.0]], "lat": [[2.0]]}).select(
-        geometry.multilinestring("lon", "lat")
+        geo.multilinestring("lon", "lat")
     )
 
     with pytest.raises(
@@ -318,12 +318,12 @@ def test_rejects_coordinate_columns_nested_only_once() -> None:
 
 def test_rejects_a_measure_without_a_y_coordinate() -> None:
     with pytest.raises(TypeError, match="without a y coordinate"):
-        geometry.multilinestring("lon", m="dist")
+        geo.multilinestring("lon", m="dist")
 
 
 def test_empty_frame_of_coordinates_keeps_its_dtype() -> None:
     df = pl.DataFrame(schema=_XY_COORDS).select(
-        geometry.multilinestring("lon", "lat").alias("multilinestring")
+        geo.multilinestring("lon", "lat").alias("multilinestring")
     )
 
     assert df.height == 0
@@ -334,8 +334,8 @@ def test_one_argument_dispatches_to_the_linestring_form() -> None:
     df = pl.DataFrame({"lines": [_SEGMENT]}, schema={"lines": _XY_LINES})
 
     assert_frame_equal(
-        df.select(geometry.multilinestring("lines")),
-        df.select(geometry.multilinestring_from_linestrings("lines")),
+        df.select(geo.multilinestring("lines")),
+        df.select(geo.multilinestring_from_linestrings("lines")),
     )
 
 
@@ -343,6 +343,6 @@ def test_coordinate_columns_dispatch_to_the_column_form() -> None:
     df = pl.DataFrame({"lon": [[[0.0, 1.0]]], "lat": [[[2.0, 3.0]]]}, schema=_XY_COORDS)
 
     assert_frame_equal(
-        df.select(geometry.multilinestring("lon", "lat")),
-        df.select(geometry.multilinestring_from_columns("lon", "lat")),
+        df.select(geo.multilinestring("lon", "lat")),
+        df.select(geo.multilinestring_from_columns("lon", "lat")),
     )

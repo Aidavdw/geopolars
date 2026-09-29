@@ -89,14 +89,14 @@ def validate(geometry: IntoExprColumn) -> pl.Expr:
     around them and check nothing:
 
     ```python
-    pl.scan_parquet("routes.parquet").select(geometry.validate("route"))
+    pl.scan_parquet("routes.parquet").select(geo.validate("route"))
     ```
 
     `ext.to` is a relabelling and reads no data, so it cannot check either:
 
     ```python
     df.select(pl.col("route").ext.to(gpl.LineStringXY())).select(
-        geometry.validate("route")
+        geo.validate("route")
     )
     ```
 
@@ -158,8 +158,8 @@ def linestring_from_vertices(vertices: IntoExprColumn) -> pl.Expr:
 
     ```python
     df.group_by("route").agg(
-        geometry.linestring_from_vertices(
-            geometry.point("lon", "lat").implode()
+        geo.linestring_from_vertices(
+            geo.point("lon", "lat").implode()
         ).alias("route")
     )
     ```
@@ -177,7 +177,7 @@ def linestring_from_columns(
     Each is a `List[Float64]` holding one list of coordinates per linestring
 
     ```python
-    df.select(geometry.linestring_from_columns("lon", "lat", z="elevation"))
+    df.select(geo.linestring_from_columns("lon", "lat", z="elevation"))
     ```
     """
     return _from_columns("linestring_coords", x, y, z, m)
@@ -191,8 +191,8 @@ def linestring(
 ) -> pl.Expr:
     """Build a `geoarrow.linestring` column, from vertices or from coordinates.
     Dispatches to either:
-    - [`linestring_from_vertices`][geopolars.geometry.linestring_from_vertices]
-    - [`linestring_from_columns`][geopolars.geometry.linestring_from_columns]
+    - [`linestring_from_vertices`][geopolars.geo.linestring_from_vertices]
+    - [`linestring_from_columns`][geopolars.geo.linestring_from_columns]
     """
     if y is None:
         if z is not None or m is not None:
@@ -211,8 +211,8 @@ def multipoint_from_points(points: IntoExprColumn) -> pl.Expr:
 
     ```python
     df.group_by("survey").agg(
-        geometry.multipoint_from_points(
-            geometry.point("lon", "lat").implode()
+        geo.multipoint_from_points(
+            geo.point("lon", "lat").implode()
         ).alias("sightings")
     )
     ```
@@ -230,7 +230,7 @@ def multipoint_from_columns(
     Each is a `List[Float64]` holding one list of coordinates per multipoint.
 
     ```python
-    df.select(geometry.multipoint_from_columns("lon", "lat", m="seen_at"))
+    df.select(geo.multipoint_from_columns("lon", "lat", m="seen_at"))
     ```
     """
     return _from_columns("multipoint_coords", x, y, z, m)
@@ -244,8 +244,8 @@ def multipoint(
 ) -> pl.Expr:
     """Build a `geoarrow.multipoint` column, from points or from coordinates.
     Dispatches to either:
-    - [`multipoint_from_points`][geopolars.geometry.multipoint_from_points]
-    - [`multipoint_from_columns`][geopolars.geometry.multipoint_from_columns]
+    - [`multipoint_from_points`][geopolars.geo.multipoint_from_points]
+    - [`multipoint_from_columns`][geopolars.geo.multipoint_from_columns]
     """
     if y is None:
         if z is not None or m is not None:
@@ -267,13 +267,13 @@ def multilinestring_from_linestrings(linestrings: IntoExprColumn) -> pl.Expr:
     (
         df.group_by("river", "branch", maintain_order=True)
         .agg(
-            geometry.linestring_from_vertices(
-                geometry.point("lon", "lat").implode()
+            geo.linestring_from_vertices(
+                geo.point("lon", "lat").implode()
             ).alias("branch")
         )
         .group_by("river", maintain_order=True)
         .agg(
-            geometry.multilinestring_from_linestrings(
+            geo.multilinestring_from_linestrings(
                 pl.col("branch").implode()
             ).alias("river")
         )
@@ -293,7 +293,7 @@ def multilinestring_from_columns(
     Each is a `List[List[Float64]]`.
 
     ```python
-    df.select(geometry.multilinestring_from_columns("lon", "lat"))
+    df.select(geo.multilinestring_from_columns("lon", "lat"))
     ```
     """
     return _from_columns("multilinestring_coords", x, y, z, m)
@@ -307,8 +307,8 @@ def multilinestring(
 ) -> pl.Expr:
     """Build a `geoarrow.multilinestring` column, from linestrings or coordinates.
     Dispatches to either:
-    - [`multilinestring_from_linestrings`][geopolars.geometry.multilinestring_from_linestrings]
-    - [`multilinestring_from_columns`][geopolars.geometry.multilinestring_from_columns]
+    - [`multilinestring_from_linestrings`][geopolars.geo.multilinestring_from_linestrings]
+    - [`multilinestring_from_columns`][geopolars.geo.multilinestring_from_columns]
     """
     if y is None:
         if z is not None or m is not None:
@@ -340,12 +340,12 @@ def polygon_from_rings(rings: IntoExprColumn) -> pl.Expr:
     (
         df.group_by("plot", "ring", maintain_order=True)
         .agg(
-            geometry.linestring_from_vertices(
-                geometry.point("lon", "lat").implode()
+            geo.linestring_from_vertices(
+                geo.point("lon", "lat").implode()
             ).alias("ring")
         )
         .group_by("plot", maintain_order=True)
-        .agg(geometry.polygon_from_rings(pl.col("ring").implode()).alias("plot"))
+        .agg(geo.polygon_from_rings(pl.col("ring").implode()).alias("plot"))
     )
     ```
     """
@@ -362,7 +362,7 @@ def polygon_from_columns(
     Each is a `List[List[Float64]]`.
 
     ```python
-    df.select(geometry.polygon_from_columns("lon", "lat"))
+    df.select(geo.polygon_from_columns("lon", "lat"))
     ```
 
     The first ring of a polygon is its exterior ring,
@@ -379,8 +379,8 @@ def polygon(
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column, from rings or from coordinates.
     Dispatches to either:
-    - [`polygon_from_rings`][geopolars.geometry.polygon_from_rings]
-    - [`polygon_from_columns`][geopolars.geometry.polygon_from_columns]
+    - [`polygon_from_rings`][geopolars.geo.polygon_from_rings]
+    - [`polygon_from_columns`][geopolars.geo.polygon_from_columns]
     """
     if y is None:
         if z is not None or m is not None:

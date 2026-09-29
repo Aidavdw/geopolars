@@ -1,6 +1,6 @@
 """Namespaces of the pyo3-polars example plugin this repo was forked from.
 
-Kept as worked examples; new geometry work goes in `geopolars.expr.geometry`.
+Kept as worked examples; new geometry work goes in `geopolars.expr.geo`.
 """
 
 from __future__ import annotations

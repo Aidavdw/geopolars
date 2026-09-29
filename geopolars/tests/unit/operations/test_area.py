@@ -6,7 +6,7 @@ import polars as pl
 import pytest
 from polars.testing import assert_series_equal
 
-from geopolars import geometry
+from geopolars import geo
 from geopolars.datatypes import PointXY, PolygonXY
 from tests.unit.conftest import XY, Dimension
 
@@ -25,12 +25,12 @@ _XY_RINGS = pl.List(_XY_VERTICES)
 def _rings(rings: list[list[dict[str, float]]]) -> pl.DataFrame:
     """A one-row polygon column, built straight from XY rings."""
     return pl.DataFrame({"rings": [rings]}, schema={"rings": _XY_RINGS}).select(
-        geometry.polygon("rings").alias("polygon")
+        geo.polygon("rings").alias("polygon")
     )
 
 
 def _areas(df: pl.DataFrame, name: str = "polygon") -> list[float | None]:
-    return df.select(geometry.area(name)).to_series().to_list()
+    return df.select(geo.area(name)).to_series().to_list()
 
 
 def test_a_polygon_is_its_exterior_ring_less_its_holes(
@@ -98,7 +98,7 @@ def test_a_missing_ring_takes_the_whole_area_with_it() -> None:
     df = pl.DataFrame(
         {"polygon": [[_SQUARE, None]]}, schema={"polygon": _XY_RINGS}
     ).select(pl.col("polygon").ext.to(PolygonXY()))
-    whole = df.select(geometry.validate("polygon"))
+    whole = df.select(geo.validate("polygon"))
 
     assert _areas(whole) == [None]
 
@@ -115,7 +115,7 @@ def test_a_closed_linestring_still_has_an_area_of_zero() -> None:
     closes bounds the space inside it -- only a polygon does."""
     df = pl.DataFrame(
         {"vertices": [_SQUARE]}, schema={"vertices": _XY_VERTICES}
-    ).select(geometry.linestring("vertices").alias("line"))
+    ).select(geo.linestring("vertices").alias("line"))
 
     assert _areas(df, "line") == [0.0]
 
@@ -169,6 +169,6 @@ def test_the_namespace_matches_the_function(ring_coords: pl.DataFrame) -> None:
     df = XY.polygons(ring_coords)
 
     assert_series_equal(
-        df.select(pl.col("polygon").geometry.area()).to_series(),
-        df.select(geometry.area("polygon")).to_series(),
+        df.select(pl.col("polygon").geo.area()).to_series(),
+        df.select(geo.area("polygon")).to_series(),
     )

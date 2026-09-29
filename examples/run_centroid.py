@@ -9,7 +9,7 @@ It uses only polars under the hood, no custom nodes and no magic!
 import polars as pl
 
 import geopolars as gpl
-from geopolars import PointXYM, geometry
+from geopolars import PointXYM, geo
 
 # Four soil samples: where they were taken, and what was measured there.
 # `value` is the measure a point carries as `m`.
@@ -26,7 +26,7 @@ print(lf.collect())
 
 # Passing `m` is what makes these XYM points: x and y say where,
 # `value` says  what was measured there.
-points = lf.select(point=geometry.point("x", "y", m="value"))
+points = lf.select(point=geo.point("x", "y", m="value"))
 
 print("\nOne point per row, with the measurement carried along:")
 print(points.collect())
@@ -34,13 +34,13 @@ print("dtype:", points.collect_schema()["point"])
 assert points.collect_schema()["point"] == PointXYM()
 
 collection = points.select(pl.col("point").implode()).select(
-    samples=geometry.multipoint("point")
+    samples=geo.multipoint("point")
 )
 
 print("\nGathered into one geometry, the four samples are one row:")
 print(collection.collect())
 
-centre = collection.select(centre=geometry.coordinate_centroid("samples"))
+centre = collection.select(centre=geo.coordinate_centroid("samples"))
 
 print(
     "The plan behind it: Ideally, all abstractions fall away, \
@@ -65,6 +65,6 @@ print(centre.collect(engine="streaming"))
 print("\nThe namespace spelling is the same expression:")
 print(
     collection.select(
-        centre=gpl.col("samples").geometry.coordinate_centroid()
+        centre=gpl.col("samples").geo.coordinate_centroid()
     ).collect()
 )

@@ -6,7 +6,7 @@ from typing import NamedTuple
 import polars as pl
 import pytest
 
-from geopolars import geometry
+from geopolars import geo
 from geopolars.datatypes import (
     GeoLineString,
     GeoMultiLineString,
@@ -74,23 +74,23 @@ class Dimension(NamedTuple):
 
     def point(self) -> pl.Expr:
         """Build a point of this dimension from columns named x/y/z/m."""
-        return self.of_coords(geometry.point).alias("point")
+        return self.of_coords(geo.point).alias("point")
 
     def linestring(self) -> pl.Expr:
         """Build a linestring of this dimension from a `point` list column."""
-        return geometry.linestring("point").alias("line")
+        return geo.linestring("point").alias("line")
 
     def polygon(self) -> pl.Expr:
         """Build a polygon of this dimension from a `line` list column."""
-        return geometry.polygon("line").alias("polygon")
+        return geo.polygon("line").alias("polygon")
 
     def multipoint(self) -> pl.Expr:
         """Build a multipoint of this dimension from a `point` list column."""
-        return geometry.multipoint("point").alias("multipoint")
+        return geo.multipoint("point").alias("multipoint")
 
     def multilinestring(self) -> pl.Expr:
         """Build a multilinestring of this dimension from a `line` list column."""
-        return geometry.multilinestring("line").alias("multilinestring")
+        return geo.multilinestring("line").alias("multilinestring")
 
     def lines(self, vertices: pl.DataFrame) -> pl.DataFrame:
         """One linestring of this dimension per `line` in a vertex frame."""
@@ -139,7 +139,7 @@ class Dimension(NamedTuple):
         return (
             vertices.group_by("line", maintain_order=True)
             .agg(COORDS)
-            .select(self.of_coords(geometry.linestring).alias("line"))
+            .select(self.of_coords(geo.linestring).alias("line"))
         )
 
     def polygons_from_coords(self, vertices: pl.DataFrame) -> pl.DataFrame:
@@ -150,7 +150,7 @@ class Dimension(NamedTuple):
             .agg(COORDS)
             .group_by("polygon", maintain_order=True)
             .agg(COORDS)
-            .select(self.of_coords(geometry.polygon).alias("polygon"))
+            .select(self.of_coords(geo.polygon).alias("polygon"))
         )
 
     def multipoints_from_coords(self, vertices: pl.DataFrame) -> pl.DataFrame:
@@ -158,7 +158,7 @@ class Dimension(NamedTuple):
         return (
             vertices.group_by("line", maintain_order=True)
             .agg(COORDS)
-            .select(self.of_coords(geometry.multipoint).alias("multipoint"))
+            .select(self.of_coords(geo.multipoint).alias("multipoint"))
         )
 
     def multilinestrings_from_coords(self, vertices: pl.DataFrame) -> pl.DataFrame:
@@ -169,7 +169,7 @@ class Dimension(NamedTuple):
             .agg(COORDS)
             .group_by("polygon", maintain_order=True)
             .agg(COORDS)
-            .select(self.of_coords(geometry.multilinestring).alias("multilinestring"))
+            .select(self.of_coords(geo.multilinestring).alias("multilinestring"))
         )
 
 

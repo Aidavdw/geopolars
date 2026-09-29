@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import polars as pl
 
-from geopolars import geometry
+from geopolars import geo
 from tests.unit.conftest import Dimension
 
 
@@ -19,7 +19,7 @@ def test_sort_orders_by_the_coordinates() -> None:
     in spec order, so a column that only varies in x sorts by x."""
     points = pl.DataFrame(
         {"i": [2, 1, 3], "x": [2.0, 1.0, 3.0], "y": [0.0, 0.0, 0.0]}
-    ).select("i", geometry.point("x", "y").alias("point"))
+    ).select("i", geo.point("x", "y").alias("point"))
 
     assert points.sort("point")["i"].to_list() == [1, 2, 3]
     assert points.sort("point", descending=True)["i"].to_list() == [3, 2, 1]
