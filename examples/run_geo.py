@@ -20,6 +20,9 @@ df = pl.DataFrame(
     }
 )
 
+# TODO: Nice to have: allow direct instantiation of points with literals.
+# TODO: put everything under 'geo' namespace insted of geometry.
+
 print(f"We start with individual columns per axis: {df}")
 
 # Build a point column from its coordinate columns.
