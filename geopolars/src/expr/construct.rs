@@ -6,7 +6,7 @@ use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 
 use super::coords::same_geometry;
-use crate::geoarrow::{coord, describe, Dimension, Geo, Kind};
+use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
 
 /// Used in error messages, don't care about allocation
 fn shape_of(part: Kind) -> String {
@@ -23,7 +23,7 @@ fn coordinate_shape_of(kind: Kind) -> String {
 /// The dimension and metadata of the parts a geometry can be gathered from:
 /// a list of `part`s, each either a `part` geometry already or the bare storage
 /// one of those wraps.
-fn parts_of(dtype: &DataType, part: Kind) -> PolarsResult<(Dimension, Option<String>)> {
+fn parts_of(dtype: &DataType, part: Kind) -> PolarsResult<(GeoDimension, Option<String>)> {
     let expected = format!(
         "expected a list of `{}`s or of {}",
         part.name(),
@@ -182,7 +182,7 @@ fn validate(inputs: &[Series]) -> PolarsResult<Series> {
 }
 
 /// The dimension a set of separate coordinate columns spells out.
-fn coordinates_of(input_fields: &[Field], kind: Kind) -> PolarsResult<Dimension> {
+fn coordinates_of(input_fields: &[Field], kind: Kind) -> PolarsResult<GeoDimension> {
     let mut coordinates = Vec::with_capacity(input_fields.len());
     for field in input_fields {
         let mut dtype = field.dtype();

@@ -6,7 +6,7 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::coords::{map_coords, same_geometry};
-use crate::geoarrow::{describe, Dimension};
+use crate::geoarrow::{describe, GeoDimension};
 
 #[derive(Deserialize)]
 struct TranslateKwargs {
@@ -16,7 +16,7 @@ struct TranslateKwargs {
 }
 
 /// Shift one flat array of coordinates by a constant offset.
-fn shift(coords: &Series, dim: Dimension, kwargs: &TranslateKwargs) -> PolarsResult<Series> {
+fn shift(coords: &Series, dim: GeoDimension, kwargs: &TranslateKwargs) -> PolarsResult<Series> {
     let fields = coords.struct_()?;
     // We know the names of the parts are right, but we don't know the exact order they will
     // be in.

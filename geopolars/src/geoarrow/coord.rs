@@ -6,11 +6,11 @@
 
 use polars_core::prelude::DataType;
 
-use super::Dimension;
+use super::GeoDimension;
 
 /// Reads the dimension off a separated-coordinate storage type.
 /// `None` if this is not a layout we recognise.
-pub fn dimension_of(coordinates: &DataType) -> Option<Dimension> {
+pub fn dimension_of(coordinates: &DataType) -> Option<GeoDimension> {
     let DataType::Struct(fields) = coordinates else {
         return None;
     };
@@ -22,7 +22,7 @@ pub fn dimension_of(coordinates: &DataType) -> Option<Dimension> {
     {
         return None;
     }
-    Dimension::ALL.into_iter().find(|dim| {
+    GeoDimension::ALL.into_iter().find(|dim| {
         let names = dim.field_names();
         fields.len() == names.len()
             && fields
@@ -34,7 +34,7 @@ pub fn dimension_of(coordinates: &DataType) -> Option<Dimension> {
 
 /// Reads the dimension off the storage of a geometry that nests its coordinates
 /// `nesting` `List` layers deep. `None` if this is not a layout we recognise.
-pub fn dimension_of_storage(storage: &DataType, nesting: u8) -> Option<Dimension> {
+pub fn dimension_of_storage(storage: &DataType, nesting: u8) -> Option<GeoDimension> {
     let mut inner = storage;
     for _ in 0..nesting {
         let DataType::List(child) = inner else {
@@ -93,12 +93,9 @@ mod tests {
     /// linestring's `List<Struct>` belongs.
     #[test]
     fn nesting_has_to_match() {
-        let xy = Dimension::XY.coordinates();
+        let xy = GeoDimension::XY.coordinates();
         assert_eq!(dimension_of_storage(&xy, 1), None);
-        assert_eq!(
-            dimension_of_storage(&DataType::List(Box::new(xy)), 0),
-            None
-        );
+        assert_eq!(dimension_of_storage(&DataType::List(Box::new(xy)), 0), None);
     }
 
     /// [`Dimension::storage`] is what an expression declares as its output type,
@@ -107,7 +104,7 @@ mod tests {
     #[test]
     fn storage_round_trips_through_dimension_of() {
         for kind in Kind::ALL {
-            for dim in Dimension::ALL {
+            for dim in GeoDimension::ALL {
                 assert_eq!(
                     dimension_of_storage(&dim.storage(kind.nesting()), kind.nesting()),
                     Some(dim)

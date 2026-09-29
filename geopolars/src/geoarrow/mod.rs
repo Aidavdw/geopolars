@@ -9,7 +9,7 @@ mod dimension;
 mod geo;
 mod kind;
 
-pub use dimension::Dimension;
+pub use dimension::GeoDimension;
 pub use geo::Geo;
 pub use kind::Kind;
 
@@ -40,7 +40,7 @@ pub struct GeoColumn<'a> {
     /// put back under it without losing metadata.
     pub typ: &'a ExtensionTypeInstance,
     pub kind: Kind,
-    pub dim: Dimension,
+    pub dim: GeoDimension,
 }
 
 /// Reads a geometry column's dtype.

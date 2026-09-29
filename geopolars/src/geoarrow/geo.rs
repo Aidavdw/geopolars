@@ -10,7 +10,7 @@ use polars_core::datatypes::extension::{
 use polars_core::prelude::DataType;
 
 use super::coord::dimension_of_storage;
-use super::{Dimension, Kind};
+use super::{GeoDimension, Kind};
 
 /// A GeoArrow geometry column's type: which geometry, over which coordinates.
 ///
@@ -20,7 +20,7 @@ use super::{Dimension, Kind};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Geo {
     kind: Kind,
-    dim: Dimension,
+    dim: GeoDimension,
 
     /// The raw `ARROW:extension:metadata` string, carried through verbatim.
     ///
@@ -33,7 +33,7 @@ pub struct Geo {
 
 impl Geo {
     /// A geometry of the given kind and dimension, carrying `metadata` verbatim.
-    pub fn new(kind: Kind, dim: Dimension, metadata: Option<String>) -> Self {
+    pub fn new(kind: Kind, dim: GeoDimension, metadata: Option<String>) -> Self {
         Self {
             kind,
             dim,

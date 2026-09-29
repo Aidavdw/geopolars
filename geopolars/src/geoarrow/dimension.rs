@@ -11,8 +11,9 @@ use polars_core::prelude::{DataType, Field};
 /// An enum is cheaper to match on than casting to types.
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Dimension {
-    // TODO: Rename to GeoDimension, just Dimension trips up rust-analyzer
+pub enum GeoDimension {
+    // This is named 'GeoDimension' and not 'Dimension' because for some reason
+    // rust-analyzer really messes up by confusing it with [polars::datatype::Dimension].
     XY,
     XYZ,
     XYM,
@@ -20,21 +21,21 @@ pub enum Dimension {
 }
 
 /// Const impl
-impl Dimension {
-    pub const ALL: [Dimension; 4] = [
-        Dimension::XY,
-        Dimension::XYZ,
-        Dimension::XYM,
-        Dimension::XYZM,
+impl GeoDimension {
+    pub const ALL: [GeoDimension; 4] = [
+        GeoDimension::XY,
+        GeoDimension::XYZ,
+        GeoDimension::XYM,
+        GeoDimension::XYZM,
     ];
 
     /// The storage struct's field names, in the order the spec requires.
     pub const fn field_names(self) -> &'static [&'static str] {
         match self {
-            Dimension::XY => &["x", "y"],
-            Dimension::XYZ => &["x", "y", "z"],
-            Dimension::XYM => &["x", "y", "m"],
-            Dimension::XYZM => &["x", "y", "z", "m"],
+            GeoDimension::XY => &["x", "y"],
+            GeoDimension::XYZ => &["x", "y", "z"],
+            GeoDimension::XYM => &["x", "y", "m"],
+            GeoDimension::XYZM => &["x", "y", "z", "m"],
         }
     }
 
@@ -42,22 +43,22 @@ impl Dimension {
     /// The same thing [`Dimension::field_names`] says, but as one `const` string.
     pub const fn tag(self) -> &'static str {
         match self {
-            Dimension::XY => "xy",
-            Dimension::XYZ => "xyz",
-            Dimension::XYM => "xym",
-            Dimension::XYZM => "xyzm",
+            GeoDimension::XY => "xy",
+            GeoDimension::XYZ => "xyz",
+            GeoDimension::XYM => "xym",
+            GeoDimension::XYZM => "xyzm",
         }
     }
 
     /// `true` if this dimension has a `z` (elevation) coordinate.
     pub const fn has_z(self) -> bool {
-        matches!(self, Dimension::XYZ | Dimension::XYZM)
+        matches!(self, GeoDimension::XYZ | GeoDimension::XYZM)
     }
 
     /// `true` if this dimension has an `m` (measure) value.
     #[allow(dead_code)]
     pub const fn has_m(self) -> bool {
-        matches!(self, Dimension::XYM | Dimension::XYZM)
+        matches!(self, GeoDimension::XYM | GeoDimension::XYZM)
     }
 
     /// The separated-coordinate struct an array of these coordinates is stored as.
@@ -91,7 +92,7 @@ mod tests {
     /// Python cannot: it spells its own names out per class.
     #[test]
     fn the_tag_follows_from_the_field_names() {
-        for dim in Dimension::ALL {
+        for dim in GeoDimension::ALL {
             assert_eq!(dim.tag(), dim.field_names().concat());
         }
     }
