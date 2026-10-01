@@ -20,11 +20,11 @@ import operator
 import time
 
 import polars as pl
+from geopolars.datatypes import GeoLineString
+from geopolars.geo import centroid as impl
 
 import geopolars as gpl
 from geopolars import geo
-from geopolars.datatypes import GeoLineString
-from geopolars.geo import centroid as impl
 
 AXES = ("x", "y", "m")
 SAMPLES = pl.col("samples")
@@ -86,15 +86,15 @@ def layers(plain: pl.DataFrame, geo_df: pl.DataFrame) -> dict[str, pl.LazyFrame]
         centre=pl.when(SAMPLES.is_not_null() & whole).then(pl.struct(means(SAMPLES)))
     )
 
-    # 3. ...plus what `by_geometry` wraps every branch in. By the time the
-    # optimiser has run, the selectors have pruned all but one branch, so every
-    # one of these coalesces has a single argument left and is a no-op.
+    # By the time the optimiser has run,
+    # the selectors have pruned all but one branch,
+    # so every one of these coalesces has a single argument left and is a no-op.
     wrapped = plain.lazy().select(
         centre=pl.coalesce(
             [
-                pl.when(pl.coalesce([SAMPLES.is_not_null() & whole, pl.lit(False)])).then(
-                    pl.struct([pl.coalesce([m, nothing]) for m in means(SAMPLES)])
-                )
+                pl.when(
+                    pl.coalesce([SAMPLES.is_not_null() & whole, pl.lit(False)])
+                ).then(pl.struct([pl.coalesce([m, nothing]) for m in means(SAMPLES)]))
             ]
         )
     )
@@ -127,7 +127,9 @@ def layers(plain: pl.DataFrame, geo_df: pl.DataFrame) -> dict[str, pl.LazyFrame]
 
 def report(rows: int, vertices: int) -> None:
     plain, geo_df = frames(rows, vertices)
-    print(f"\n{rows:,} linestrings of {vertices} coordinates ({rows * vertices:,} total)")
+    print(
+        f"\n{rows:,} linestrings of {vertices} coordinates ({rows * vertices:,} total)"
+    )
     print("-" * 62)
     base = None
     for name, frame in layers(plain, geo_df).items():

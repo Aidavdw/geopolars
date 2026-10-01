@@ -63,8 +63,4 @@ print("\nThe whole thing is one lazy query, so it streams:")
 print(centre.collect(engine="streaming"))
 
 print("\nThe namespace spelling is the same expression:")
-print(
-    collection.select(
-        centre=gpl.col("samples").geo.coordinate_centroid()
-    ).collect()
-)
+print(collection.select(centre=gpl.col("samples").geo.coordinate_centroid()).collect())

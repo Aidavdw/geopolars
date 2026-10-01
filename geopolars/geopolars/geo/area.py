@@ -12,15 +12,12 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GEOMETRIES, GeoPolygon
-from geopolars.geo._dispatch import by_geometry
+from geopolars.datatypes import GeoPolygon
+from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
-    from geopolars.geo._dispatch import Where
 
 
 def _twice_signed(ring: pl.Expr) -> pl.Expr:
@@ -43,17 +40,12 @@ def _polygon(column: pl.Expr) -> pl.Expr:
     return (2 * rings.list.first().fill_null(0.0) - rings.list.sum()) / 2
 
 
-def _branches(where: Where) -> Iterator[pl.Expr]:
-    """One area per geometry the column could turn out to hold."""
-    column = where(*GeoPolygon.dimensions())
-    if column is not None:
-        yield _polygon(column)
-
+def _area(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
+    """The area of one geometry type, per row."""
+    if issubclass(geometry, GeoPolygon):
+        return _polygon(column)
     # Everything else has no defined area.
-    flat: list[type[GeoArrowType]] = [g for g in GEOMETRIES if g is not GeoPolygon]
-    column = where(*(concrete for g in flat for concrete in g.dimensions()))
-    if column is not None:
-        yield pl.when(column.is_not_null()).then(pl.lit(0.0, dtype=pl.Float64))
+    return pl.when(column.is_not_null()).then(pl.lit(0.0, dtype=pl.Float64))
 
 
 def area(geometry: IntoExprColumn) -> pl.Expr:
@@ -84,4 +76,4 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     ```
     """
     # CHECK: CCW/CW orientation of polygon should not matter, area should be positive only.
-    return by_geometry(geometry, _branches)
+    return on_geometry(geometry, _area)

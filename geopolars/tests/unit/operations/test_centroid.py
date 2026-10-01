@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
-from polars.exceptions import ColumnNotFoundError, StructFieldNotFoundError
+from polars.exceptions import ColumnNotFoundError
 from polars.testing import assert_frame_equal
 
 import geopolars as gpl
@@ -373,7 +373,7 @@ def test_it_runs_on_the_streaming_engine(line_coords: pl.DataFrame) -> None:
 def test_rejects_a_plain_float_column() -> None:
     df = pl.DataFrame({"line": [1.0, 2.0]})
 
-    with pytest.raises(StructFieldNotFoundError, match="expected a `geoarrow.point`"):
+    with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         df.select(geo.coordinate_centroid("line"))
 
 
@@ -381,7 +381,7 @@ def test_rejects_a_bare_coordinate_struct() -> None:
     """The storage of a point is not a point: the dtype is what says it is one."""
     df = pl.DataFrame({"point": [{"x": 1.0, "y": 2.0}]})
 
-    with pytest.raises(StructFieldNotFoundError, match="expected a `geoarrow.point`"):
+    with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         df.select(geo.coordinate_centroid("point"))
 
 
@@ -390,7 +390,7 @@ def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
     not something that waits until the data is there."""
     lf = pl.LazyFrame({"lon": [1.0]}).select(geo.coordinate_centroid("lon"))
 
-    with pytest.raises(StructFieldNotFoundError, match="expected a `geoarrow.point`"):
+    with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         lf.collect_schema()
 
 
@@ -405,17 +405,21 @@ def test_rejects_a_geometry_carrying_extension_metadata() -> None:
         pl.struct(x=pl.col("x"), y=pl.col("y")).ext.to(spherical).alias("point")
     )
 
-    with pytest.raises(StructFieldNotFoundError, match="no extension metadata"):
+    with pytest.raises(TypeError, match="no extension metadata"):
         df.select(geo.coordinate_centroid("point"))
 
 
-def test_rejects_an_expression_that_is_not_a_column(line_coords: pl.DataFrame) -> None:
-    """A chained expression has no dtype until the plan is resolved, and by then
-    the expression has to have been built."""
+def test_takes_an_expression_as_well_as_a_column(line_coords: pl.DataFrame) -> None:
+    """The geometry is read off the resolved dtype, so it need not be a column."""
+    df = XY.lines(line_coords)
     translated = gpl.col("line").geo.translate(1.0, 1.0)
 
-    with pytest.raises(TypeError, match="expected a column name"):
-        XY.lines(line_coords).select(geo.coordinate_centroid(translated))
+    assert_frame_equal(
+        df.select(geo.coordinate_centroid(translated)),
+        df.select(geo.coordinate_centroid("line")).select(
+            geo.translate("line", 1.0, 1.0)
+        ),
+    )
 
 
 def test_rejects_a_series_that_is_not_a_geometry() -> None:

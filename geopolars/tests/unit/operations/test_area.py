@@ -172,3 +172,21 @@ def test_the_namespace_matches_the_function(ring_coords: pl.DataFrame) -> None:
         df.select(pl.col("polygon").geo.area()).to_series(),
         df.select(geo.area("polygon")).to_series(),
     )
+
+
+def test_every_form_of_column_gives_the_same_answer(ring_coords: pl.DataFrame) -> None:
+    """A name, a `pl.col(...)`, a `Series` and a chained expression all work."""
+    df = XY.polygons(ring_coords)
+    expected = df.select(geo.area("polygon")).to_series()
+
+    assert_series_equal(df.select(geo.area(pl.col("polygon"))).to_series(), expected)
+    assert_series_equal(pl.select(geo.area(df["polygon"])).to_series(), expected)
+    translated = geo.translate("polygon", 10.0, -3.0)
+    assert_series_equal(df.select(geo.area(translated)).to_series(), expected)
+
+
+def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
+    lf = pl.LazyFrame({"polygon": [1.0]}).select(geo.area("polygon"))
+
+    with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
+        lf.collect_schema()

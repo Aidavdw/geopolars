@@ -9,17 +9,12 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GEOMETRIES, GeoPoint
-from geopolars.datatypes.dimension import ALL as DIMENSIONS
-from geopolars.datatypes.dimension import XYZM
-from geopolars.geo._dispatch import by_geometry
+from geopolars.datatypes import GeoPoint
+from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
-    from geopolars.geo._dispatch import Where
 
 # A reduction over the coordinates of one innermost part of a geometry.
 Reduce = Callable[[pl.Expr, bool], pl.Expr]
@@ -90,50 +85,23 @@ def _coordinates(geometry: type[GeoArrowType], column: pl.Expr) -> pl.Expr:
     return _per_geometry(storage, geometry._nesting, _count, geometry._rings)
 
 
-def _branches(where: Where) -> Iterator[pl.Expr]:
-    """One centroid per geometry the column could turn out to hold."""
-    nested = [geometry for geometry in GEOMETRIES if geometry._nesting > 0]
-
-    # A point is its own centroid. Its storage is already the coordinate struct
-    # a point wraps and its dtype is already the one to hand back.
-    for dimension in DIMENSIONS:
-        column = where(GeoPoint.of_dimension(dimension))
-        if column is not None:
-            yield column
-
-    # Geometries don't have interior nulls (see spec).
-    # Only need to check if the geometry has a coordinate at all.
-    # `list.len` reads that off the offsets,
-    counted = []
-    for geometry in nested:
-        for dimension in DIMENSIONS:
-            column = where(geometry.of_dimension(dimension))
-            if column is not None:
-                counted.append(_coordinates(geometry, column) > 0)
-    # The literal is what keeps a coalesce from being empty,
-    # and says "no centroid" for a column that is none of these.
-    filled = pl.coalesce([*counted, pl.lit(False)])
+def _centroid(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
+    """The centroid of one geometry type, per row."""
+    # A point is its own centroid.
+    if geometry._nesting == 0:
+        return column
 
     # `m` is a measure rather than an axis, but it averages like one.
-    coordinates: dict[str, pl.Expr] = {}
-    for axis in XYZM:
-        means = []
-        for geometry in nested:
-            carries = [t for t in geometry.dimensions() if axis in t._dimension]
-            column = where(*carries)
-            if column is not None:
-                means.append(_mean(geometry, column, axis))
-        coordinates[axis] = pl.coalesce([*means, pl.lit(None, dtype=pl.Float64)])
-
-    for dimension in DIMENSIONS:
-        column = where(*(geometry.of_dimension(dimension) for geometry in nested))
-        if column is None:
-            continue
-        yield (
-            pl.when(column.is_not_null() & filled)
-            .then(pl.struct([coordinates[axis].alias(axis) for axis in dimension]))
-            .ext.to(GeoPoint.of_dimension(dimension)())
-        )
+    dimension = geometry._dimension
+    means = [_mean(geometry, column, axis).alias(axis) for axis in dimension]
+    return (
+        # Geometries don't have interior nulls (see spec), so only check whether
+        # it has a coordinate at all. A null geometry counts null, which `when`
+        # reads as false.
+        pl.when(_coordinates(geometry, column) > 0)
+        .then(pl.struct(means))
+        .ext.to(GeoPoint.of_dimension(dimension)())
+    )
 
 
 def coordinate_centroid(geometry: IntoExprColumn) -> pl.Expr:
@@ -158,4 +126,4 @@ def coordinate_centroid(geometry: IntoExprColumn) -> pl.Expr:
     df.select(geo.coordinate_centroid("route"))
     ```
     """
-    return by_geometry(geometry, _branches)
+    return on_geometry(geometry, _centroid)
