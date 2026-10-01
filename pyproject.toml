@@ -6,6 +6,9 @@ requires-python = ">=3.10"
 dependencies = [
     "geopolars",
     "polars>=1.44",
+    # uv ignores sources for transitive dependencies,
+    # but polars pulls this in.
+    "polars-runtime-32",
 ]
 
 [tool.uv]
@@ -22,6 +25,8 @@ members = ["geopolars"]
 # cdylib next to the Python sources where `plugin_path=LIB` expects it.
 [tool.uv.sources]
 geopolars = { workspace = true }
+polars = { path = ".polars/py-polars" }
+polars-runtime-32 = { path = ".polars/py-polars/runtime/polars-runtime-32" }
 
 [dependency-groups]
 dev = [

@@ -44,6 +44,8 @@ target/
 *.tbl
 
 # Project
+# polars checkout made by `make polars-src`.
+/.polars/
 /docs/assets/data/*
 !/docs/assets/data/alltypes_plain.parquet
 !/docs/assets/data/apple_stock.csv

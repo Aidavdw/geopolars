@@ -123,7 +123,7 @@ fn haversine(inputs: &[Series]) -> PolarsResult<Series> {
             let end_long = inputs[3].f32().unwrap();
             super::distances::naive_haversine(start_lat, start_long, end_lat, end_long)?
                 .into_series()
-        },
+        }
         DataType::Float64 => {
             let start_lat = inputs[0].f64().unwrap();
             let start_long = inputs[1].f64().unwrap();
@@ -131,7 +131,7 @@ fn haversine(inputs: &[Series]) -> PolarsResult<Series> {
             let end_long = inputs[3].f64().unwrap();
             super::distances::naive_haversine(start_lat, start_long, end_lat, end_long)?
                 .into_series()
-        },
+        }
         _ => unimplemented!(),
     };
     Ok(out)

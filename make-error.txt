@@ -1,0 +1,131 @@
+Resolved 16 packages in 1ms
+   Building geopolars @ file:///home/aida/geopolars/geopolars
+   Building polars @ file:///home/aida/geopolars/.polars/py-polars
+   Building polars-runtime-32 @ file:///home/aida/geopolars/.polars/py-polars/runtime/polars-runtime-32
+      Built polars @ file:///home/aida/geopolars/.polars/py-polars
+  × Failed to build `geopolars @ file:///home/aida/geopolars/geopolars`
+  ├─▶ The build backend returned an error
+  ╰─▶ Call to `maturin.build_editable` failed (exit status: 1)
+
+      [stdout]
+      Running `maturin pep517 build-wheel -i
+      /home/aida/.cache/uv/builds-v0/.tmpAxugoa/bin/python --compatibility off
+      --editable --profile dev`
+
+      [stderr]
+      warning: patch `polars-lazy v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-lazy)` was not used in the crate
+      graph
+      help: Check that the patched package version and available features are
+      compatible
+            with the dependency requirements. If the patch has a different version from
+            what is locked in the Cargo.lock file, run `cargo update` to use the new
+            version. This may also occur with an optional dependency that is not
+      enabled.
+          Blocking waiting for file lock on package cache
+          Blocking waiting for file lock on package cache
+      🍹 Building a mixed python/rust project
+      🔗 Found pyo3 bindings with abi3 support
+      🐍 Found CPython 3.14 at /home/aida/.cache/uv/builds-v0/.tmpAxugoa/bin/python
+          Blocking waiting for file lock on package cache
+      warning: patch `polars-lazy v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-lazy)` was not used in the crate
+      graph
+      help: Check that the patched package version and available features are
+      compatible
+            with the dependency requirements. If the patch has a different version from
+            what is locked in the Cargo.lock file, run `cargo update` to use the new
+            version. This may also occur with an optional dependency that is not
+      enabled.
+          Blocking waiting for file lock on package cache
+          Blocking waiting for file lock on package cache
+         Compiling pyo3-ffi v0.29.2
+      warning: unused import: `num_traits::AsPrimitive`
+       --> .polars/crates/polars-compute/src/cast/binary_to.rs:1:5
+        |
+      1 | use num_traits::AsPrimitive;
+        |     ^^^^^^^^^^^^^^^^^^^^^^^
+        |
+        = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+      warning: `polars-compute` (lib) generated 1 warning (run `cargo fix --lib -p
+      polars-compute` to apply 1 suggestion)
+         Compiling pyo3 v0.29.2
+         Compiling numpy v0.29.0
+         Compiling polars-utils v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-utils)
+         Compiling polars-plan v0.55.1 (/home/aida/geopolars/.polars/crates/polars-plan)
+         Compiling polars-error v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-error)
+         Compiling polars-config v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-config)
+         Compiling polars-buffer v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-buffer)
+         Compiling polars-schema v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-schema)
+         Compiling polars-async v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-async)
+         Compiling polars-arrow v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-arrow)
+         Compiling polars-compute v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-compute)
+         Compiling polars-dtype v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-dtype)
+         Compiling polars-row v0.55.1 (/home/aida/geopolars/.polars/crates/polars-row)
+         Compiling polars-parquet v0.55.1
+      (/home/aida/geopolars/.polars/crates/polars-parquet)
+         Compiling polars-core v0.55.1 (/home/aida/geopolars/.polars/crates/polars-core)
+      warning: `polars-compute` (lib) generated 1 warning (1 duplicate)
+         Compiling polars-defs v0.55.1 (/home/aida/geopolars/.polars/crates/polars-defs)
+         Compiling polars-ffi v0.55.1 (/home/aida/geopolars/.polars/crates/polars-ffi)
+         Compiling polars-io v0.55.1 (/home/aida/geopolars/.polars/crates/polars-io)
+         Compiling polars v0.55.1 (/home/aida/geopolars/.polars/crates/polars)
+         Compiling pyo3-polars v0.28.0
+      (/home/aida/geopolars/.polars/pyo3-polars/pyo3-polars)
+         Compiling geopolars v0.1.0 (/home/aida/geopolars/geopolars)
+      error[E0433]: cannot find `arrow` in `utils`
+       --> geopolars/src/example/distances.rs:6:46
+        |
+      6 | use pyo3_polars::export::polars_core::utils::arrow::types::NativeType;
+        |                                              ^^^^^ could not find `arrow`
+      in `utils`
+
+      error[E0659]: `polars_plan` is ambiguous
+        --> geopolars/src/example/expressions.rs:4:5
+         |
+       4 | use polars_plan::prelude::FieldsMapper;
+         |     ^^^^^^^^^^^ ambiguous name
+         |
+         = note: ambiguous because of a conflict between a name from a glob import and
+      an outer scope during import or macro resolution
+         = note: `polars_plan` could refer to a crate passed with `--extern`
+         = help: use `::polars_plan` to refer to this crate unambiguously
+      note: `polars_plan` could also refer to the crate imported here
+        --> geopolars/src/example/expressions.rs:28:1
+         |
+      28 | #[polars_expr(output_type=String)]
+         | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         = help: consider adding an explicit import of `polars_plan` to disambiguate
+         = help: or use `self::polars_plan` to refer to this crate unambiguously
+         = note: this error originates in the attribute macro `polars_expr` (in Nightly
+      builds, run with -Z macro-backtrace for more info)
+
+      Some errors have detailed explanations: E0433, E0659.
+      For more information about an error, try `rustc --explain E0433`.
+      error: could not compile `geopolars` (lib) due to 2 previous errors
+      💥 maturin failed
+        Caused by: Failed to build a native library through cargo
+        Caused by: Cargo build finished with "exit status: 101": `env -u CARGO
+      PYO3_BUILD_EXTENSION_MODULE="1" PYO3_ENVIRONMENT_SIGNATURE="cpython-3.14-64bit"
+      PYO3_PYTHON="/home/aida/.cache/uv/builds-v0/.tmpAxugoa/bin/python"
+      PYTHON_SYS_EXECUTABLE="/home/aida/.cache/uv/builds-v0/.tmpAxugoa/bin/python"
+      "cargo" "rustc" "--profile" "dev" "--message-format" "json-render-diagnostics"
+      "--manifest-path" "/home/aida/geopolars/geopolars/Cargo.toml" "--lib"`
+      Error: command ['maturin', 'pep517', 'build-wheel', '-i',
+      '/home/aida/.cache/uv/builds-v0/.tmpAxugoa/bin/python', '--compatibility', 'off',
+      '--editable', '--profile', 'dev'] returned non-zero exit status 1
+
+
+hint: `geopolars` was included because `geopolars-dev` (v0.0.0) depends on `geopolars`
+hint: Build failures usually indicate a problem with the package or the build environment
+make: *** [Makefile:22: install] Error 1

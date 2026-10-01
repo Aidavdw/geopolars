@@ -21,6 +21,8 @@ polars = { workspace = true, features = [
   "allow_unused",
   "dtype-extension",
   "dtype-struct",
+  # Series::date() in src/example/expressions.rs.
+  "dtype-date",
 ] }
 # Needed directly for `use polars_plan::prelude::FieldsMapper`.
 polars-plan = { workspace = true }
@@ -36,3 +38,5 @@ pyo3 = { workspace = true, features = ["abi3-py310"] }
 num = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+geo = "0.33.1"
+geo-traits = "0.3.0"

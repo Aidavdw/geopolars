@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["geopolars"]
+# The polars checkout patched in below is its own workspace. Without this,
+# cargo makes path dependencies under this directory members of ours.
+exclude = [".polars"]
 
 [workspace.package]
 version = "0.1.0"
@@ -45,13 +48,15 @@ debug = "line-tables-only"
 lto = "thin"
 codegen-units = 1
 
-# To track polars git instead of a release, uncomment ALL of these together so
-# the whole graph moves as one.
-# [patch.crates-io]
-# polars = { git = "https://github.com/pola-rs/polars.git" }
-# polars-arrow = { git = "https://github.com/pola-rs/polars.git" }
-# polars-core = { git = "https://github.com/pola-rs/polars.git" }
-# polars-ffi = { git = "https://github.com/pola-rs/polars.git" }
-# polars-lazy = { git = "https://github.com/pola-rs/polars.git" }
-# polars-plan = { git = "https://github.com/pola-rs/polars.git" }
-# polars-utils = { git = "https://github.com/pola-rs/polars.git" }
+# We build agains a specific polars commit (see the makefile).
+# Python polars is build from the same tree.
+[patch.crates-io]
+polars = { path = ".polars/crates/polars" }
+polars-arrow = { path = ".polars/crates/polars-arrow" }
+polars-core = { path = ".polars/crates/polars-core" }
+polars-ffi = { path = ".polars/crates/polars-ffi" }
+polars-lazy = { path = ".polars/crates/polars-lazy" }
+polars-plan = { path = ".polars/crates/polars-plan" }
+polars-utils = { path = ".polars/crates/polars-utils" }
+pyo3-polars = { path = ".polars/pyo3-polars/pyo3-polars" }
+pyo3-polars-derive = { path = ".polars/pyo3-polars/pyo3-polars-derive" }

@@ -3,7 +3,7 @@ use std::hash::Hash;
 use arrow::array::PrimitiveArray;
 use num::Float;
 use polars::prelude::*;
-use pyo3_polars::export::polars_core::utils::arrow::types::NativeType;
+use arrow::types::NativeType;
 use pyo3_polars::export::polars_core::with_match_physical_integer_type;
 
 #[allow(clippy::all)]
