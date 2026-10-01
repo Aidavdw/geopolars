@@ -23,6 +23,7 @@ from geopolars.geo.construct import (
     polygon_from_rings,
     validate,
 )
+from geopolars.geo.crs import to_crs
 
 __all__ = [
     "area",
@@ -40,6 +41,7 @@ __all__ = [
     "polygon",
     "polygon_from_columns",
     "polygon_from_rings",
+    "to_crs",
     "translate",
     "validate",
 ]

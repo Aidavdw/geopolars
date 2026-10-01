@@ -5,6 +5,7 @@
 //! adding a geometry does not touch `crate::expr`.
 
 pub mod coord;
+pub mod crs;
 mod dimension;
 mod geo;
 mod kind;

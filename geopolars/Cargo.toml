@@ -38,5 +38,9 @@ pyo3 = { workspace = true, features = ["abi3-py310"] }
 num = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-geo = "0.33.1"
+geo = { version = "0.33.1", features = ["proj"] }
 geo-traits = "0.3.0"
+# Never named in code: we use the copy `geo` re-exports as `geo::proj`.
+# This is here only to switch on `bundled_proj` for that copy, so PROJ is built
+# from source instead of found on the system. Must match the version geo pins.
+proj = { version = "0.31", features = ["bundled_proj"] }
