@@ -1,4 +1,9 @@
-"""Building a geometry out of the parts it is made of."""
+"""Building a geometry out of the parts it is made of.
+
+A geometry gathered from parts carries the parts' metadata over. Setting a
+`crs` the parts already declare is allowed; setting a different one is an
+error, since relabelling would silently put the coordinates in the wrong place.
+"""
 
 from __future__ import annotations
 
@@ -45,12 +50,18 @@ def _given(
     return {name: value for name, value in given.items() if value is not None}
 
 
+def _metadata(crs: str | None) -> dict[str, str | None]:
+    """Mirrors `MetadataKwargs` in `src/geoarrow/crs.rs`."""
+    return {"crs": crs}
+
+
 def _from_columns(
     function_name: str,
     x: IntoExprColumn,
     y: IntoExprColumn,
     z: IntoExprColumn | None,
     m: IntoExprColumn | None,
+    crs: str | None,
 ) -> pl.Expr:
     """Zip one nested coordinate column per axis into one geometry per row."""
     # A plugin call rather than expressions: Polars can transpose a struct of
@@ -61,10 +72,11 @@ def _from_columns(
         args=[_named(value, name) for name, value in _given(x, y, z, m).items()],
         function_name=function_name,
         is_elementwise=True,
+        kwargs=_metadata(crs),
     )
 
 
-def _gather(function_name: str, parts: IntoExprColumn) -> pl.Expr:
+def _gather(function_name: str, parts: IntoExprColumn, crs: str | None) -> pl.Expr:
     """Gather a list column of a geometry's parts into one geometry per row."""
     # Unlike `point`, this is a plugin call: the output dimension is only
     # knowable from the input's dtype, which `output_type_func` gets to see and
@@ -74,6 +86,7 @@ def _gather(function_name: str, parts: IntoExprColumn) -> pl.Expr:
         args=[parts],
         function_name=function_name,
         is_elementwise=True,
+        kwargs=_metadata(crs),
     )
 
 
@@ -118,6 +131,8 @@ def point(
     y: IntoExprColumn,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.point` column from its coordinate columns.
     Whether you pass `z` and/or `m` decides the dimension, and so the dtype:
@@ -131,6 +146,10 @@ def point(
 
     `z` is an elevation; `m` is an arbitrary measure carried along with the
     vertex, such as a timestamp or a distance along a route.
+
+    ```python
+    df.select(geo.point("lon", "lat", crs="EPSG:4326"))
+    ```
     """
     given = _given(x, y, z, m)
     dimension = tuple(given)
@@ -145,10 +164,12 @@ def point(
     # That really limits usability, no?
     complete = pl.all_horizontal([coord.is_not_null() for coord in coords])
     dtype = GeoPoint.of_dimension(dimension)
-    return pl.when(complete).then(pl.struct(coords)).ext.to(dtype())
+    return pl.when(complete).then(pl.struct(coords)).ext.to(dtype(crs=crs))
 
 
-def linestring_from_vertices(vertices: IntoExprColumn) -> pl.Expr:
+def linestring_from_vertices(
+    vertices: IntoExprColumn, *, crs: str | None = None
+) -> pl.Expr:
     """Build a `geoarrow.linestring` column out of lists of vertices.
 
     `vertices` is a list column holding one list per linestring, of either
@@ -164,7 +185,7 @@ def linestring_from_vertices(vertices: IntoExprColumn) -> pl.Expr:
     )
     ```
     """
-    return _gather("linestring", vertices)
+    return _gather("linestring", vertices, crs)
 
 
 def linestring_from_columns(
@@ -172,6 +193,8 @@ def linestring_from_columns(
     y: IntoExprColumn,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.linestring` column from one coordinate column per axis.
     Each is a `List[Float64]` holding one list of coordinates per linestring
@@ -180,7 +203,7 @@ def linestring_from_columns(
     df.select(geo.linestring_from_columns("lon", "lat", z="elevation"))
     ```
     """
-    return _from_columns("linestring_coords", x, y, z, m)
+    return _from_columns("linestring_coords", x, y, z, m, crs)
 
 
 def linestring(
@@ -188,6 +211,8 @@ def linestring(
     y: IntoExprColumn | None = None,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.linestring` column, from vertices or from coordinates.
     Dispatches to either:
@@ -201,12 +226,14 @@ def linestring(
                 "pass x and y as columns, or call linestring_from_vertices()"
             )
             raise TypeError(msg)
-        return linestring_from_vertices(x)
+        return linestring_from_vertices(x, crs=crs)
 
-    return linestring_from_columns(x, y, z, m)
+    return linestring_from_columns(x, y, z, m, crs=crs)
 
 
-def multipoint_from_points(points: IntoExprColumn) -> pl.Expr:
+def multipoint_from_points(
+    points: IntoExprColumn, *, crs: str | None = None
+) -> pl.Expr:
     """Build a `geoarrow.multipoint` column out of lists of points.
 
     ```python
@@ -217,7 +244,7 @@ def multipoint_from_points(points: IntoExprColumn) -> pl.Expr:
     )
     ```
     """
-    return _gather("multipoint", points)
+    return _gather("multipoint", points, crs)
 
 
 def multipoint_from_columns(
@@ -225,6 +252,8 @@ def multipoint_from_columns(
     y: IntoExprColumn,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.multipoint` column from one coordinate column per axis.
     Each is a `List[Float64]` holding one list of coordinates per multipoint.
@@ -233,7 +262,7 @@ def multipoint_from_columns(
     df.select(geo.multipoint_from_columns("lon", "lat", m="seen_at"))
     ```
     """
-    return _from_columns("multipoint_coords", x, y, z, m)
+    return _from_columns("multipoint_coords", x, y, z, m, crs)
 
 
 def multipoint(
@@ -241,6 +270,8 @@ def multipoint(
     y: IntoExprColumn | None = None,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.multipoint` column, from points or from coordinates.
     Dispatches to either:
@@ -254,12 +285,14 @@ def multipoint(
                 "pass x and y as columns, or call multipoint_from_points()"
             )
             raise TypeError(msg)
-        return multipoint_from_points(x)
+        return multipoint_from_points(x, crs=crs)
 
-    return multipoint_from_columns(x, y, z, m)
+    return multipoint_from_columns(x, y, z, m, crs=crs)
 
 
-def multilinestring_from_linestrings(linestrings: IntoExprColumn) -> pl.Expr:
+def multilinestring_from_linestrings(
+    linestrings: IntoExprColumn, *, crs: str | None = None
+) -> pl.Expr:
     """Build a `geoarrow.multilinestring` column out of lists of linestrings.
     Takes either a list of linestrings, or bare vertex lists.
 
@@ -280,7 +313,7 @@ def multilinestring_from_linestrings(linestrings: IntoExprColumn) -> pl.Expr:
     )
     ```
     """
-    return _gather("multilinestring", linestrings)
+    return _gather("multilinestring", linestrings, crs)
 
 
 def multilinestring_from_columns(
@@ -288,6 +321,8 @@ def multilinestring_from_columns(
     y: IntoExprColumn,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.multilinestring` column from one column per axis.
     Each is a `List[List[Float64]]`.
@@ -296,7 +331,7 @@ def multilinestring_from_columns(
     df.select(geo.multilinestring_from_columns("lon", "lat"))
     ```
     """
-    return _from_columns("multilinestring_coords", x, y, z, m)
+    return _from_columns("multilinestring_coords", x, y, z, m, crs)
 
 
 def multilinestring(
@@ -304,6 +339,8 @@ def multilinestring(
     y: IntoExprColumn | None = None,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.multilinestring` column, from linestrings or coordinates.
     Dispatches to either:
@@ -318,12 +355,12 @@ def multilinestring(
                 "multilinestring_from_linestrings()"
             )
             raise TypeError(msg)
-        return multilinestring_from_linestrings(x)
+        return multilinestring_from_linestrings(x, crs=crs)
 
-    return multilinestring_from_columns(x, y, z, m)
+    return multilinestring_from_columns(x, y, z, m, crs=crs)
 
 
-def polygon_from_rings(rings: IntoExprColumn) -> pl.Expr:
+def polygon_from_rings(rings: IntoExprColumn, *, crs: str | None = None) -> pl.Expr:
     """Build a `geoarrow.polygon` column out of lists of rings.
 
     `rings` is a list column holding one list per polygon, of either
@@ -349,7 +386,7 @@ def polygon_from_rings(rings: IntoExprColumn) -> pl.Expr:
     )
     ```
     """
-    return _gather("polygon", rings)
+    return _gather("polygon", rings, crs)
 
 
 def polygon_from_columns(
@@ -357,6 +394,8 @@ def polygon_from_columns(
     y: IntoExprColumn,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column from one coordinate column per axis.
     Each is a `List[List[Float64]]`.
@@ -368,7 +407,7 @@ def polygon_from_columns(
     The first ring of a polygon is its exterior ring,
     and the rest are its holes.
     """
-    return _from_columns("polygon_coords", x, y, z, m)
+    return _from_columns("polygon_coords", x, y, z, m, crs)
 
 
 def polygon(
@@ -376,6 +415,8 @@ def polygon(
     y: IntoExprColumn | None = None,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column, from rings or from coordinates.
     Dispatches to either:
@@ -389,6 +430,6 @@ def polygon(
                 "pass x and y as columns, or call polygon_from_rings()"
             )
             raise TypeError(msg)
-        return polygon_from_rings(x)
+        return polygon_from_rings(x, crs=crs)
 
-    return polygon_from_columns(x, y, z, m)
+    return polygon_from_columns(x, y, z, m, crs=crs)

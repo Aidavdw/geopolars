@@ -378,6 +378,21 @@ def test_multilinestring_namespace_matches_the_functional_api(
     )
 
 
+def test_to_crs_namespace_matches_the_functional_api(
+    line_coords: pl.DataFrame,
+) -> None:
+    lines = (
+        line_coords.group_by("line", maintain_order=True)
+        .agg("x", "y", "z")
+        .select(line=geo.linestring_from_columns("x", "y", z="z", crs="EPSG:4326"))
+    )
+
+    assert_frame_equal(
+        lines.select(gpl.col("line").geo.to_crs("EPSG:3857")),
+        lines.select(geo.to_crs("line", "EPSG:3857")),
+    )
+
+
 def test_translate_rejects_a_non_geometry_while_resolving_the_schema() -> None:
     """The output type is derived from the input's dtype,
     so a bad column is a schema error."""

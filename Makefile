@@ -1,6 +1,6 @@
 SHELL=/bin/bash
 
-.PHONY: install install-release polars-src run run-geo run-line run-centroid run-centroid-manual run-release rebuild test test-rust test-python clean
+.PHONY: install install-release polars-src run run-geo run-line run-centroid run-centroid-manual run-crs run-release rebuild test test-rust test-python clean
 
 # The polars commit we build against, for both Cargo and uv. 
 # Single source of truth.
@@ -61,6 +61,10 @@ run-geo: install
 ## Run the geoarrow.linestring proof of concept.
 run-line: install
 	uv run examples/run_line.py
+
+## Run the CRS reprojection example, for points and lines.
+run-crs: install
+	uv run examples/run_crs.py
 
 ## Run the coordinate centroid proof of concept.
 run-centroid: install

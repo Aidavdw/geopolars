@@ -19,7 +19,11 @@ struct ToCrsKwargs {
 fn reprojected_geometry(dtype: &DataType, to: &str) -> PolarsResult<Geo> {
     let geo = describe(dtype)?;
     let metadata = ExtensionMetadata::parse(geo.typ.serialize_metadata().as_deref())?;
-    Ok(Geo::new(geo.kind, geo.dim, metadata.with_crs(to).serialize()))
+    Ok(Geo::new(
+        geo.kind,
+        geo.dim,
+        metadata.with_crs(to).serialize(),
+    ))
 }
 
 /// `output_type_func_with_kwargs` for [`to_crs`]: the same geometry, but the

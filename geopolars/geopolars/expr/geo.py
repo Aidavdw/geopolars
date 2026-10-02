@@ -9,29 +9,35 @@ from geopolars.geo import affine, centroid, construct
 # bound directly: `geopolars.geo.area` is the function, not the module.
 from geopolars.geo.area import area as _area
 
+# bound directly: the method's `crs` argument would shadow the module.
+from geopolars.geo.crs import to_crs as _to_crs
+
 
 @pl.api.register_expr_namespace("geo")
 class Geometry:
     def __init__(self, expr: pl.Expr):
         self._expr = expr
 
-    def linestring(self) -> pl.Expr:
-        return construct.linestring_from_vertices(self._expr)
+    def linestring(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.linestring_from_vertices(self._expr, crs=crs)
 
-    def multipoint(self) -> pl.Expr:
-        return construct.multipoint_from_points(self._expr)
+    def multipoint(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.multipoint_from_points(self._expr, crs=crs)
 
-    def multilinestring(self) -> pl.Expr:
-        return construct.multilinestring_from_linestrings(self._expr)
+    def multilinestring(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.multilinestring_from_linestrings(self._expr, crs=crs)
 
-    def polygon(self) -> pl.Expr:
-        return construct.polygon_from_rings(self._expr)
+    def polygon(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.polygon_from_rings(self._expr, crs=crs)
 
     def validate(self) -> pl.Expr:
         return construct.validate(self._expr)
 
     def translate(self, dx: float, dy: float, dz: float = 0.0) -> pl.Expr:
         return affine.translate(self._expr, dx=dx, dy=dy, dz=dz)
+
+    def to_crs(self, crs: str) -> pl.Expr:
+        return _to_crs(self._expr, crs)
 
     def coordinate_centroid(self) -> pl.Expr:
         return centroid.coordinate_centroid(self._expr)

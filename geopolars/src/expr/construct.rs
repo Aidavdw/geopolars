@@ -6,6 +6,7 @@ use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 
 use super::coords::same_geometry;
+use crate::geoarrow::crs::MetadataKwargs;
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
 
 /// Used in error messages, don't care about allocation
@@ -53,30 +54,48 @@ fn parts_of(dtype: &DataType, part: Kind) -> PolarsResult<(GeoDimension, Option<
     Ok((dim, None))
 }
 
-/// `output_type_func` for gathering a list of `part`s into a `kind`.
-fn gathered_type(input_fields: &[Field], kind: Kind, part: Kind) -> PolarsResult<Field> {
+/// Small helper
+fn gathered(
+    dtype: &DataType,
+    kwargs: &MetadataKwargs,
+    kind: Kind,
+    part: Kind,
+) -> PolarsResult<Geo> {
+    let (dim, metadata) = parts_of(dtype, part)?;
+    Ok(Geo::new(kind, dim, kwargs.apply(metadata)?))
+}
+
+/// `output_type_func_with_kwargs` for gathering a list of `part`s into a `kind`.
+fn gathered_type(
+    input_fields: &[Field],
+    kwargs: &MetadataKwargs,
+    kind: Kind,
+    part: Kind,
+) -> PolarsResult<Field> {
     let field = &input_fields[0];
-    let (dim, metadata) = parts_of(field.dtype(), part)?;
-    Ok(Field::new(
-        field.name().clone(),
-        Geo::new(kind, dim, metadata).dtype(),
-    ))
+    let geo = gathered(field.dtype(), kwargs, kind, part)?;
+    Ok(Field::new(field.name().clone(), geo.dtype()))
 }
 
-fn linestring_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    gathered_type(input_fields, Kind::LineString, Kind::Point)
+fn linestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    gathered_type(input_fields, &kwargs, Kind::LineString, Kind::Point)
 }
 
-fn polygon_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    gathered_type(input_fields, Kind::Polygon, Kind::LineString)
+fn polygon_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    gathered_type(input_fields, &kwargs, Kind::Polygon, Kind::LineString)
 }
 
-fn multipoint_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    gathered_type(input_fields, Kind::MultiPoint, Kind::Point)
+fn multipoint_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    gathered_type(input_fields, &kwargs, Kind::MultiPoint, Kind::Point)
 }
 
-fn multilinestring_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    gathered_type(input_fields, Kind::MultiLineString, Kind::LineString)
+fn multilinestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    gathered_type(
+        input_fields,
+        &kwargs,
+        Kind::MultiLineString,
+        Kind::LineString,
+    )
 }
 
 /// Elementwise: is this geometry there in full, down to the last coordinate?
@@ -127,8 +146,8 @@ fn only_complete(parts: Series, nesting: u8) -> PolarsResult<Series> {
 }
 
 /// Gather a list of `part`s into one geometry of `kind` per row.
-fn gather(parts: &Series, kind: Kind, part: Kind) -> PolarsResult<Series> {
-    let (dim, metadata) = parts_of(parts.dtype(), part)?;
+fn gather(parts: &Series, kwargs: &MetadataKwargs, kind: Kind, part: Kind) -> PolarsResult<Series> {
+    let geo = gathered(parts.dtype(), kwargs, kind, part)?;
     // This only changes dtype, nothing on the data.
     let storage = parts.list()?.apply_to_inner(&|part| {
         Ok(match part.dtype() {
@@ -137,20 +156,19 @@ fn gather(parts: &Series, kind: Kind, part: Kind) -> PolarsResult<Series> {
         })
     })?;
 
-    Ok(only_complete(storage.into_series(), kind.nesting())?
-        .into_extension(Geo::new(kind, dim, metadata).instance()))
+    Ok(only_complete(storage.into_series(), kind.nesting())?.into_extension(geo.instance()))
 }
 
 /// Gather lists of vertices into linestrings.
-#[polars_expr(output_type_func=linestring_type)]
-fn linestring(inputs: &[Series]) -> PolarsResult<Series> {
-    gather(&inputs[0], Kind::LineString, Kind::Point)
+#[polars_expr(output_type_func_with_kwargs=linestring_type)]
+fn linestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    gather(&inputs[0], &kwargs, Kind::LineString, Kind::Point)
 }
 
 /// Gather lists of rings into polygons.
-#[polars_expr(output_type_func=polygon_type)]
-fn polygon(inputs: &[Series]) -> PolarsResult<Series> {
-    gather(&inputs[0], Kind::Polygon, Kind::LineString)
+#[polars_expr(output_type_func_with_kwargs=polygon_type)]
+fn polygon(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    gather(&inputs[0], &kwargs, Kind::Polygon, Kind::LineString)
 }
 
 /// Gather lists of points into multipoints.
@@ -158,17 +176,17 @@ fn polygon(inputs: &[Series]) -> PolarsResult<Series> {
 /// The same gather a linestring is built by, over the same parts. Only the
 /// `Kind` it is labelled with differs, and that is the whole difference between
 /// the two geometries.
-#[polars_expr(output_type_func=multipoint_type)]
-fn multipoint(inputs: &[Series]) -> PolarsResult<Series> {
-    gather(&inputs[0], Kind::MultiPoint, Kind::Point)
+#[polars_expr(output_type_func_with_kwargs=multipoint_type)]
+fn multipoint(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    gather(&inputs[0], &kwargs, Kind::MultiPoint, Kind::Point)
 }
 
 /// Gather lists of linestrings into multilinestrings.
 ///
 /// See Python: `multilinestring_from_linestrings()`
-#[polars_expr(output_type_func=multilinestring_type)]
-fn multilinestring(inputs: &[Series]) -> PolarsResult<Series> {
-    gather(&inputs[0], Kind::MultiLineString, Kind::LineString)
+#[polars_expr(output_type_func_with_kwargs=multilinestring_type)]
+fn multilinestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    gather(&inputs[0], &kwargs, Kind::MultiLineString, Kind::LineString)
 }
 
 /// Null out every geometry that is missing a part, or a coordinate of one.
@@ -212,29 +230,35 @@ fn coordinates_of(input_fields: &[Field], kind: Kind) -> PolarsResult<GeoDimensi
     })
 }
 
-/// `output_type_func` for zipping coordinate columns into a `kind`.
-fn zipped_type(input_fields: &[Field], kind: Kind) -> PolarsResult<Field> {
+/// Small helper
+fn zipped(input_fields: &[Field], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<Geo> {
     let dim = coordinates_of(input_fields, kind)?;
-    Ok(Field::new(
-        input_fields[0].name().clone(),
-        Geo::new(kind, dim, None).dtype(),
-    ))
+    Ok(Geo::new(kind, dim, kwargs.apply(None)?))
 }
 
-fn linestring_coords_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    zipped_type(input_fields, Kind::LineString)
+/// `output_type_func_with_kwargs` for zipping coordinate columns into a `kind`.
+fn zipped_type(input_fields: &[Field], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<Field> {
+    let geo = zipped(input_fields, kwargs, kind)?;
+    Ok(Field::new(input_fields[0].name().clone(), geo.dtype()))
 }
 
-fn polygon_coords_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    zipped_type(input_fields, Kind::Polygon)
+fn linestring_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    zipped_type(input_fields, &kwargs, Kind::LineString)
 }
 
-fn multipoint_coords_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    zipped_type(input_fields, Kind::MultiPoint)
+fn polygon_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    zipped_type(input_fields, &kwargs, Kind::Polygon)
 }
 
-fn multilinestring_coords_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    zipped_type(input_fields, Kind::MultiLineString)
+fn multipoint_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    zipped_type(input_fields, &kwargs, Kind::MultiPoint)
+}
+
+fn multilinestring_coords_type(
+    input_fields: &[Field],
+    kwargs: MetadataKwargs,
+) -> PolarsResult<Field> {
+    zipped_type(input_fields, &kwargs, Kind::MultiLineString)
 }
 
 /// Interleave columns that each nest their coordinate `nesting` `List` layers
@@ -264,12 +288,12 @@ fn interleave(columns: &[Series], nesting: u8) -> PolarsResult<Series> {
 }
 
 /// Zip one coordinate column per axis into one geometry of `kind` per row.
-fn zip(inputs: &[Series], kind: Kind) -> PolarsResult<Series> {
+fn zip(inputs: &[Series], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<Series> {
     let input_fields: Vec<Field> = inputs
         .iter()
         .map(|s| Field::new(s.name().clone(), s.dtype().clone()))
         .collect();
-    let dim = coordinates_of(&input_fields, kind)?;
+    let geo = zipped(&input_fields, kwargs, kind)?;
 
     // `get_inner` reads the values array whole, so anything a slice left
     // outside the offsets has to go before the columns can be read in lockstep.
@@ -295,32 +319,29 @@ fn zip(inputs: &[Series], kind: Kind) -> PolarsResult<Series> {
     }
 
     let storage = interleave(&columns, kind.nesting())?;
-    Ok(
-        only_complete(storage, kind.nesting())?
-            .into_extension(Geo::new(kind, dim, None).instance()),
-    )
+    Ok(only_complete(storage, kind.nesting())?.into_extension(geo.instance()))
 }
 
 /// Zip lists of coordinates into linestrings.
-#[polars_expr(output_type_func=linestring_coords_type)]
-fn linestring_coords(inputs: &[Series]) -> PolarsResult<Series> {
-    zip(inputs, Kind::LineString)
+#[polars_expr(output_type_func_with_kwargs=linestring_coords_type)]
+fn linestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    zip(inputs, &kwargs, Kind::LineString)
 }
 
 /// Zip lists of lists of coordinates into polygons.
-#[polars_expr(output_type_func=polygon_coords_type)]
-fn polygon_coords(inputs: &[Series]) -> PolarsResult<Series> {
-    zip(inputs, Kind::Polygon)
+#[polars_expr(output_type_func_with_kwargs=polygon_coords_type)]
+fn polygon_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    zip(inputs, &kwargs, Kind::Polygon)
 }
 
 /// Zip lists of coordinates into multipoints.
-#[polars_expr(output_type_func=multipoint_coords_type)]
-fn multipoint_coords(inputs: &[Series]) -> PolarsResult<Series> {
-    zip(inputs, Kind::MultiPoint)
+#[polars_expr(output_type_func_with_kwargs=multipoint_coords_type)]
+fn multipoint_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    zip(inputs, &kwargs, Kind::MultiPoint)
 }
 
 /// Zip lists of lists of coordinates into multilinestrings.
-#[polars_expr(output_type_func=multilinestring_coords_type)]
-fn multilinestring_coords(inputs: &[Series]) -> PolarsResult<Series> {
-    zip(inputs, Kind::MultiLineString)
+#[polars_expr(output_type_func_with_kwargs=multilinestring_coords_type)]
+fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    zip(inputs, &kwargs, Kind::MultiLineString)
 }

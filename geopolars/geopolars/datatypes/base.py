@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import polars as pl
 
+from geopolars import geopolars as _rust
 from geopolars.datatypes import dimension
 
 if TYPE_CHECKING:
@@ -54,18 +55,22 @@ class GeoArrowType(pl.datatypes.BaseExtension):
             cls._geo_storage = dimension.storage(cls._dimension, cls._nesting)
             cls._by_dimension[cls._dimension] = cls
 
-    def __init__(self) -> None:
-        # Metadata is None for now.
-        # It is the slot GeoArrow reserves for `crs`,
-        # `crs_type` and `edges`, encoded as a JSON string -- the one place
-        # JSON is involved, and it describes the type, never the coordinates.
+    def __init__(self, *, crs: str | None = None) -> None:
+        """`crs` declares the coordinate reference system the coordinates are in,
+        in any form PROJ accepts: e.g. `"EPSG:4326"`, WKT or PROJJSON.
+        It is only a label: nothing is checked or reprojected."""
+        # Metadata is the slot GeoArrow reserves for `crs`, `crs_type` and
+        # `edges`, encoded as a JSON string -- the one place JSON is involved,
+        # and it describes the type, never the coordinates.
         #
-        # NOTE: when CRS lands, mind that `BaseExtension.__eq__` compares
-        # metadata as a *string*, byte for byte. Two spellings of the same CRS
-        # will read as two different dtypes unless we canonicalise here. Rust's
-        # `dyn_eq` has no such constraint and can compare semantically.
+        # `BaseExtension.__eq__` compares metadata as a *string*, byte for byte,
+        # and so does Rust. So the JSON is written by the same Rust code that
+        # writes it for the plugin's outputs, never by Python.
+        # Two spellings of the same CRS still make two different dtypes.
         super().__init__(
-            name=self._extension_name, storage=self._geo_storage, metadata=None
+            name=self._extension_name,
+            storage=self._geo_storage,
+            metadata=_rust.extension_metadata(crs=crs),
         )
 
     def __repr__(self) -> str:

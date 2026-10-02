@@ -74,14 +74,53 @@ impl ExtensionMetadata {
 
     /// Consuming setter for CRS.
     pub fn with_crs(mut self, crs: &str) -> Self {
-        // The spec asks for a JSON object to be written as one, not escaped.
-        let crs = match serde_json::from_str(crs) {
-            Ok(object @ Value::Object(_)) => object,
-            _ => Value::String(crs.to_owned()),
-        };
-        self.0.insert("crs".to_owned(), crs);
+        self.0.insert("crs".to_owned(), crs_value(crs));
         self.0.shift_remove("crs_type");
         self
+    }
+}
+
+fn crs_value(crs: &str) -> Value {
+    match serde_json::from_str(crs) {
+        Ok(object @ Value::Object(_)) => object,
+        _ => Value::String(crs.to_owned()),
+    }
+}
+
+/// The metadata fields a constructor can be asked to set, as keyword arguments.
+///
+/// A fixed set: every one is a field GeoArrow defines, never an arbitrary key.
+/// A new field is one more `Option` here, and one more keyword on the Python
+/// side.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct MetadataKwargs {
+    /// The CRS the coordinates are in, in any form PROJ accepts.
+    pub crs: Option<String>,
+}
+
+impl MetadataKwargs {
+    /// The metadata of a geometry built from parts carrying `metadata`.
+    ///
+    /// Without fields to set, `metadata` comes back untouched, byte for byte.
+    ///
+    /// This labels and never reprojects. Parts that already declare a different
+    /// CRS are an error rather than being relabelled into the wrong place.
+    pub fn apply(&self, metadata: Option<String>) -> PolarsResult<Option<String>> {
+        let Some(crs) = &self.crs else {
+            return Ok(metadata);
+        };
+
+        let parsed = ExtensionMetadata::parse(metadata.as_deref())?;
+        match parsed.0.get("crs") {
+            None | Some(Value::Null) => Ok(parsed.with_crs(crs).serialize()),
+            Some(declared) if *declared == crs_value(crs) => Ok(metadata),
+            Some(declared) => polars_bail!(
+                SchemaMismatch: "the parts already declare the CRS {declared}, not {}; \
+                use `to_crs` to reproject them instead",
+                crs_value(crs)
+            ),
+        }
     }
 }
 
@@ -151,6 +190,54 @@ mod tests {
         let out = with_crs(None, r#"{"type": "GeographicCRS"}"#).unwrap();
         assert_eq!(out, r#"{"crs":{"type":"GeographicCRS"}}"#);
         assert_eq!(crs_of(Some(&out)).unwrap(), r#"{"type":"GeographicCRS"}"#);
+    }
+
+    fn apply(metadata: Option<&str>, crs: Option<&str>) -> PolarsResult<Option<String>> {
+        let kwargs = MetadataKwargs {
+            crs: crs.map(str::to_owned),
+        };
+        kwargs.apply(metadata.map(str::to_owned))
+    }
+
+    #[test]
+    fn nothing_to_set_keeps_metadata_verbatim() {
+        let metadata = r#"{ "crs" : "EPSG:4326", "x-extra": 1 }"#;
+        assert_eq!(apply(Some(metadata), None).unwrap().unwrap(), metadata);
+        assert_eq!(apply(None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn sets_a_crs_next_to_the_other_keys() {
+        assert_eq!(
+            apply(None, Some("EPSG:4326")).unwrap().unwrap(),
+            r#"{"crs":"EPSG:4326"}"#
+        );
+        assert_eq!(
+            apply(Some(r#"{"edges":"spherical"}"#), Some("EPSG:4326"))
+                .unwrap()
+                .unwrap(),
+            r#"{"edges":"spherical","crs":"EPSG:4326"}"#
+        );
+    }
+
+    #[test]
+    fn the_same_crs_again_is_not_a_conflict() {
+        // Untouched: `crs_type` survives, where `with_crs` would have dropped it.
+        let code = r#"{"crs":"EPSG:4326","crs_type":"authority_code"}"#;
+        assert_eq!(apply(Some(code), Some("EPSG:4326")).unwrap().unwrap(), code);
+        let projjson = r#"{"crs":{"type":"GeographicCRS"}}"#;
+        assert_eq!(
+            apply(Some(projjson), Some(r#"{ "type": "GeographicCRS" }"#))
+                .unwrap()
+                .unwrap(),
+            projjson
+        );
+    }
+
+    #[test]
+    fn refuses_to_relabel_a_declared_crs() {
+        let err = apply(Some(r#"{"crs":"EPSG:4326"}"#), Some("EPSG:28992")).unwrap_err();
+        assert!(err.to_string().contains("to_crs"), "{err}");
     }
 
     #[test]
