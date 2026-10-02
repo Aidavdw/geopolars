@@ -1,1 +1,0 @@
-export MATURIN_PEP517_ARGS="--profile dev"; if [ -e .polars/.reinstall ]; then reinstall="--reinstall-package polars --reinstall-package polars-runtime-32"; fi; uv sync $reinstall && rm -f .polars/.reinstall
