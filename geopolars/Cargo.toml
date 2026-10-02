@@ -21,7 +21,7 @@ polars = { workspace = true, features = [
   "allow_unused",
   "dtype-extension",
   "dtype-struct",
-  # Series::date() in src/example/expressions.rs.
+  # Remove this when removing the example functions.
   "dtype-date",
 ] }
 # Needed directly for `use polars_plan::prelude::FieldsMapper`.
@@ -40,7 +40,11 @@ rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 geo = { version = "0.33.1", features = ["proj"] }
 geo-traits = "0.3.0"
-# Never named in code: we use the copy `geo` re-exports as `geo::proj`.
-# This is here only to switch on `bundled_proj` for that copy, so PROJ is built
-# from source instead of found on the system. Must match the version geo pins.
+# Used by 'geo'. This sets it so that proj is bundled with the plugin,
+# rather than using the system installation (portability).
 proj = { version = "0.31", features = ["bundled_proj"] }
+geoparquet = "0.9.0"
+# Must match the version geoparquet pins.
+geoarrow-schema = "0.9.0"
+# for maximum interoperability, we should not reshuffle keys when (re-)constructing metadata.
+serde_json = { version = "1", features = ["preserve_order"] }
