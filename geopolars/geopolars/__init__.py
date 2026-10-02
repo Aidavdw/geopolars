@@ -17,7 +17,7 @@ In code organisation, the layering is one-directional:
 There should be no links the other direction.
 """
 
-from geopolars import datatypes, date_util, dist, geo, language, panic
+from geopolars import datatypes, geo
 from geopolars.datatypes import (
     GeoLineString,
     GeoMultiLineString,
@@ -47,27 +47,15 @@ from geopolars.datatypes import (
 )
 
 # Importing this registers the namespaces on pl.Expr as a side effect.
-from geopolars.expr import (
-    DateUtil,
-    Distance,
-    Geometry,
-    Language,
-    Panic,
-    PluginExpr,
-    as_plugin,
-    col,
-)
+from geopolars.expr import Geometry, PluginExpr, as_plugin, col
 
 __all__ = [
-    "DateUtil",
-    "Distance",
     "GeoLineString",
     "GeoMultiLineString",
     "GeoMultiPoint",
     "GeoPoint",
     "GeoPolygon",
     "Geometry",
-    "Language",
     "LineStringXY",
     "LineStringXYM",
     "LineStringXYZ",
@@ -80,7 +68,6 @@ __all__ = [
     "MultiPointXYM",
     "MultiPointXYZ",
     "MultiPointXYZM",
-    "Panic",
     "PluginExpr",
     "PointXY",
     "PointXYM",
@@ -93,9 +80,5 @@ __all__ = [
     "as_plugin",
     "col",
     "datatypes",
-    "date_util",
-    "dist",
     "geo",
-    "language",
-    "panic",
 ]

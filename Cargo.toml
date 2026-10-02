@@ -18,7 +18,6 @@ polars = { version = "0.55", default-features = false }
 polars-core = { version = "0.55", default-features = false }
 polars-ffi = { version = "0.55", default-features = false }
 polars-lazy = { version = "0.55", default-features = false }
-polars-plan = { version = "0.55", default-features = false }
 polars-utils = { version = "0.55", default-features = false }
 
 # pyo3-polars is versioned INDEPENDENTLY of polars. 0.28 is the release built
@@ -26,16 +25,7 @@ polars-utils = { version = "0.55", default-features = false }
 pyo3-polars = { version = "0.28" }
 pyo3 = { version = "0.29" }
 
-num = "0.4"
-rayon = "1.12"
 serde = { version = "1.0.188", features = ["derive", "rc"] }
-
-# `use arrow::...` in the plugin refers to polars' vendored arrow, not the
-# arrow-rs crate. It must track the polars version exactly.
-[workspace.dependencies.arrow]
-package = "polars-arrow"
-version = "0.55"
-default-features = false
 
 # Full debuginfo for all of polars statically linked into one cdylib produces an
 # ~800MB artifact. Line tables are enough for backtraces and keep it sane.

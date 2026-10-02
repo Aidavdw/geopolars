@@ -11,20 +11,15 @@ from typing import cast
 
 import polars as pl
 
-from geopolars.expr.example import DateUtil, Distance, Language, Panic
 from geopolars.expr.geo import Geometry
 
 
 class PluginExpr(pl.Expr):
     """A `pl.Expr` that declares this package's namespaces for type checkers.
-    The subclass exists so a checker can resolve `.geo`, `.dist`, etc.
+    The subclass exists so a checker can resolve `.geo`.
     """
 
     geo: Geometry
-    language: Language
-    dist: Distance
-    date_util: DateUtil
-    panic: Panic
 
 
 def col(name: str) -> PluginExpr:
@@ -39,7 +34,7 @@ def as_plugin(expr: pl.Expr) -> PluginExpr:
     `pl.Expr` and loses the annotation:
 
     ```python
-    as_plugin(pl.col("a").str.to_uppercase()).dist.hamming_distance("b")
+    as_plugin(pl.col("a").struct.field("b")).geo.translate(1.0, 2.0)
     ```
     """
     return cast(PluginExpr, expr)

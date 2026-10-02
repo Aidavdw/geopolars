@@ -1,6 +1,6 @@
 SHELL=/bin/bash
 
-.PHONY: install install-release polars-src run run-geo run-line run-centroid run-centroid-manual run-crs run-release rebuild test test-rust test-python clean
+.PHONY: install install-release polars-src run-geo run-line run-centroid run-centroid-manual run-crs run-release rebuild test test-rust test-python clean
 
 # The polars commit we build against, for both Cargo and uv. 
 # Single source of truth.
@@ -50,9 +50,6 @@ test-rust: polars-src
 ## Python tests. Delegates to the package Makefile, which builds first.
 test-python:
 	@$(MAKE) -s -C geopolars test
-
-run: install
-	uv run examples/run.py
 
 ## Run the geoarrow.point proof of concept.
 run-geo: install
