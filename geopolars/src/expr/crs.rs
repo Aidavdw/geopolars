@@ -16,7 +16,8 @@ struct ToCrsKwargs {
 }
 
 /// The geometry we were handed, with its metadata naming the target CRS.
-fn reprojected_geometry(dtype: &DataType, to: &str) -> PolarsResult<Geo> {
+/// Type operation only.
+fn reprojected_geometry_type(dtype: &DataType, to: &str) -> PolarsResult<Geo> {
     let geo = describe(dtype)?;
     let metadata = ExtensionMetadata::parse(geo.typ.serialize_metadata().as_deref())?;
     Ok(Geo::new(
@@ -30,7 +31,7 @@ fn reprojected_geometry(dtype: &DataType, to: &str) -> PolarsResult<Geo> {
 /// metadata now names the target CRS, so the dtype is a different one.
 fn reprojected(input_fields: &[Field], kwargs: ToCrsKwargs) -> PolarsResult<Field> {
     let field = &input_fields[0];
-    let geo = reprojected_geometry(field.dtype(), &kwargs.to)?;
+    let geo = reprojected_geometry_type(field.dtype(), &kwargs.to)?;
     Ok(Field::new(field.name().clone(), geo.dtype()))
 }
 
@@ -97,6 +98,6 @@ fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
         reproject(coords, geo.dim, &proj)
     })?;
 
-    let typ = reprojected_geometry(inputs[0].dtype(), &kwargs.to)?.instance();
+    let typ = reprojected_geometry_type(inputs[0].dtype(), &kwargs.to)?.instance();
     Ok(out.into_extension(typ))
 }

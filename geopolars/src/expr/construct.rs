@@ -98,12 +98,11 @@ fn multilinestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> Polar
     )
 }
 
-/// Elementwise: is this geometry there in full, down to the last coordinate?
+/// Elementwise check:
+/// is this geometry there in full, down to the last coordinate?
 ///
 /// A part that is missing anywhere below the outermost level
-/// (e.g. a vertex of a linestring,
-/// a ring of a polygon,
-/// a vertex of one of those rings)
+/// (e.g. a vertex of a linestring, a ring of a polygon, a vertex of one of those rings)
 /// counts as missing here rather than as null,
 /// because the geometry around it cannot stand without it.
 fn complete(values: &Series, nesting: u8) -> PolarsResult<BooleanChunked> {
@@ -134,7 +133,7 @@ fn complete(values: &Series, nesting: u8) -> PolarsResult<BooleanChunked> {
 
 /// Null out every geometry that is missing a part, or a coordinate of one.
 ///
-/// GeoArrow allows nulls only at the outermost level.
+/// This enforces that GeoArrow allows nulls only at the outermost level.
 fn only_complete(parts: Series, nesting: u8) -> PolarsResult<Series> {
     let complete = complete(&parts, nesting)?;
     if complete.all() {
@@ -172,12 +171,9 @@ fn polygon(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
 }
 
 /// Gather lists of points into multipoints.
-///
-/// The same gather a linestring is built by, over the same parts. Only the
-/// `Kind` it is labelled with differs, and that is the whole difference between
-/// the two geometries.
 #[polars_expr(output_type_func_with_kwargs=multipoint_type)]
 fn multipoint(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    // Note that this is basically the same as linestring, but just a different [Kind].
     gather(&inputs[0], &kwargs, Kind::MultiPoint, Kind::Point)
 }
 
@@ -264,8 +260,7 @@ fn multilinestring_coords_type(
 /// Interleave columns that each nest their coordinate `nesting` `List` layers
 /// deep into one `List`-of-that-depth of coordinate structs.
 ///
-/// Only the first column's offsets survive; the callers checks the rest carry
-/// the same ones.
+/// Only the first column's offsets survive; the callers checks the rest carry the same ones.
 fn interleave(columns: &[Series], nesting: u8) -> PolarsResult<Series> {
     if nesting == 0 {
         let coordinates = columns

@@ -1,4 +1,5 @@
-//! What every expression over a geometry's coordinates shares.
+//! Shared functionality for expressions is often implemented over coordinates,
+//! the shared building block of geometries.
 
 use polars::prelude::*;
 
@@ -14,8 +15,8 @@ pub fn same_geometry(input_fields: &[Field]) -> PolarsResult<Field> {
 /// Apply a coordinate-wise kernel through however many `List` layers the
 /// geometry nests its coordinates under.
 ///
-/// The offsets are never touched,
-/// so group association (linestring etc) is unaffected.
+/// This works on any geometry, because it works on the coordinates directly.
+/// Geometry-specific data (e.g. group association) is never touched.
 pub fn map_coords(
     storage: &Series,
     nesting: u8,
