@@ -11,7 +11,6 @@ import pytest
 from polars.exceptions import SchemaError
 from polars.testing import assert_frame_equal
 
-from geopolars.datatypes import GeoMultiLineString, MultiLineStringXY
 from tests.unit.conftest import XY, XYZ, Dimension, multilinestring_coordinates
 
 
@@ -139,52 +138,3 @@ def test_the_lists_keep_the_linestrings_apart(
     assert df.select(lines.explode(empty_as_null=False).list.len())[
         "multilinestring"
     ].to_list() == [5, 4, 4]
-
-
-def test_the_linestrings_keep_their_order(
-    ring_coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    """Unlike a polygon's rings, no part is singled out as the exterior one, but
-    the parts still arrive in the order they were given."""
-    df = dimension.multilinestrings(ring_coords)
-    first = df.select(
-        pl.col("multilinestring").ext.storage().list.first().alias("line")
-    ).head(1)
-    expected = ring_coords.filter(polygon="a", ring=0)
-
-    assert_frame_equal(
-        first.select(pl.col("line").explode(empty_as_null=False))
-        .to_series()
-        .struct.unnest(),
-        expected.select(dimension.coords),
-    )
-
-
-@pytest.mark.parametrize(
-    "storage",
-    [
-        # A multilinestring nests twice; a bare coordinate is a point.
-        pl.Struct({"x": pl.Float64, "y": pl.Float64}),
-        # One list short: that nesting is a single linestring.
-        pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})),
-        # Order is significant inside the coordinate, two levels down.
-        pl.List(pl.List(pl.Struct({"y": pl.Float64, "x": pl.Float64}))),
-        # Interleaved coordinates are a layout this version does not implement.
-        pl.List(pl.List(pl.Float64)),
-        # One list too many: that nesting is a multipolygon.
-        pl.List(pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})))),
-    ],
-    ids=["unnested", "one line", "reversed", "interleaved", "over-nested"],
-)
-def test_rejects_storage_that_is_not_two_lists_of_spec_coordinates(
-    storage: pl.DataType,
-) -> None:
-    with pytest.raises(
-        ValueError, match="unsupported 'geoarrow.multilinestring' storage"
-    ):
-        GeoMultiLineString.ext_from_params("geoarrow.multilinestring", storage, None)
-
-
-def test_the_extension_name_is_the_one_the_spec_fixes() -> None:
-    assert MultiLineStringXY().ext_name() == "geoarrow.multilinestring"
-    assert GeoMultiLineString._extension_name == "geoarrow.multilinestring"

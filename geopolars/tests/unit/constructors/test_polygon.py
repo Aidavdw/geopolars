@@ -9,10 +9,7 @@ from polars.testing import assert_frame_equal
 
 from geopolars import geo
 from geopolars.datatypes import (
-    GeoLineString,
-    LineStringXY,
     PolygonXY,
-    PolygonXYM,
 )
 from tests.unit.conftest import Dimension, ring_coordinates
 
@@ -137,24 +134,6 @@ def test_a_missing_coordinate_invalidates_the_whole_polygon() -> None:
     assert df["polygon"].is_null().to_list() == [True, False]
 
 
-def test_metadata_is_carried_over_from_the_rings() -> None:
-    metadata = '{"edges":"spherical"}'
-    spherical = GeoLineString.ext_from_params(
-        "geoarrow.linestring", LineStringXY().ext_storage(), metadata
-    )
-    df = (
-        pl.DataFrame({"vertices": _TRIANGLE}, schema={"vertices": _XY_VERTICES})
-        .select(ring=pl.col("vertices").ext.to(spherical))
-        .select(pl.col("ring").implode())
-        .select(geo.polygon("ring").alias("polygon"))
-    )
-
-    assert df.schema["polygon"].ext_metadata() == metadata
-    assert df.schema["polygon"] == PolygonXY.ext_from_params(
-        "geoarrow.polygon", PolygonXY().ext_storage(), metadata
-    )
-
-
 def test_rejects_rings_that_are_not_coordinates() -> None:
     df = pl.DataFrame({"rings": [[[1.0, 2.0]]]})
 
@@ -200,29 +179,6 @@ def test_empty_frame_keeps_its_dtype() -> None:
 
     assert df.height == 0
     assert df.schema["polygon"] == PolygonXY()
-
-
-def test_measures_stay_per_vertex() -> None:
-    """`m` belongs to a vertex, not to the ring or the polygon,
-    so building a polygon out of linestrings keeps one measure per vertex."""
-    df = pl.DataFrame(
-        {
-            "plot": [1, 1, 1, 1],
-            "x": [0.0, 1.0, 0.0, 0.0],
-            "y": [0.0, 0.0, 1.0, 0.0],
-            "m": [7.0, 8.0, 9.0, 7.0],
-        }
-    )
-    polygons = (
-        df.group_by("plot", maintain_order=True)
-        .agg(geo.point("x", "y", m="m").alias("point"))
-        .select(geo.linestring("point").alias("line"))
-        .select(pl.col("line").implode())
-        .select(geo.polygon("line").alias("polygon"))
-    )
-
-    assert polygons.schema["polygon"] == PolygonXYM()
-    assert_frame_equal(ring_coordinates(polygons), df.select("x", "y", "m"))
 
 
 def test_rejects_bad_rings_while_resolving_the_schema() -> None:

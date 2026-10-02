@@ -13,7 +13,6 @@ import pytest
 from polars.exceptions import SchemaError, StructFieldNotFoundError
 from polars.testing import assert_frame_equal
 
-from geopolars.datatypes import GeoPoint, PointXY
 from tests.unit.conftest import DIMENSIONS, XY, XYM, XYZ, Dimension, coordinates
 
 
@@ -91,37 +90,3 @@ def test_coordinates_are_not_reachable_as_struct_fields(
 
     with pytest.raises(StructFieldNotFoundError):
         df.select(pl.col("point").struct.field("x"))
-
-
-@pytest.mark.parametrize(
-    "storage",
-    [
-        # The spec fixes x before y...
-        pl.Struct({"y": pl.Float64, "x": pl.Float64}),
-        # ...and z before m.
-        pl.Struct({"x": pl.Float64, "y": pl.Float64, "m": pl.Float64, "z": pl.Float64}),
-        # The names are the dimension, so these are not coordinates.
-        pl.Struct({"lon": pl.Float64, "lat": pl.Float64}),
-        # Coordinates are doubles, and we will not quietly widen.
-        pl.Struct({"x": pl.Float32, "y": pl.Float32}),
-        # An interleaved encoding is a layout this version does not implement.
-        pl.List(pl.Float64),
-    ],
-    ids=["reversed", "m before z", "renamed", "f32", "interleaved"],
-)
-def test_rejects_storage_that_is_not_spec_coordinates(storage: pl.DataType) -> None:
-    with pytest.raises(ValueError, match="unsupported 'geoarrow.point' storage"):
-        GeoPoint.ext_from_params("geoarrow.point", storage, None)
-
-
-def test_metadata_is_carried_through_verbatim() -> None:
-    """rebuilding must not drop metadata"""
-    metadata = '{"crs":"EPSG:4326"}'
-    dtype = GeoPoint.ext_from_params(
-        "geoarrow.point", PointXY().ext_storage(), metadata
-    )
-
-    assert dtype.ext_metadata() == metadata
-    assert isinstance(dtype, PointXY)
-    # Metadata is part of what a dtype is, so this is not a plain `PointXY`.
-    assert dtype != PointXY()

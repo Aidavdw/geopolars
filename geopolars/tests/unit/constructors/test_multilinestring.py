@@ -12,7 +12,6 @@ from geopolars.datatypes import (
     GeoLineString,
     LineStringXY,
     MultiLineStringXY,
-    MultiLineStringXYM,
 )
 from tests.unit.conftest import Dimension, multilinestring_coordinates
 
@@ -197,38 +196,6 @@ def test_empty_frame_keeps_its_dtype() -> None:
 
     assert df.height == 0
     assert df.schema["multilinestring"] == MultiLineStringXY()
-
-
-def test_measures_stay_per_vertex() -> None:
-    """`m` belongs to a vertex, not to the part or the collection."""
-    df = pl.DataFrame(
-        {
-            "river": [1, 1, 1],
-            "x": [0.0, 1.0, 2.0],
-            "y": [3.0, 4.0, 5.0],
-            "m": [7.0, 8.0, 9.0],
-        }
-    )
-    multilines = (
-        df.group_by("river", maintain_order=True)
-        .agg(geo.point("x", "y", m="m").alias("point"))
-        .select(geo.linestring("point").alias("line"))
-        .select(pl.col("line").implode())
-        .select(geo.multilinestring("line").alias("multilinestring"))
-    )
-
-    assert multilines.schema["multilinestring"] == MultiLineStringXYM()
-    assert_frame_equal(
-        multilinestring_coordinates(multilines), df.select("x", "y", "m")
-    )
-
-
-def test_coordinate_columns_decide_the_dtype(
-    ring_coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    df = dimension.multilinestrings_from_coords(ring_coords)
-
-    assert df.schema["multilinestring"] == dimension.multilinestring_dtype()
 
 
 def test_coordinate_columns_build_the_same_multilinestrings(

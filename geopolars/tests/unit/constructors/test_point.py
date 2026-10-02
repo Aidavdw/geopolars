@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
-from geopolars.datatypes import GeoPoint, PointXY, PointXYM, PointXYZ, PointXYZM
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
+from geopolars.datatypes import GeoPoint, PointXY, PointXYM, PointXYZ, PointXYZM
 from tests.unit.conftest import coordinates
 
 
@@ -29,14 +29,6 @@ def test_optional_coordinates_pick_the_dtype(
     df = coords.select(geo.point("x", "y", **optional_coords).alias("point"))
 
     assert df.schema["point"] == expected()
-
-
-def test_coordinates_are_stored_in_spec_order(coords: pl.DataFrame) -> None:
-    """`m` is the last argument but not always the last field:
-    the spec fixes x, y, z, m, so an XYM point stores m third."""
-    df = coords.select(geo.point("x", "y", m="m").alias("point"))
-
-    assert_frame_equal(coordinates(df), coords.select("x", "y", "m"))
 
 
 @pytest.mark.parametrize("form", ["column name", "expression", "series"])

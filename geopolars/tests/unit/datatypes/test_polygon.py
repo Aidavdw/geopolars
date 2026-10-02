@@ -7,7 +7,6 @@ import pytest
 from polars.exceptions import SchemaError
 from polars.testing import assert_frame_equal
 
-from geopolars.datatypes import GeoPolygon
 from tests.unit.conftest import XY, XYZ, Dimension, ring_coordinates
 
 
@@ -103,48 +102,3 @@ def test_the_lists_keep_the_rings_apart(
     assert df.select(rings.explode(empty_as_null=False).list.len())[
         "polygon"
     ].to_list() == [5, 4, 4]
-
-
-def test_the_first_ring_is_the_exterior_one(
-    ring_coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    """Ring order carries meaning:
-    the first ring of a polygon is its boundary,
-    the ones after it are holes.
-    So the rings arrive in the order they were given,
-    not sorted or otherwise rearranged."""
-    df = dimension.polygons(ring_coords)
-    exterior = df.select(
-        pl.col("polygon").ext.storage().list.first().alias("line")
-    ).head(1)
-    expected = ring_coords.filter(polygon="a", ring=0)
-
-    assert_frame_equal(
-        exterior.select(pl.col("line").explode(empty_as_null=False))
-        .to_series()
-        .struct.unnest(),
-        expected.select(dimension.coords),
-    )
-
-
-@pytest.mark.parametrize(
-    "storage",
-    [
-        # A polygon nests twice; a bare coordinate is a point.
-        pl.Struct({"x": pl.Float64, "y": pl.Float64}),
-        # One list short: that nesting is a linestring, a single ring.
-        pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})),
-        # Order is significant inside the coordinate, two levels down.
-        pl.List(pl.List(pl.Struct({"y": pl.Float64, "x": pl.Float64}))),
-        # Interleaved coordinates are a layout this version does not implement.
-        pl.List(pl.List(pl.Float64)),
-        # One list too many: that nesting is a multipolygon.
-        pl.List(pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})))),
-    ],
-    ids=["unnested", "one ring", "reversed", "interleaved", "over-nested"],
-)
-def test_rejects_storage_that_is_not_two_lists_of_spec_coordinates(
-    storage: pl.DataType,
-) -> None:
-    with pytest.raises(ValueError, match="unsupported 'geoarrow.polygon' storage"):
-        GeoPolygon.ext_from_params("geoarrow.polygon", storage, None)

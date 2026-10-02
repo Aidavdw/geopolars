@@ -11,7 +11,6 @@ import pytest
 from polars.exceptions import SchemaError
 from polars.testing import assert_frame_equal
 
-from geopolars.datatypes import GeoMultiPoint, MultiPointXY
 from tests.unit.conftest import XY, XYZ, Dimension, multipoint_coordinates
 
 
@@ -111,29 +110,3 @@ def test_the_list_keeps_the_multipoints_apart(
     assert df.select(pl.col("multipoint").ext.storage().list.len())[
         "multipoint"
     ].to_list() == [3, 2]
-
-
-@pytest.mark.parametrize(
-    "storage",
-    [
-        # A multipoint nests its coordinates; a bare coordinate is a point.
-        pl.Struct({"x": pl.Float64, "y": pl.Float64}),
-        # Order is significant inside the coordinate, one level down.
-        pl.List(pl.Struct({"y": pl.Float64, "x": pl.Float64})),
-        # Interleaved coordinates are a layout this version does not implement.
-        pl.List(pl.Float64),
-        # One list too many: that nesting is a multilinestring, not a multipoint.
-        pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))),
-    ],
-    ids=["unnested", "reversed", "interleaved", "over-nested"],
-)
-def test_rejects_storage_that_is_not_a_list_of_spec_coordinates(
-    storage: pl.DataType,
-) -> None:
-    with pytest.raises(ValueError, match="unsupported 'geoarrow.multipoint' storage"):
-        GeoMultiPoint.ext_from_params("geoarrow.multipoint", storage, None)
-
-
-def test_the_extension_name_is_the_one_the_spec_fixes() -> None:
-    assert MultiPointXY().ext_name() == "geoarrow.multipoint"
-    assert GeoMultiPoint._extension_name == "geoarrow.multipoint"

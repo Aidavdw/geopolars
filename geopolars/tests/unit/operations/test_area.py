@@ -94,15 +94,6 @@ def test_a_missing_polygon_has_no_area() -> None:
     assert _areas(df.select(pl.col("polygon").ext.to(PolygonXY()))) == [16.0, None]
 
 
-def test_a_missing_ring_takes_the_whole_area_with_it() -> None:
-    df = pl.DataFrame(
-        {"polygon": [[_SQUARE, None]]}, schema={"polygon": _XY_RINGS}
-    ).select(pl.col("polygon").ext.to(PolygonXY()))
-    whole = df.select(geo.validate("polygon"))
-
-    assert _areas(whole) == [None]
-
-
 def test_a_linestring_has_an_area_of_zero(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:

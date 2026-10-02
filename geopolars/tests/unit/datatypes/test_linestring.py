@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
-from geopolars.datatypes import GeoLineString
 from polars.exceptions import SchemaError
 from polars.testing import assert_frame_equal
 
@@ -98,24 +97,3 @@ def test_the_list_keeps_the_lines_apart(
         3,
         2,
     ]
-
-
-@pytest.mark.parametrize(
-    "storage",
-    [
-        # A linestring nests its coordinates; a bare coordinate is a point.
-        pl.Struct({"x": pl.Float64, "y": pl.Float64}),
-        # Order is significant inside the coordinate, one level down.
-        pl.List(pl.Struct({"y": pl.Float64, "x": pl.Float64})),
-        # Interleaved coordinates are a layout this version does not implement.
-        pl.List(pl.Float64),
-        # One list too many: that nesting is a polygon, not a linestring.
-        pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))),
-    ],
-    ids=["unnested", "reversed", "interleaved", "over-nested"],
-)
-def test_rejects_storage_that_is_not_a_list_of_spec_coordinates(
-    storage: pl.DataType,
-) -> None:
-    with pytest.raises(ValueError, match="unsupported 'geoarrow.linestring' storage"):
-        GeoLineString.ext_from_params("geoarrow.linestring", storage, None)

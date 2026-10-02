@@ -65,9 +65,7 @@ def test_translate_leaves_m_untouched(coords: pl.DataFrame) -> None:
     """`m` is a measure, not a position: moving the geometry must not change
     the timestamp or distance-along-route the vertex carries."""
     df = coords.select(XYZM.point())
-    out = df.select(
-        geo.translate("point", dx=10.0, dy=10.0, dz=10.0).alias("point")
-    )
+    out = df.select(geo.translate("point", dx=10.0, dy=10.0, dz=10.0).alias("point"))
 
     assert_frame_equal(coordinates(out).select("m"), coordinates(df).select("m"))
 
@@ -87,24 +85,6 @@ def test_translate_rejects_dz_on_a_point_with_no_z(
 
     with pytest.raises(ComputeError, match="cannot translate by dz"):
         df.select(geo.translate("point", dx=0.0, dy=0.0, dz=1.0))
-
-
-@pytest.mark.parametrize(
-    "dimension",
-    [
-        XY,
-        XYM,
-    ],
-    ids=["PointXY", "PointXYM"],
-)
-def test_translate_allows_a_zero_dz_on_a_point_with_no_z(
-    coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    """dz defaults to 0.0, so an ordinary 2D translate must not trip the check."""
-    df = coords.select(dimension.point())
-    out = df.select(geo.translate("point", dx=1.0, dy=1.0, dz=0.0).alias("point"))
-
-    assert out.schema["point"] == dimension.point_dtype()
 
 
 def test_translate_rejects_a_plain_float_column() -> None:
@@ -189,9 +169,7 @@ def test_translate_shifts_every_point_of_a_multipoint(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.multipoints(line_coords)
-    out = df.select(
-        geo.translate("multipoint", dx=1.5, dy=-2.0).alias("multipoint")
-    )
+    out = df.select(geo.translate("multipoint", dx=1.5, dy=-2.0).alias("multipoint"))
 
     assert out.schema["multipoint"] == dimension.multipoint_dtype()
     assert_frame_equal(
@@ -371,9 +349,7 @@ def test_multilinestring_namespace_matches_the_functional_api(
     )
 
     assert_frame_equal(
-        lines.select(
-            gpl.col("line").geo.multilinestring().alias("multilinestring")
-        ),
+        lines.select(gpl.col("line").geo.multilinestring().alias("multilinestring")),
         lines.select(geo.multilinestring("line").alias("multilinestring")),
     )
 

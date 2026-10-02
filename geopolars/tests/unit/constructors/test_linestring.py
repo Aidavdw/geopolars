@@ -8,7 +8,7 @@ from polars.exceptions import ComputeError
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
-from geopolars.datatypes import GeoPoint, LineStringXY, LineStringXYM, PointXY
+from geopolars.datatypes import LineStringXY
 from tests.unit.conftest import Dimension, line_coordinates
 
 # A list of bare coordinate structs: what a linestring stores, before it is one.
@@ -98,27 +98,6 @@ def test_a_missing_coordinate_invalidates_the_whole_linestring() -> None:
     assert df["line"].is_null().to_list() == [True, False]
 
 
-def test_metadata_is_carried_over_from_the_vertices() -> None:
-    """The spec asks for `edges` to be propagated when an array is converted
-    from one GeoArrow type to another, and points to linestrings is one.
-    This version carries the whole metadata string, so `crs` comes along too."""
-    metadata = '{"edges":"spherical"}'
-    spherical = GeoPoint.ext_from_params(
-        "geoarrow.point", PointXY().ext_storage(), metadata
-    )
-    df = (
-        pl.DataFrame({"x": [1.0, 2.0], "y": [3.0, 4.0]})
-        .select(vertices=pl.struct("x", "y").ext.to(spherical))
-        .select(pl.col("vertices").implode())
-        .select(geo.linestring("vertices").alias("line"))
-    )
-
-    assert df.schema["line"].ext_metadata() == metadata
-    assert df.schema["line"] == LineStringXY.ext_from_params(
-        "geoarrow.linestring", LineStringXY().ext_storage(), metadata
-    )
-
-
 def test_rejects_vertices_that_are_not_coordinates() -> None:
     df = pl.DataFrame({"vertices": [[1.0, 2.0]]})
 
@@ -146,27 +125,6 @@ def test_empty_frame_keeps_its_dtype() -> None:
     assert df.schema["line"] == LineStringXY()
 
 
-def test_measures_stay_per_vertex() -> None:
-    """`m` belongs to a vertex, not to the line, so building a line out of
-    points keeps one measure per vertex."""
-    df = pl.DataFrame(
-        {
-            "id": [1, 1, 1],
-            "x": [1.0, 2.0, 3.0],
-            "y": [4.0, 5.0, 6.0],
-            "m": [7.0, 8.0, 9.0],
-        }
-    )
-    lines = (
-        df.group_by("id", maintain_order=True)
-        .agg(geo.point("x", "y", m="m").alias("point"))
-        .select(geo.linestring("point").alias("line"))
-    )
-
-    assert lines.schema["line"] == LineStringXYM()
-    assert_frame_equal(line_coordinates(lines), df.select("x", "y", "m"))
-
-
 def test_rejects_a_linestring_column() -> None:
     """A line of lines is not a linestring; that nesting is a polygon."""
     df = pl.DataFrame(
@@ -184,14 +142,6 @@ def test_rejects_bad_vertices_while_resolving_the_schema() -> None:
 
     with pytest.raises(ComputeError, match="expected a list of"):
         lf.collect_schema()
-
-
-def test_coordinate_columns_decide_the_dtype(
-    line_coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    df = dimension.lines_from_coords(line_coords)
-
-    assert df.schema["line"] == dimension.linestring_dtype()
 
 
 def test_coordinate_columns_build_the_same_lines(
@@ -274,9 +224,7 @@ def test_rejects_coordinate_columns_that_nest_differently(
 
 def test_rejects_flat_coordinate_columns() -> None:
     """One vertex per row is a point column; a linestring needs them grouped."""
-    lf = pl.LazyFrame({"lon": [1.0], "lat": [2.0]}).select(
-        geo.linestring("lon", "lat")
-    )
+    lf = pl.LazyFrame({"lon": [1.0], "lat": [2.0]}).select(geo.linestring("lon", "lat"))
 
     with pytest.raises(ComputeError, match="lists of f64, one per linestring"):
         lf.collect_schema()

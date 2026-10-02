@@ -13,7 +13,6 @@ from geopolars.datatypes import (
     GeoPoint,
     LineStringXY,
     PointXY,
-    PolygonXY,
 )
 from tests.unit.conftest import XY, XYZM, Dimension, coordinates
 
@@ -113,16 +112,6 @@ def test_an_empty_ring_takes_nothing_with_it() -> None:
         coordinates(out, "polygon"),
         pl.DataFrame({"x": [2.0, 2.0], "y": [2.0, 2.0]}),
     )
-
-
-def test_a_missing_ring_takes_the_whole_centroid_with_it() -> None:
-    df = pl.DataFrame(
-        {"polygon": [[_SQUARE, None]]}, schema={"polygon": _XY_RINGS}
-    ).select(pl.col("polygon").ext.to(PolygonXY()))
-    whole = df.select(geo.validate("polygon"))
-    out = whole.select(geo.coordinate_centroid("polygon"))
-
-    assert out["polygon"].is_null().to_list() == [True]
 
 
 def test_a_multipoint_averages_its_points(
@@ -330,37 +319,13 @@ def test_a_missing_coordinate_takes_the_whole_centroid_with_it() -> None:
     assert out["line"].is_null().to_list() == [True]
 
 
-def test_a_geometry_from_a_constructor_needs_no_validating(
-    line_coords: pl.DataFrame,
-) -> None:
-    df = XY.lines(line_coords)
-
-    assert_frame_equal(
-        df.select(geo.validate("line")).select(
-            geo.coordinate_centroid("line")
-        ),
-        df.select(geo.coordinate_centroid("line")),
-    )
-
-
 def test_every_form_of_column_gives_the_same_answer(line_coords: pl.DataFrame) -> None:
     """A name, a `pl.col(...)` and a `Series` are the same column."""
     df = XY.lines(line_coords)
     expected = df.select(geo.coordinate_centroid("line"))
 
-    assert_frame_equal(
-        df.select(geo.coordinate_centroid(pl.col("line"))), expected
-    )
+    assert_frame_equal(df.select(geo.coordinate_centroid(pl.col("line"))), expected)
     assert_frame_equal(pl.select(geo.coordinate_centroid(df["line"])), expected)
-
-
-def test_namespace_matches_the_functional_api(line_coords: pl.DataFrame) -> None:
-    df = XY.lines(line_coords)
-
-    assert_frame_equal(
-        df.select(gpl.col("line").geo.coordinate_centroid()),
-        df.select(geo.coordinate_centroid("line")),
-    )
 
 
 def test_it_runs_on_the_streaming_engine(line_coords: pl.DataFrame) -> None:

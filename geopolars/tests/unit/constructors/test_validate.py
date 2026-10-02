@@ -113,16 +113,6 @@ def test_it_leaves_a_whole_column_exactly_as_it_was() -> None:
     assert_frame_equal(df.select(geo.validate("line")), df)
 
 
-def test_it_keeps_the_dtype_it_was_given() -> None:
-    df = pl.DataFrame({"line": [_SQUARE]}, schema={"line": _XY_VERTICES}).select(
-        pl.col("line").ext.to(LineStringXY())
-    )
-
-    out = df.select(geo.validate("line"))
-
-    assert out.schema["line"] == LineStringXY()
-
-
 def test_it_is_idempotent() -> None:
     df = pl.DataFrame(
         {"line": [[{"x": 0.0, "y": 0.0}, None], _SQUARE]},

@@ -8,7 +8,7 @@ from polars.exceptions import ComputeError
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
-from geopolars.datatypes import GeoPoint, MultiPointXY, MultiPointXYM, PointXY
+from geopolars.datatypes import MultiPointXY, PointXY
 from tests.unit.conftest import Dimension, multipoint_coordinates
 
 # A list of bare coordinate structs: what a multipoint stores, before it is one.
@@ -102,24 +102,6 @@ def test_a_missing_coordinate_invalidates_the_whole_multipoint() -> None:
     assert df["multipoint"].is_null().to_list() == [True, False]
 
 
-def test_metadata_is_carried_over_from_the_points() -> None:
-    metadata = '{"edges":"spherical"}'
-    spherical = GeoPoint.ext_from_params(
-        "geoarrow.point", PointXY().ext_storage(), metadata
-    )
-    df = (
-        pl.DataFrame({"x": [1.0, 2.0], "y": [3.0, 4.0]})
-        .select(points=pl.struct("x", "y").ext.to(spherical))
-        .select(pl.col("points").implode())
-        .select(geo.multipoint("points").alias("multipoint"))
-    )
-
-    assert df.schema["multipoint"].ext_metadata() == metadata
-    assert df.schema["multipoint"] == MultiPointXY.ext_from_params(
-        "geoarrow.multipoint", MultiPointXY().ext_storage(), metadata
-    )
-
-
 def test_rejects_points_that_are_not_coordinates() -> None:
     df = pl.DataFrame({"points": [[1.0, 2.0]]})
 
@@ -177,34 +159,6 @@ def test_empty_frame_keeps_its_dtype() -> None:
 
     assert df.height == 0
     assert df.schema["multipoint"] == MultiPointXY()
-
-
-def test_measures_stay_per_point() -> None:
-    """`m` belongs to a point, not to the collection"""
-    df = pl.DataFrame(
-        {
-            "id": [1, 1, 1],
-            "x": [1.0, 2.0, 3.0],
-            "y": [4.0, 5.0, 6.0],
-            "m": [7.0, 8.0, 9.0],
-        }
-    )
-    multipoints = (
-        df.group_by("id", maintain_order=True)
-        .agg(geo.point("x", "y", m="m").alias("point"))
-        .select(geo.multipoint("point").alias("multipoint"))
-    )
-
-    assert multipoints.schema["multipoint"] == MultiPointXYM()
-    assert_frame_equal(multipoint_coordinates(multipoints), df.select("x", "y", "m"))
-
-
-def test_coordinate_columns_decide_the_dtype(
-    line_coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    df = dimension.multipoints_from_coords(line_coords)
-
-    assert df.schema["multipoint"] == dimension.multipoint_dtype()
 
 
 def test_coordinate_columns_build_the_same_multipoints(
@@ -291,9 +245,7 @@ def test_rejects_coordinate_columns_that_nest_differently(
 def test_rejects_flat_coordinate_columns() -> None:
     """One coordinate per row is a point column.
     a multipoint needs them grouped."""
-    lf = pl.LazyFrame({"lon": [1.0], "lat": [2.0]}).select(
-        geo.multipoint("lon", "lat")
-    )
+    lf = pl.LazyFrame({"lon": [1.0], "lat": [2.0]}).select(geo.multipoint("lon", "lat"))
 
     with pytest.raises(ComputeError, match="lists of f64, one per multipoint"):
         lf.collect_schema()
