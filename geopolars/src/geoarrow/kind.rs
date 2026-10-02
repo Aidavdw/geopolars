@@ -1,10 +1,9 @@
-//! Which geometry a column holds.
+//! GeoArrow geometries are not implemented as concrete rust types,
+//! but as enums ([Kind]) so that dispatching follows the way Polars does it.
 
 /// A GeoArrow native geometry.
-///
-/// The geometries differ in three facts, all of them `const`, and in nothing
-/// else: every one of them is [`Geo`](super::Geo) over a [`Dimension`](super::Dimension).
-/// Adding one is a variant here plus an arm in each `match` below.
+/// Every variant represents a [`Geo`](super::Geo) with some [`Dimension`](super::Dimension).
+/// Used for dispatching.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Kind {
     Point,

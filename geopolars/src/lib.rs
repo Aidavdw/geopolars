@@ -8,9 +8,8 @@ mod geoarrow;
 #[global_allocator]
 static ALLOC: PolarsAllocator = PolarsAllocator::new();
 
-/// The `ARROW:extension:metadata` a geometry dtype built with these fields carries.
-///
-/// Used for constructing dtype, keeping stuff on the python and rust side in agreement.
+/// Parses metadata used as extra `kwargs`.
+/// Used for constructing dtype in Python, keeping stuff on the python and rust side in agreement.
 #[pyfunction]
 #[pyo3(signature = (*, crs = None))]
 fn extension_metadata(crs: Option<String>) -> PyResult<Option<String>> {
@@ -20,11 +19,11 @@ fn extension_metadata(crs: Option<String>) -> PyResult<Option<String>> {
 }
 
 /// The plugin's Python module.
-/// Unlike custom expressions, extension types must be explicitly
-/// registered with Polars.
-/// `PyInit_geopolars` is that hook.
+/// Here so that extension types are explicitly registered with Polars with `PyInit_geopolars`.
 #[pymodule]
 fn geopolars(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Expressions don't have to be registered,
+    // that hook is already by calling the plugin functions.
     m.add_function(wrap_pyfunction!(extension_metadata, m)?)?;
     geoarrow::register().map_err(|e| {
         pyo3::exceptions::PyRuntimeError::new_err(format!(

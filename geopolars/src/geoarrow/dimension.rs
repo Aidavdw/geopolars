@@ -1,14 +1,21 @@
-//! Which coordinates a geometry carries.
+//! In GeoArrow, a coordinate can be 2D or 3D,
+//! and optionally carry a 'measurement'.
+//!
+//! `Geometry` can be built up from any of these.
+//! Dimensional information is carried by the coordinates, and forwarded to the geometries.
+//!
+//! All variations are defined in [GeoDimension].
+//! Note this is one enum rather than four separate rust types.
+//! In polars we already work with an abstraction over the type system,
+//! and this extends that framework.
 
 use polars_core::prelude::{DataType, Field};
 
-/// Which coordinate dimensions a geometry carries.
+/// Which coordinate dimensions a coordinate/geometry carries.
 ///
 /// Because the spec fixes the order of the coordinate data,
 /// this also determines its dimension.
 ///
-/// Note this is one enum rather than four separate extension types.
-/// An enum is cheaper to match on than casting to types.
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GeoDimension {
@@ -86,10 +93,7 @@ mod tests {
 
     use super::*;
 
-    /// Every type name is built from [`Dimension::tag`], which is hand-written,
-    /// so check it still agrees with the field list it claims to describe.
-    ///
-    /// Python cannot: it spells its own names out per class.
+    /// Consistency check
     #[test]
     fn the_tag_follows_from_the_field_names() {
         for dim in GeoDimension::ALL {

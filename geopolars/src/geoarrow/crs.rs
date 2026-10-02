@@ -1,19 +1,20 @@
-//! The coordinate reference system a geometry column declares.
-//!
-//! GeoArrow keeps the CRS in `ARROW:extension:metadata`, a JSON object along
-//! the lines of `{"crs": ..., "crs_type": ..., "edges": ...}`. [`ExtensionMetadata`]
-//! parses and gives back that raw string, so nothing has to downcast to
-//! [`Geo`](super::Geo) to get at it.
-
+//! Home of [ExtensionMetadata].
 use geoarrow_schema::{Crs, CrsType};
 use polars::prelude::*;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
-/// A column's `ARROW:extension:metadata`.
+/// Metadata for GeoArrow columns.
 ///
-/// Lossless. Even data that cannot be parsed is kept,
-/// so it can be put back on the output type.
+/// GeoArrow keeps metadata (such as the CRS) in `ARROW:extension:metadata`.
+/// It is encoded as a JSON string, looking something like:
+/// ```json
+/// {"crs": ..., "crs_type": ..., "edges": ...}
+/// ```
+///
+/// In GeoPolars, we keep this data as-is, but wrapped in a newtype [ExtensionMetadata].
+/// This allows us to reconstruct it **losslessly** for fields we do not support, but others might,
+/// while also giving an anchoring point for functionality that has to do with the metadata.
 /// This is a slight deviation from the GeoArrow schema,
 /// but makes chaining with proprietary data producers more versatile.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -87,11 +88,10 @@ fn crs_value(crs: &str) -> Value {
     }
 }
 
-/// The metadata fields a constructor can be asked to set, as keyword arguments.
-///
-/// A fixed set: every one is a field GeoArrow defines, never an arbitrary key.
-/// A new field is one more `Option` here, and one more keyword on the Python
-/// side.
+/// The metadata fields a constructor for
+/// one of our Arrow Extension types in the API can be asked to set, as keyword arguments.
+/// These form a fixed set, not arbitrary keys.
+/// These have to be mirrored on the python side.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct MetadataKwargs {
@@ -101,8 +101,7 @@ pub struct MetadataKwargs {
 
 impl MetadataKwargs {
     /// The metadata of a geometry built from parts carrying `metadata`.
-    ///
-    /// Without fields to set, `metadata` comes back untouched, byte for byte.
+    /// If empty, `metadata` comes back untouched.
     ///
     /// This labels and never reprojects. Parts that already declare a different
     /// CRS are an error rather than being relabelled into the wrong place.

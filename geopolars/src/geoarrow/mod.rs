@@ -1,8 +1,8 @@
-//! GeoArrow geometry types: what a geometry *is*.
+//! Glue for the GeoArrow data types, and dispatching to it.
 //!
-//! Expressions never name a concrete geometry. They ask [`describe`] what a
-//! column holds and dispatch on the [`Kind`] and [`Dimension`] it reports, so
-//! adding a geometry does not touch `crate::expr`.
+//! Expressions never name a concrete geometry:
+//! They ask [`describe`] what a column holds and dispatch on the [`Kind`] and [`Dimension`] it reports,
+//! so adding a geometry does not touch `crate::expr`.
 
 pub mod coord;
 pub mod crs;
@@ -23,11 +23,11 @@ use geo::GeoFactory;
 
 /// Populate this library's extension-type registry.
 /// This exposes the types from this plugin's library.
+/// This cannot run lazily.
+///
 /// Registering also needs to happen in the host `polars` wheel,
 /// which is done with `pl.register_extension_type`.
 /// Both are needed, and they must agree on names.
-///
-/// This cannot run lazily.
 pub fn register() -> PolarsResult<()> {
     for kind in Kind::ALL {
         register_extension_type(kind.name(), Some(Arc::new(GeoFactory(kind))))?;
@@ -35,7 +35,7 @@ pub fn register() -> PolarsResult<()> {
     Ok(())
 }
 
-/// A geometry column, reduced to what an expression over it needs.
+/// A view of a geometry column, containing only what an expression over it needs.
 pub struct GeoColumn<'a> {
     /// The [`ExtensionTypeInstance`] the column came in, so the result can be
     /// put back under it without losing metadata.
@@ -44,11 +44,7 @@ pub struct GeoColumn<'a> {
     pub dim: GeoDimension,
 }
 
-/// Reads a geometry column's dtype.
-///
-/// The dtype already states everything: the extension name says which geometry,
-/// the storage says which dimension. So this parses rather than downcasts, and
-/// does not grow a branch per geometry.
+/// Parses a geometry column's dtype (as a polars [DataType]) into a [GeoColumn].
 pub fn describe(dtype: &DataType) -> PolarsResult<GeoColumn<'_>> {
     let DataType::Extension(typ, storage) = dtype else {
         polars_bail!(SchemaMismatch: "expected a {} column, got: {}", Kind::names(), dtype);

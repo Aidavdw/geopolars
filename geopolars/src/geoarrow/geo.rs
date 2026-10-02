@@ -1,4 +1,7 @@
 //! The extension type every GeoArrow geometry is an instance of.
+//! In this module, the polars traits [ExtensionTypeImpl] and [ExtensionTypeFactory]
+//! are implemented for our extension type,
+//! so that Polars can use our extension type generically.
 
 use std::any::Any;
 use std::borrow::Cow;
@@ -12,7 +15,8 @@ use polars_core::prelude::DataType;
 use super::coord::dimension_of_storage;
 use super::{GeoDimension, Kind};
 
-/// A GeoArrow geometry column's type: which geometry, over which coordinates.
+/// A GeoArrow geometry column's type:
+/// which geometry, over which coordinates.
 ///
 /// Both are derived from the storage once, in [`GeoFactory`];
 /// everything downstream dispatches on them
@@ -22,16 +26,12 @@ pub struct Geo {
     kind: Kind,
     dim: GeoDimension,
 
-    /// The raw `ARROW:extension:metadata` string, carried through verbatim.
-    ///
-    /// This version does not interpret it. Keeping the bytes rather than dropping
-    /// them means reading and re-writing a file that *does* carry a `crs`
-    /// preserves it instead of silently losing it. When CRS lands this becomes
-    /// a parsed `Metadata { crs, crs_type, edges }`.
+    // TODO: replace this with the new metadata type
     metadata: Option<String>,
 }
 
 impl Geo {
+    // TODO: take metadata here as Metadata type.
     /// A geometry of the given kind and dimension, carrying `metadata` verbatim.
     pub fn new(kind: Kind, dim: GeoDimension, metadata: Option<String>) -> Self {
         Self {
@@ -41,12 +41,13 @@ impl Geo {
         }
     }
 
-    /// This type, ready to label a column of the matching storage with.
+    /// Produces a Polars Arrow extension type from this type.
+    /// Ready to label a column of the matching storage with.
     pub fn instance(self) -> ExtensionTypeInstance {
         ExtensionTypeInstance(Box::new(self))
     }
 
-    /// The dtype a column of these geometries has.
+    /// Produces a Polars dtype.
     pub fn dtype(self) -> DataType {
         let storage = self.dim.storage(self.kind.nesting());
         DataType::Extension(self.instance(), Box::new(storage))

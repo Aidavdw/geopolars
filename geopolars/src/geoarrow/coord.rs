@@ -1,8 +1,6 @@
-//! Coordinates: the inner level of every GeoArrow geometry.
-//!
-//! Reading a dimension back off an Arrow layout happens here and nowhere else.
-//! Everything downstream matches on the [`Dimension`] instead of re-inspecting
-//! struct fields.
+//! Every GeoArrow geometry is made up of n-dimensional *Coordinates*.
+//! This module contains functionality for this inner type that is used
+//! by all of the other geometry types.
 
 use polars_core::prelude::DataType;
 
@@ -10,12 +8,16 @@ use super::GeoDimension;
 
 /// Reads the dimension off a separated-coordinate storage type.
 /// `None` if this is not a layout we recognise.
+///
+/// Reading a dimension back off an Arrow layout happens here and nowhere else.
+/// Everything downstream matches on the [`Dimension`] instead of re-inspecting
+/// struct fields.
 pub fn dimension_of(coordinates: &DataType) -> Option<GeoDimension> {
     let DataType::Struct(fields) = coordinates else {
         return None;
     };
-    // Every coordinate is a double; a f32 "point" is a different type, not a
-    // point we should silently widen.
+    // GeoArrow spec says that all coordinates *have to be* doubles.
+    // a f32 "point" is a different type, not a point we should silently widen.
     if !fields
         .iter()
         .all(|f| matches!(f.dtype(), DataType::Float64))
@@ -32,8 +34,9 @@ pub fn dimension_of(coordinates: &DataType) -> Option<GeoDimension> {
     })
 }
 
-/// Reads the dimension off the storage of a geometry that nests its coordinates
-/// `nesting` `List` layers deep. `None` if this is not a layout we recognise.
+/// Reads the dimension off the storage of a geometry
+/// that nests its coordinates `nesting` `List` layers deep.
+/// `None` if this is not a layout we recognise.
 pub fn dimension_of_storage(storage: &DataType, nesting: u8) -> Option<GeoDimension> {
     let mut inner = storage;
     for _ in 0..nesting {
@@ -62,13 +65,8 @@ mod tests {
         )
     }
 
-    /// The path into [`Unsupported`](super::super::Geo): storage carrying one of
-    /// our extension names that we do not implement, which is what reading
-    /// someone else's GeoArrow file can hand us.
-    ///
-    /// Python cannot reach this: `ext_from_params` rejects an unrecognised layout
-    /// before a column can be built, so the factories never see one from that
-    /// direction.
+    /// The path into [`Unsupported`](super::super::Geo):
+    /// Can be reached by reading someone's GeoArrow file using rust only (no python).
     #[test]
     fn unrecognised_layouts_are_rejected() {
         // Wrong order: the spec fixes x before y, and z before m.
@@ -89,8 +87,8 @@ mod tests {
         assert_eq!(dimension_of(&DataType::Float64), None);
     }
 
-    /// Storage too shallow for the geometry that claims it: a `Struct` where a
-    /// linestring's `List<Struct>` belongs.
+    /// Storage too shallow for the geometry that claims it.
+    /// e.g. a `Struct` where a linestring's `List<Struct>` belongs.
     #[test]
     fn nesting_has_to_match() {
         let xy = GeoDimension::XY.coordinates();
@@ -98,9 +96,6 @@ mod tests {
         assert_eq!(dimension_of_storage(&DataType::List(Box::new(xy)), 0), None);
     }
 
-    /// [`Dimension::storage`] is what an expression declares as its output type,
-    /// so it has to be the layout `dimension_of_storage` accepts back -- for
-    /// every geometry, at the nesting that geometry claims.
     #[test]
     fn storage_round_trips_through_dimension_of() {
         for kind in Kind::ALL {
