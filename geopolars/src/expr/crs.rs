@@ -1,6 +1,6 @@
 //! Moving a geometry from one coordinate reference system to another.
 
-use geo::proj::Proj;
+use rsgeo::proj::Proj;
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;

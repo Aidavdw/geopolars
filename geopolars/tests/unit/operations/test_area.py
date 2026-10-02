@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import polars as pl
 import pytest
 from polars.testing import assert_series_equal
@@ -29,33 +31,46 @@ def _rings(rings: list[list[dict[str, float]]]) -> pl.DataFrame:
     )
 
 
-def _areas(df: pl.DataFrame, name: str = "polygon") -> list[float | None]:
-    return df.select(geo.area(name)).to_series().to_list()
+Area = Callable[[str | pl.Expr | pl.Series], pl.Expr]
+
+
+@pytest.fixture(params=[geo.area, geo.area_rsgeo], ids=["expr", "rsgeo"])
+def area(request: pytest.FixtureRequest) -> Area:
+    """Every test runs against both implementations, which have to agree."""
+    return request.param  # type: ignore[no-any-return]
+
+
+def _areas(area: Area, df: pl.DataFrame, name: str = "polygon") -> list[float | None]:
+    return df.select(area(name)).to_series().to_list()
 
 
 def test_a_polygon_is_its_exterior_ring_less_its_holes(
-    ring_coords: pl.DataFrame, dimension: Dimension
+    area: Area, ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     """`a` is a 4x4 square with a triangular hole of 0.5 in it; `b` is a
     triangle with legs of 2."""
     df = dimension.polygons(ring_coords)
 
-    assert _areas(df) == [15.5, 2.0]
+    assert _areas(area, df) == [15.5, 2.0]
 
 
-def test_z_and_m_are_left_out(ring_coords: pl.DataFrame, dimension: Dimension) -> None:
+def test_z_and_m_are_left_out(
+    area: Area, ring_coords: pl.DataFrame, dimension: Dimension
+) -> None:
     """The area of the footprint on the xy plane. A sloped roof does not cover
     more ground than a flat one, and `m` is a measure, not an axis."""
-    assert _areas(dimension.polygons(ring_coords)) == _areas(XY.polygons(ring_coords))
+    flat = _areas(area, XY.polygons(ring_coords))
+
+    assert _areas(area, dimension.polygons(ring_coords)) == flat
 
 
-def test_winding_order_does_not_change_the_area() -> None:
+def test_winding_order_does_not_change_the_area(area: Area) -> None:
     """The spec fixes no winding order, so a ring that runs the other way is
     the same ring. Position is what says which one is the hole."""
-    assert _areas(_rings([_SQUARE])) == _areas(_rings([_SQUARE[::-1]]))
+    assert _areas(area, _rings([_SQUARE])) == _areas(area, _rings([_SQUARE[::-1]]))
 
 
-def test_a_hole_is_the_second_ring_whichever_way_it_winds() -> None:
+def test_a_hole_is_the_second_ring_whichever_way_it_winds(area: Area) -> None:
     hole = [
         {"x": 1.0, "y": 1.0},
         {"x": 2.0, "y": 1.0},
@@ -64,11 +79,11 @@ def test_a_hole_is_the_second_ring_whichever_way_it_winds() -> None:
         {"x": 1.0, "y": 1.0},
     ]
 
-    assert _areas(_rings([_SQUARE, hole])) == [15.0]
-    assert _areas(_rings([_SQUARE, hole[::-1]])) == [15.0]
+    assert _areas(area, _rings([_SQUARE, hole])) == [15.0]
+    assert _areas(area, _rings([_SQUARE, hole[::-1]])) == [15.0]
 
 
-def test_a_degenerate_ring_encloses_nothing() -> None:
+def test_a_degenerate_ring_encloses_nothing(area: Area) -> None:
     """Fewer than three distinct vertices cannot bound anything."""
     there_and_back = [
         {"x": 1.0, "y": 1.0},
@@ -76,74 +91,78 @@ def test_a_degenerate_ring_encloses_nothing() -> None:
         {"x": 1.0, "y": 1.0},
     ]
 
-    assert _areas(_rings([there_and_back])) == [0.0]
+    assert _areas(area, _rings([there_and_back])) == [0.0]
 
 
-def test_an_empty_ring_takes_nothing_with_it() -> None:
-    assert _areas(_rings([_SQUARE, []])) == [16.0]
+def test_an_empty_ring_takes_nothing_with_it(area: Area) -> None:
+    assert _areas(area, _rings([_SQUARE, []])) == [16.0]
 
 
-def test_an_empty_polygon_encloses_nothing() -> None:
+def test_an_empty_polygon_encloses_nothing(area: Area) -> None:
     """No exterior ring at all, which is an area of zero rather than no area."""
-    assert _areas(_rings([])) == [0.0]
+    assert _areas(area, _rings([])) == [0.0]
 
 
-def test_a_missing_polygon_has_no_area() -> None:
+def test_a_missing_polygon_has_no_area(area: Area) -> None:
     df = pl.DataFrame({"polygon": [[_SQUARE], None]}, schema={"polygon": _XY_RINGS})
 
-    assert _areas(df.select(pl.col("polygon").ext.to(PolygonXY()))) == [16.0, None]
+    df = df.select(pl.col("polygon").ext.to(PolygonXY()))
+
+    assert _areas(area, df) == [16.0, None]
 
 
 def test_a_linestring_has_an_area_of_zero(
-    line_coords: pl.DataFrame, dimension: Dimension
+    area: Area, line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     """A curve has no interior, however it runs."""
-    assert set(_areas(dimension.lines(line_coords), "line")) == {0.0}
+    assert set(_areas(area, dimension.lines(line_coords), "line")) == {0.0}
 
 
-def test_a_closed_linestring_still_has_an_area_of_zero() -> None:
+def test_a_closed_linestring_still_has_an_area_of_zero(area: Area) -> None:
     """The square's ring, read as a curve. Nothing says a linestring that
     closes bounds the space inside it -- only a polygon does."""
     df = pl.DataFrame(
         {"vertices": [_SQUARE]}, schema={"vertices": _XY_VERTICES}
     ).select(geo.linestring("vertices").alias("line"))
 
-    assert _areas(df, "line") == [0.0]
+    assert _areas(area, df, "line") == [0.0]
 
 
 def test_a_multipoint_has_an_area_of_zero(
-    line_coords: pl.DataFrame, dimension: Dimension
+    area: Area, line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
-    assert set(_areas(dimension.multipoints(line_coords), "multipoint")) == {0.0}
+    df = dimension.multipoints(line_coords)
+
+    assert set(_areas(area, df, "multipoint")) == {0.0}
 
 
 def test_a_multilinestring_has_an_area_of_zero(
-    ring_coords: pl.DataFrame, dimension: Dimension
+    area: Area, ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     """The same vertices a polygon of 15.5 is made of, as curves instead."""
     df = dimension.multilinestrings(ring_coords)
 
-    assert set(_areas(df, "multilinestring")) == {0.0}
+    assert set(_areas(area, df, "multilinestring")) == {0.0}
 
 
 def test_a_point_has_an_area_of_zero(
-    coords: pl.DataFrame, dimension: Dimension
+    area: Area, coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = coords.select(dimension.point())
 
-    assert _areas(df, "point") == [0.0, 0.0, 0.0]
+    assert _areas(area, df, "point") == [0.0, 0.0, 0.0]
 
 
-def test_a_missing_point_has_no_area() -> None:
+def test_a_missing_point_has_no_area(area: Area) -> None:
     df = pl.DataFrame(
         {"point": [{"x": 1.0, "y": 2.0}, None]},
         schema={"point": pl.Struct({"x": pl.Float64, "y": pl.Float64})},
     ).select(pl.col("point").ext.to(PointXY()))
 
-    assert _areas(df, "point") == [0.0, None]
+    assert _areas(area, df, "point") == [0.0, None]
 
 
-def test_the_area_survives_coordinates_far_from_the_origin() -> None:
+def test_the_area_survives_coordinates_far_from_the_origin(area: Area) -> None:
     """A metre-scale parcel in a projected CRS. Squaring the coordinates before
     subtracting them -- the shoelace sum written out about the origin -- throws
     away the digits the answer is made of."""
@@ -151,33 +170,50 @@ def test_the_area_survives_coordinates_far_from_the_origin() -> None:
     unit = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]
     ring = [{"x": ox + x, "y": oy + y} for x, y in unit]
 
-    (got,) = _areas(_rings([ring]))
+    (got,) = _areas(area, _rings([ring]))
 
     assert got == pytest.approx(1.0, abs=1e-9)
 
 
-def test_the_namespace_matches_the_function(ring_coords: pl.DataFrame) -> None:
+def test_the_namespace_matches_the_function(
+    area: Area, ring_coords: pl.DataFrame
+) -> None:
     df = XY.polygons(ring_coords)
 
+    method = getattr(pl.col("polygon").geo, area.__name__)
+
     assert_series_equal(
-        df.select(pl.col("polygon").geo.area()).to_series(),
-        df.select(geo.area("polygon")).to_series(),
+        df.select(method()).to_series(),
+        df.select(area("polygon")).to_series(),
     )
 
 
-def test_every_form_of_column_gives_the_same_answer(ring_coords: pl.DataFrame) -> None:
+def test_every_form_of_column_gives_the_same_answer(
+    area: Area, ring_coords: pl.DataFrame
+) -> None:
     """A name, a `pl.col(...)`, a `Series` and a chained expression all work."""
     df = XY.polygons(ring_coords)
-    expected = df.select(geo.area("polygon")).to_series()
+    expected = df.select(area("polygon")).to_series()
 
-    assert_series_equal(df.select(geo.area(pl.col("polygon"))).to_series(), expected)
-    assert_series_equal(pl.select(geo.area(df["polygon"])).to_series(), expected)
+    assert_series_equal(df.select(area(pl.col("polygon"))).to_series(), expected)
+    assert_series_equal(pl.select(area(df["polygon"])).to_series(), expected)
     translated = geo.translate("polygon", 10.0, -3.0)
-    assert_series_equal(df.select(geo.area(translated)).to_series(), expected)
+    assert_series_equal(df.select(area(translated)).to_series(), expected)
 
 
-def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
-    lf = pl.LazyFrame({"polygon": [1.0]}).select(geo.area("polygon"))
+def test_rejects_a_non_geometry_while_resolving_the_schema(area: Area) -> None:
+    lf = pl.LazyFrame({"polygon": [1.0]}).select(area("polygon"))
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         lf.collect_schema()
+
+
+def test_both_implementations_agree_row_for_row(
+    ring_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    df = dimension.polygons(ring_coords)
+
+    assert_series_equal(
+        df.select(geo.area_rsgeo("polygon")).to_series(),
+        df.select(geo.area("polygon")).to_series(),
+    )

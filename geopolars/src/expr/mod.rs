@@ -10,6 +10,7 @@
 //! [`Kind`](crate::geoarrow::Kind) exhaustively.
 
 pub mod affine;
+pub mod area;
 pub mod construct;
 pub mod coords;
 pub mod crs;

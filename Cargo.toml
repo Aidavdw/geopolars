@@ -16,6 +16,7 @@ license = "MIT"
 # types and fails with confusing trait errors.
 polars = { version = "0.55", default-features = false }
 polars-core = { version = "0.55", default-features = false }
+polars-arrow = { version = "0.55", default-features = false }
 
 # pyo3-polars is versioned INDEPENDENTLY of polars. 0.28 is the release built
 # against polars 0.55 / pyo3 0.29. Bump all three together, never one alone.

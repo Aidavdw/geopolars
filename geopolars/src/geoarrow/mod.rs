@@ -9,6 +9,7 @@ pub mod crs;
 mod dimension;
 mod geo;
 mod kind;
+pub mod to_rsgeo;
 
 pub use dimension::GeoDimension;
 pub use geo::Geo;

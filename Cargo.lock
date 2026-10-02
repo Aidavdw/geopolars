@@ -1139,6 +1139,7 @@ dependencies = [
  "geoarrow-schema",
  "geoparquet",
  "polars",
+ "polars-arrow",
  "polars-core",
  "proj",
  "pyo3",

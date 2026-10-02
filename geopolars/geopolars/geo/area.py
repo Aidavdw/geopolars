@@ -11,7 +11,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import polars as pl
+from polars.plugins import register_plugin_function
 
+from geopolars._utils import LIB
 from geopolars.datatypes import GeoPolygon
 from geopolars.geo._dispatch import on_geometry
 
@@ -77,3 +79,27 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     """
     # CHECK: CCW/CW orientation of polygon should not matter, area should be positive only.
     return on_geometry(geometry, _area)
+
+
+def _area_rsgeo(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
+    """The area of the geometry"""
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[column],
+        function_name="area_rsgeo",
+        is_elementwise=True,
+    )
+
+
+def area_rsgeo(geometry: IntoExprColumn) -> pl.Expr:
+    """The planar area a geometry encloses, as an `f64`, computed by the `geo` crate.
+
+    Gives the same answers as `area`, which is written in plain Polars expressions;
+    see there for what counts as an area. The two sit side by side so they can be
+    compared, for correctness and for speed.
+
+    ```python
+    df.select(geo.area_rsgeo("parcel"))
+    ```
+    """
+    return on_geometry(geometry, _area_rsgeo)

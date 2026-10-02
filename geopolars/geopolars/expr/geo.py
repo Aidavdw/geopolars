@@ -8,6 +8,7 @@ from geopolars.geo import affine, construct
 
 # bound directly: `geopolars.geo.area` is the function, not the module.
 from geopolars.geo.area import area as _area
+from geopolars.geo.area import area_rsgeo as _area_rsgeo
 
 # bound directly: the method's `crs` argument would shadow the module.
 from geopolars.geo.crs import to_crs as _to_crs
@@ -47,3 +48,6 @@ class Geometry:
 
     def area(self) -> pl.Expr:
         return _area(self._expr)
+
+    def area_rsgeo(self) -> pl.Expr:
+        return _area_rsgeo(self._expr)

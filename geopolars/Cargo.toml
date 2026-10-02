@@ -22,6 +22,8 @@ polars = { workspace = true, features = [
   "dtype-struct",
 ] }
 polars-core = { workspace = true, features = ["dtype-extension", "dtype-struct"] }
+# The array types under a Series. polars does not re-export them publicly.
+polars-arrow = { workspace = true }
 
 pyo3-polars = { workspace = true, features = ["derive"] }
 # abi3-py310: one wheel for 3.10+, matching polars' own requires-python.
@@ -29,7 +31,8 @@ pyo3-polars = { workspace = true, features = ["derive"] }
 pyo3 = { workspace = true, features = ["abi3-py310"] }
 
 serde = { workspace = true, features = ["derive"] }
-geo = { version = "0.33.1", features = ["proj"] }
+# Named `rsgeo` so it cannot be confused with our own `geo` namespace and modules.
+rsgeo = { package = "geo", version = "0.33.1", features = ["proj"] }
 geo-traits = "0.3.0"
 # Used by 'geo'. This sets it so that proj is bundled with the plugin,
 # rather than using the system installation (portability).
