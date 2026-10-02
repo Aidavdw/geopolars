@@ -1,25 +1,5 @@
 """Polars plugin expressions, with a statically-typed namespace accessor.
 
-# TODO: move this to a readme?
-
-We present two equivalent APIs:
-```python
-
-    # functional
-    from geopolars import geo
-    geo.translate("route", dx=1.0, dy=2.0)
-
-    # expressions using a namespace
-    import geopolars as gp
-    gpl.col("route").geo.translate(1.0, 2.0)
-```
-
-Both are fully type-checked, but with an asterisk.
-Plain `pl.col("route").geo...` works at runtime,
-but a checker cannot see namespaces that `register_expr_namespace`
-patches onto `pl.Expr`.
-To avoid that, prefer `gpl.col` to keep static typing.
-
 In code organisation, the layering is one-directional:
 `expr` (namespaces) -> the functional modules -> `datatypes`.
 There should be no links the other direction.
