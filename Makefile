@@ -1,6 +1,6 @@
 SHELL=/bin/bash
 
-.PHONY: install install-release polars-src run-geo run-line run-centroid run-centroid-manual run-crs rebuild test test-rust test-python clean
+.PHONY: install install-release polars-src run-geo run-line run-mean-coordinate run-mean-coordinate-manual run-crs rebuild test test-rust test-python clean
 
 # The polars commit we build against, for both Cargo and uv. 
 # Single source of truth.
@@ -66,13 +66,13 @@ run-line: install
 run-crs: install
 	uv run examples/run_crs.py
 
-## Run the coordinate centroid proof of concept.
-run-centroid: install
-	uv run examples/run_centroid.py
+## Run the mean coordinate proof of concept.
+run-mean-coordinate: install
+	uv run examples/run_mean_coordinate.py
 
-## Run the same centroid written by hand, in plain Polars.
-run-centroid-manual: install
-	uv run examples/run_centroid_manual.py
+## Run the same mean coordinate written by hand, in plain Polars.
+run-mean-coordinate-manual: install
+	uv run examples/run_mean_coordinate_manual.py
 
 clean:
 	-@rm -rf .venv target

@@ -1,7 +1,7 @@
-"""Where the cost of the centroid abstraction actually goes.
+"""Where the cost of the mean coordinate abstraction actually goes.
 
-`run_centroid_manual.py` shows the plan you would write by hand;
-`run_centroid.py` shows the plan the abstractions build.
+`run_mean_coordinate_manual.py` shows the plan you would write by hand;
+`run_mean_coordinate.py` shows the plan the abstractions build.
 This one puts a number on each layer between the two, by adding them
 one at a time to the same hand-written expression:
 
@@ -16,15 +16,18 @@ dominates at two vertices apiece. `breakdown()` at the bottom times the real
 """
 
 import functools
+import importlib
 import operator
 import time
 
 import polars as pl
 from geopolars.datatypes import GeoLineString
-from geopolars.geo import centroid as impl
 
 import geopolars as gpl
 from geopolars import geo
+
+# Not `from geopolars.geo import ...`: that name is the function, not the module.
+impl = importlib.import_module("geopolars.geo.mean_coordinate")
 
 AXES = ("x", "y", "m")
 SAMPLES = pl.col("samples")
@@ -67,15 +70,15 @@ def axis(column: pl.Expr, name: str) -> pl.Expr:
 
 
 def means(column: pl.Expr) -> list[pl.Expr]:
-    """The mean of each axis, per row. The whole of what a centroid is."""
+    """The mean of each axis, per row. The whole of what a mean coordinate is."""
     return [(axis(column, a).list.sum() / column.list.len()).alias(a) for a in AXES]
 
 
 def layers(plain: pl.DataFrame, geo_df: pl.DataFrame) -> dict[str, pl.LazyFrame]:
-    """The same centroid, with one more layer of abstraction each time."""
+    """The same mean coordinate, with one more layer of abstraction each time."""
     nothing = pl.lit(None, dtype=pl.Float64)
 
-    # 1. What the centroid is, and nothing else.
+    # 1. What the mean coordinate is, and nothing else.
     minimal = plain.lazy().select(centre=pl.struct(means(SAMPLES)))
 
     # 2. ...plus `_defined`: one null scan per axis, on top of the sums.
@@ -115,12 +118,12 @@ def layers(plain: pl.DataFrame, geo_df: pl.DataFrame) -> dict[str, pl.LazyFrame]
     )
 
     return {
-        "1. minimal (what a centroid is)": minimal,
+        "1. minimal (what a mean is)": minimal,
         "2.  + the validity checks": checked,
         "3.  + the dispatch coalesces": wrapped,
         "4.  + ext.storage() / ext.to()": typed,
-        "5. geo.coordinate_centroid": geo_df.lazy().select(
-            centre=geo.coordinate_centroid("samples")
+        "5. geo.mean_coordinate": geo_df.lazy().select(
+            centre=geo.mean_coordinate("samples")
         ),
     }
 
@@ -158,7 +161,7 @@ def breakdown(rows: int, vertices: int) -> None:
         "...of which is axis extraction": pl.struct(
             [storage.list.eval(pl.element().struct.field(a)).alias(a) for a in AXES]
         ),
-        "coordinate_centroid (all of it)": geo.coordinate_centroid("samples"),
+        "mean_coordinate (all of it)": geo.mean_coordinate("samples"),
     }
 
     print(f"\n{rows:,} linestrings of {vertices} coordinates, {''.join(AXES)}")
@@ -177,12 +180,12 @@ report(rows=4_000, vertices=1_000)
 breakdown(rows=200_000, vertices=20)
 
 # The node the whole thing streams through, or does not.
-# `run_centroid.py` falls back to an in-memory node -- but that node is the
-# `implode()` that gathers the rows into one geometry, not the centroid.
+# `run_mean_coordinate.py` falls back to an in-memory node -- but that node is the
+# `implode()` that gathers the rows into one geometry, not the mean.
 # Plain Polars does exactly the same thing, with no geometry in sight:
 plain, geo_df = frames(rows=1_000, vertices=4)
-print("\nThe centroid alone, given a geometry column that already exists:")
-centre = geo_df.lazy().select(centre=geo.coordinate_centroid("samples"))
+print("\nThe mean coordinate alone, given a geometry column that already exists:")
+centre = geo_df.lazy().select(centre=geo.mean_coordinate("samples"))
 print(centre.explain(engine="streaming"))
 centre.show_graph(plan_stage="physical", engine="streaming", optimized=True)
 

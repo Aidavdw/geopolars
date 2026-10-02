@@ -1,7 +1,7 @@
-"""Example showing the calculation of centroids of coordinates.
+"""Example showing the calculation of the mean coordinate of a geometry.
 Shows the following steps:
 - changing columns into points
-- calculating centroids from the points.
+- calculating the mean coordinate of the points.
 Ideally this should just be an abstraction on the plugin layer.
 It uses only polars under the hood, no custom nodes and no magic!
 """
@@ -40,7 +40,7 @@ collection = points.select(pl.col("point").implode()).select(
 print("\nGathered into one geometry, the four samples are one row:")
 print(collection.collect())
 
-centre = collection.select(centre=geo.coordinate_centroid("samples"))
+centre = collection.select(centre=geo.mean_coordinate("samples"))
 
 print(
     "The plan behind it: Ideally, all abstractions fall away, \
@@ -51,7 +51,7 @@ print(centre.explain())
 print("\nThe physical plan, node by node:")
 centre.show_graph(plan_stage="physical", engine="streaming", optimized=True)
 
-print("\nThe centroid of the four samples:")
+print("\nThe mean coordinate of the four samples:")
 print(centre.collect())
 
 print("\nThe same numbers, averaged column by column:")
@@ -63,4 +63,4 @@ print("\nThe whole thing is one lazy query, so it streams:")
 print(centre.collect(engine="streaming"))
 
 print("\nThe namespace spelling is the same expression:")
-print(collection.select(centre=gpl.col("samples").geo.coordinate_centroid()).collect())
+print(collection.select(centre=gpl.col("samples").geo.mean_coordinate()).collect())

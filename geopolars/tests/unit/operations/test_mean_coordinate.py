@@ -1,4 +1,4 @@
-"""The centroid of the coordinates a geometry is made of."""
+"""The mean of the coordinates a geometry is made of."""
 
 from __future__ import annotations
 
@@ -43,11 +43,11 @@ def _opened(rings: pl.DataFrame) -> pl.DataFrame:
     return rings.filter(within < pl.len().over("polygon", "ring") - 1)
 
 
-def test_a_point_is_its_own_centroid(
+def test_a_point_is_its_own_mean_coordinate(
     coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = coords.select(dimension.point())
-    out = df.select(geo.coordinate_centroid("point"))
+    out = df.select(geo.mean_coordinate("point"))
 
     assert out.schema["point"] == dimension.point_dtype()
     assert_frame_equal(coordinates(out), coordinates(df))
@@ -57,7 +57,7 @@ def test_a_linestring_averages_its_vertices(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.lines(line_coords)
-    out = df.select(geo.coordinate_centroid("line"))
+    out = df.select(geo.mean_coordinate("line"))
 
     assert_frame_equal(
         coordinates(out, "line"), _mean_per(line_coords, "line", dimension)
@@ -69,7 +69,7 @@ def test_a_polygon_averages_the_vertices_of_all_its_rings(
 ) -> None:
     """Holes count as much as the exterior ring: every coordinate counts once."""
     df = dimension.polygons(ring_coords)
-    out = df.select(geo.coordinate_centroid("polygon"))
+    out = df.select(geo.mean_coordinate("polygon"))
 
     assert_frame_equal(
         coordinates(out, "polygon"),
@@ -79,11 +79,11 @@ def test_a_polygon_averages_the_vertices_of_all_its_rings(
 
 def test_the_coordinate_that_closes_a_ring_is_left_out() -> None:
     """A square's four corners average to its middle. Counting the repeat that
-    closes the ring would pull the centroid towards wherever it starts."""
+    closes the ring would pull the mean towards wherever it starts."""
     df = pl.DataFrame({"rings": [[_SQUARE]]}, schema={"rings": _XY_RINGS}).select(
         geo.polygon("rings").alias("polygon")
     )
-    out = df.select(geo.coordinate_centroid("polygon"))
+    out = df.select(geo.mean_coordinate("polygon"))
 
     assert_frame_equal(
         coordinates(out, "polygon"), pl.DataFrame({"x": [2.0], "y": [2.0]})
@@ -96,7 +96,7 @@ def test_a_closed_linestring_keeps_every_vertex() -> None:
     df = pl.DataFrame(
         {"vertices": [_SQUARE]}, schema={"vertices": _XY_VERTICES}
     ).select(geo.linestring("vertices").alias("line"))
-    out = df.select(geo.coordinate_centroid("line"))
+    out = df.select(geo.mean_coordinate("line"))
 
     assert_frame_equal(coordinates(out, "line"), pl.DataFrame({"x": [1.6], "y": [1.6]}))
 
@@ -105,7 +105,7 @@ def test_an_empty_ring_takes_nothing_with_it() -> None:
     df = pl.DataFrame(
         {"rings": [[_SQUARE, []], [[], _SQUARE]]}, schema={"rings": _XY_RINGS}
     ).select(geo.polygon("rings").alias("polygon"))
-    out = df.select(geo.coordinate_centroid("polygon"))
+    out = df.select(geo.mean_coordinate("polygon"))
 
     # The square's four corners, whichever side of it the empty ring is on.
     assert_frame_equal(
@@ -118,7 +118,7 @@ def test_a_multipoint_averages_its_points(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.multipoints(line_coords)
-    out = df.select(geo.coordinate_centroid("multipoint"))
+    out = df.select(geo.mean_coordinate("multipoint"))
 
     assert_frame_equal(
         coordinates(out, "multipoint"), _mean_per(line_coords, "line", dimension)
@@ -129,9 +129,9 @@ def test_a_multipoint_and_a_linestring_of_the_same_points_agree(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     multipoints = dimension.multipoints(line_coords).select(
-        geo.coordinate_centroid("multipoint")
+        geo.mean_coordinate("multipoint")
     )
-    lines = dimension.lines(line_coords).select(geo.coordinate_centroid("line"))
+    lines = dimension.lines(line_coords).select(geo.mean_coordinate("line"))
 
     assert_frame_equal(
         coordinates(multipoints, "multipoint"), coordinates(lines, "line")
@@ -144,14 +144,16 @@ def test_a_closed_multipoint_keeps_every_point() -> None:
     df = pl.DataFrame({"points": [_SQUARE]}, schema={"points": _XY_VERTICES}).select(
         geo.multipoint("points").alias("multipoint")
     )
-    out = df.select(geo.coordinate_centroid("multipoint"))
+    out = df.select(geo.mean_coordinate("multipoint"))
 
     assert_frame_equal(
         coordinates(out, "multipoint"), pl.DataFrame({"x": [1.6], "y": [1.6]})
     )
 
 
-def test_an_empty_or_missing_multipoint_has_no_centroid(dimension: Dimension) -> None:
+def test_an_empty_or_missing_multipoint_has_no_mean_coordinate(
+    dimension: Dimension,
+) -> None:
     df = pl.DataFrame(
         {"points": [[], None]},
         schema={
@@ -159,7 +161,7 @@ def test_an_empty_or_missing_multipoint_has_no_centroid(dimension: Dimension) ->
         },
     ).select(geo.multipoint("points").alias("multipoint"))
 
-    out = df.select(geo.coordinate_centroid("multipoint"))
+    out = df.select(geo.mean_coordinate("multipoint"))
 
     assert out["multipoint"].is_null().to_list() == [True, True]
 
@@ -168,7 +170,7 @@ def test_a_multilinestring_averages_the_vertices_of_all_its_parts(
     ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.multilinestrings(ring_coords)
-    out = df.select(geo.coordinate_centroid("multilinestring"))
+    out = df.select(geo.mean_coordinate("multilinestring"))
 
     assert_frame_equal(
         coordinates(out, "multilinestring"),
@@ -181,9 +183,9 @@ def test_a_multilinestrings_parts_are_not_rings(ring_coords: pl.DataFrame) -> No
     but a polygon drops the coordinate that closes each ring
     and a multilinestring keeps it."""
     multilines = XY.multilinestrings(ring_coords).select(
-        geo.coordinate_centroid("multilinestring")
+        geo.mean_coordinate("multilinestring")
     )
-    polygons = XY.polygons(ring_coords).select(geo.coordinate_centroid("polygon"))
+    polygons = XY.polygons(ring_coords).select(geo.mean_coordinate("polygon"))
 
     assert (
         coordinates(multilines, "multilinestring").rows()
@@ -197,14 +199,14 @@ def test_a_closed_multilinestring_keeps_every_vertex() -> None:
     df = pl.DataFrame({"lines": [[_SQUARE]]}, schema={"lines": _XY_RINGS}).select(
         geo.multilinestring("lines").alias("multilinestring")
     )
-    out = df.select(geo.coordinate_centroid("multilinestring"))
+    out = df.select(geo.mean_coordinate("multilinestring"))
 
     assert_frame_equal(
         coordinates(out, "multilinestring"), pl.DataFrame({"x": [1.6], "y": [1.6]})
     )
 
 
-def test_an_empty_or_missing_multilinestring_has_no_centroid(
+def test_an_empty_or_missing_multilinestring_has_no_mean_coordinate(
     dimension: Dimension,
 ) -> None:
     df = pl.DataFrame(
@@ -216,7 +218,7 @@ def test_an_empty_or_missing_multilinestring_has_no_centroid(
         },
     ).select(geo.multilinestring("lines").alias("multilinestring"))
 
-    out = df.select(geo.coordinate_centroid("multilinestring"))
+    out = df.select(geo.mean_coordinate("multilinestring"))
 
     assert out["multilinestring"].is_null().to_list() == [True, True, True]
 
@@ -244,17 +246,17 @@ def test_the_result_is_a_point_of_the_same_dimension(
         df = dimension.polygons(ring_coords)
     name = df.columns[0]
 
-    out = df.select(geo.coordinate_centroid(name))
+    out = df.select(geo.mean_coordinate(name))
 
     assert out.schema[name] == GeoPoint.of_dimension(dimension.coords)()
 
 
 def test_m_is_averaged_like_any_other_coordinate(line_coords: pl.DataFrame) -> None:
     """Unlike `translate`, which leaves a measure where it was, there is nothing
-    to carry through here: the centroid of a trajectory carries the mean of the
-    measures its vertices hold."""
+    to carry through here: the mean coordinate of a trajectory carries the mean
+    of the measures its vertices hold."""
     df = XYZM.lines(line_coords)
-    out = df.select(geo.coordinate_centroid("line"))
+    out = df.select(geo.mean_coordinate("line"))
 
     assert_frame_equal(
         coordinates(out, "line").select("m"),
@@ -262,9 +264,12 @@ def test_m_is_averaged_like_any_other_coordinate(line_coords: pl.DataFrame) -> N
     )
 
 
-def test_an_empty_or_missing_linestring_has_no_centroid(dimension: Dimension) -> None:
-    """A geometry with no coordinates has no centroid, and a null geometry stays
-    null: GeoArrow has no point with null coordinates, only a null point."""
+def test_an_empty_or_missing_linestring_has_no_mean_coordinate(
+    dimension: Dimension,
+) -> None:
+    """A geometry with no coordinates has no mean coordinate, and a null
+    geometry stays null: GeoArrow has no point with null coordinates, only a
+    null point."""
     df = pl.DataFrame(
         {"vertices": [[], None]},
         schema={
@@ -272,12 +277,14 @@ def test_an_empty_or_missing_linestring_has_no_centroid(dimension: Dimension) ->
         },
     ).select(geo.linestring("vertices").alias("line"))
 
-    out = df.select(geo.coordinate_centroid("line"))
+    out = df.select(geo.mean_coordinate("line"))
 
     assert out["line"].is_null().to_list() == [True, True]
 
 
-def test_an_empty_or_missing_polygon_has_no_centroid(dimension: Dimension) -> None:
+def test_an_empty_or_missing_polygon_has_no_mean_coordinate(
+    dimension: Dimension,
+) -> None:
     """A polygon with no rings, or with nothing but empty ones, has no
     coordinates to average either."""
     df = pl.DataFrame(
@@ -289,32 +296,32 @@ def test_an_empty_or_missing_polygon_has_no_centroid(dimension: Dimension) -> No
         },
     ).select(geo.polygon("rings").alias("polygon"))
 
-    out = df.select(geo.coordinate_centroid("polygon"))
+    out = df.select(geo.mean_coordinate("polygon"))
 
     assert out["polygon"].is_null().to_list() == [True, True, True]
 
 
-def test_a_missing_point_has_no_centroid() -> None:
+def test_a_missing_point_has_no_mean_coordinate() -> None:
     df = pl.DataFrame({"x": [None, 1.0], "y": [2.0, 2.0]}).select(
         geo.point("x", "y").alias("point")
     )
 
-    out = df.select(geo.coordinate_centroid("point"))
+    out = df.select(geo.mean_coordinate("point"))
 
     assert out["point"].is_null().to_list() == [True, False]
 
 
-def test_a_missing_coordinate_takes_the_whole_centroid_with_it() -> None:
+def test_a_missing_coordinate_takes_the_whole_mean_with_it() -> None:
     """The constructors do not let a vertex go missing, so this goes around
-    them. Averaging what is left would hand back a centroid of a geometry that
-    is not there, which is what `validate` is there to prevent."""
+    them. Averaging what is left would hand back the mean coordinate of a
+    geometry that is not there, which is what `validate` is there to prevent."""
     df = pl.DataFrame(
         {"line": [[{"x": 0.0, "y": 0.0}, {"x": 2.0, "y": None}]]},
         schema={"line": _XY_VERTICES},
     ).select(pl.col("line").ext.to(LineStringXY()))
     whole = df.select(geo.validate("line"))
 
-    out = whole.select(geo.coordinate_centroid("line"))
+    out = whole.select(geo.mean_coordinate("line"))
 
     assert out["line"].is_null().to_list() == [True]
 
@@ -322,15 +329,15 @@ def test_a_missing_coordinate_takes_the_whole_centroid_with_it() -> None:
 def test_every_form_of_column_gives_the_same_answer(line_coords: pl.DataFrame) -> None:
     """A name, a `pl.col(...)` and a `Series` are the same column."""
     df = XY.lines(line_coords)
-    expected = df.select(geo.coordinate_centroid("line"))
+    expected = df.select(geo.mean_coordinate("line"))
 
-    assert_frame_equal(df.select(geo.coordinate_centroid(pl.col("line"))), expected)
-    assert_frame_equal(pl.select(geo.coordinate_centroid(df["line"])), expected)
+    assert_frame_equal(df.select(geo.mean_coordinate(pl.col("line"))), expected)
+    assert_frame_equal(pl.select(geo.mean_coordinate(df["line"])), expected)
 
 
 def test_it_runs_on_the_streaming_engine(line_coords: pl.DataFrame) -> None:
     """The point of building this out of ordinary expressions."""
-    lf = XY.lines(line_coords).lazy().select(geo.coordinate_centroid("line"))
+    lf = XY.lines(line_coords).lazy().select(geo.mean_coordinate("line"))
 
     assert_frame_equal(lf.collect(engine="streaming"), lf.collect())
 
@@ -339,7 +346,7 @@ def test_rejects_a_plain_float_column() -> None:
     df = pl.DataFrame({"line": [1.0, 2.0]})
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
-        df.select(geo.coordinate_centroid("line"))
+        df.select(geo.mean_coordinate("line"))
 
 
 def test_rejects_a_bare_coordinate_struct() -> None:
@@ -347,13 +354,13 @@ def test_rejects_a_bare_coordinate_struct() -> None:
     df = pl.DataFrame({"point": [{"x": 1.0, "y": 2.0}]})
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
-        df.select(geo.coordinate_centroid("point"))
+        df.select(geo.mean_coordinate("point"))
 
 
 def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
     """The geometry is read off the dtype, so a bad column is a schema error and
     not something that waits until the data is there."""
-    lf = pl.LazyFrame({"lon": [1.0]}).select(geo.coordinate_centroid("lon"))
+    lf = pl.LazyFrame({"lon": [1.0]}).select(geo.mean_coordinate("lon"))
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         lf.collect_schema()
@@ -371,7 +378,7 @@ def test_rejects_a_geometry_carrying_extension_metadata() -> None:
     )
 
     with pytest.raises(TypeError, match="no extension metadata"):
-        df.select(geo.coordinate_centroid("point"))
+        df.select(geo.mean_coordinate("point"))
 
 
 def test_takes_an_expression_as_well_as_a_column(line_coords: pl.DataFrame) -> None:
@@ -380,20 +387,18 @@ def test_takes_an_expression_as_well_as_a_column(line_coords: pl.DataFrame) -> N
     translated = gpl.col("line").geo.translate(1.0, 1.0)
 
     assert_frame_equal(
-        df.select(geo.coordinate_centroid(translated)),
-        df.select(geo.coordinate_centroid("line")).select(
-            geo.translate("line", 1.0, 1.0)
-        ),
+        df.select(geo.mean_coordinate(translated)),
+        df.select(geo.mean_coordinate("line")).select(geo.translate("line", 1.0, 1.0)),
     )
 
 
 def test_rejects_a_series_that_is_not_a_geometry() -> None:
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
-        pl.select(geo.coordinate_centroid(pl.Series("line", [1.0])))
+        pl.select(geo.mean_coordinate(pl.Series("line", [1.0])))
 
 
 def test_rejects_a_column_that_is_not_there() -> None:
     df = pl.DataFrame({"a": [1.0]})
 
     with pytest.raises(ColumnNotFoundError, match="line"):
-        df.select(geo.coordinate_centroid("line"))
+        df.select(geo.mean_coordinate("line"))

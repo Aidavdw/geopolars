@@ -85,7 +85,7 @@ def test_a_missing_coordinate_nulls_the_point() -> None:
 
 def test_an_empty_geometry_is_whole() -> None:
     """A geometry with no coordinates is not a geometry with missing ones. It
-    has no centroid, but it is there, and `validate` leaves it alone."""
+    has no mean coordinate, but it is there, and `validate` leaves it alone."""
     df = pl.DataFrame({"line": [[], _SQUARE]}, schema={"line": _XY_VERTICES}).select(
         pl.col("line").ext.to(LineStringXY())
     )

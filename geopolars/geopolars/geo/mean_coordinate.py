@@ -1,5 +1,5 @@
-"""Averaging over coordinates.
-Note that this is different from an area centroid!
+"""The mean coordinate of a geometry: every coordinate weighted the same.
+Note that this is not a centroid, which weighs by length or area!
 """
 
 from __future__ import annotations
@@ -85,9 +85,9 @@ def _coordinates(geometry: type[GeoArrowType], column: pl.Expr) -> pl.Expr:
     return _per_geometry(storage, geometry._nesting, _count, geometry._rings)
 
 
-def _centroid(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
-    """The centroid of one geometry type, per row."""
-    # A point is its own centroid.
+def _mean_coordinate(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
+    """The mean coordinate of one geometry type, per row."""
+    # A point is its own mean coordinate.
     if geometry._nesting == 0:
         return column
 
@@ -104,13 +104,13 @@ def _centroid(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
     )
 
 
-def coordinate_centroid(geometry: IntoExprColumn) -> pl.Expr:
+def mean_coordinate(geometry: IntoExprColumn) -> pl.Expr:
     """The mean of the coordinates a geometry is made of, as a `geoarrow.point`.
 
-    Note that this is *not* the centre of mass (area centroid).
+    Note that this is *not* the centroid (centre of mass).
     Every coordinate counts once and counts the same,
     so this is the centre of a geometry's vertices rather than of the space it covers.
-    For a polygon those differ:
+    For a linestring or a polygon those differ:
     this one moves with where the vertices are dense.
 
     | in                     | out          |
@@ -120,10 +120,11 @@ def coordinate_centroid(geometry: IntoExprColumn) -> pl.Expr:
     | `PolygonXYZM`          | `PointXYZM`  |
 
     The measure `m` is also averaged.
-    A null geometry, and a geometry with no coordinates at all, has no centroid.
+    A null geometry, and a geometry with no coordinates at all,
+    has no mean coordinate.
 
     ```python
-    df.select(geo.coordinate_centroid("route"))
+    df.select(geo.mean_coordinate("route"))
     ```
     """
-    return on_geometry(geometry, _centroid)
+    return on_geometry(geometry, _mean_coordinate)

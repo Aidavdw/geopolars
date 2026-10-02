@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import polars as pl
 
-from geopolars.geo import affine, centroid, construct
+from geopolars.geo import affine, construct
 
 # bound directly: `geopolars.geo.area` is the function, not the module.
 from geopolars.geo.area import area as _area
 
 # bound directly: the method's `crs` argument would shadow the module.
 from geopolars.geo.crs import to_crs as _to_crs
+
+# bound directly: `geopolars.geo.mean_coordinate` is the function, not the module.
+from geopolars.geo.mean_coordinate import mean_coordinate as _mean_coordinate
 
 
 @pl.api.register_expr_namespace("geo")
@@ -39,8 +42,8 @@ class Geometry:
     def to_crs(self, crs: str) -> pl.Expr:
         return _to_crs(self._expr, crs)
 
-    def coordinate_centroid(self) -> pl.Expr:
-        return centroid.coordinate_centroid(self._expr)
+    def mean_coordinate(self) -> pl.Expr:
+        return _mean_coordinate(self._expr)
 
     def area(self) -> pl.Expr:
         return _area(self._expr)

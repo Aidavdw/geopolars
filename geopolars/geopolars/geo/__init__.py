@@ -4,7 +4,6 @@ Everything in the 'geo' namespace forwards to here.
 
 from geopolars.geo.affine import translate
 from geopolars.geo.area import area
-from geopolars.geo.centroid import coordinate_centroid
 from geopolars.geo.construct import (
     linestring,
     linestring_from_columns,
@@ -22,13 +21,14 @@ from geopolars.geo.construct import (
     validate,
 )
 from geopolars.geo.crs import to_crs
+from geopolars.geo.mean_coordinate import mean_coordinate
 
 __all__ = [
     "area",
-    "coordinate_centroid",
     "linestring",
     "linestring_from_columns",
     "linestring_from_vertices",
+    "mean_coordinate",
     "multilinestring",
     "multilinestring_from_columns",
     "multilinestring_from_linestrings",

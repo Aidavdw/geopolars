@@ -1,11 +1,11 @@
-"""Manual implementation of getting the centroid of some coordinates.
+"""Manual implementation of getting the mean of some coordinates.
 This is here so you can compare the plan of something hand-built to using
 the geopolars abstractions layer.
 """
 
 import polars as pl
 
-# The same four soil samples as in `run_centroid.py`,
+# The same four soil samples as in `run_mean_coordinate.py`,
 # as three plain float columns.
 lf = pl.LazyFrame(
     {
@@ -24,7 +24,7 @@ flat = lf.select(
     pl.col("value").mean(),
 )
 
-print("\nCentroid of the four samples, straight off the loose columns:")
+print("\nMean coordinate of the four samples, straight off the loose columns:")
 print(flat.collect())
 print(flat.explain(engine="streaming"))
 flat.show_graph(plan_stage="physical", engine="streaming", optimized=True)
@@ -35,7 +35,7 @@ flat.show_graph(plan_stage="physical", engine="streaming", optimized=True)
 point = pl.struct(x=pl.col("x"), y=pl.col("y"), m=pl.col("value"))
 
 # One mean per axis, mapped over the fields of that struct.
-centroid = lf.select(
+mean = lf.select(
     centre=pl.struct(
         # [point.struct.field(axis).mean().alias(axis) for axis in ("x", "y", "m")]
         point.struct.field("x").mean().alias("x_mean"),
@@ -49,6 +49,6 @@ print(
     "\nNow we put them all in a struct to get a little closer to the abstraction \
     that GeoPolars uses:"
 )
-print(centroid.collect())
-print(centroid.explain(engine="streaming"))
-centroid.show_graph(plan_stage="physical", engine="streaming", optimized=True)
+print(mean.collect())
+print(mean.explain(engine="streaming"))
+mean.show_graph(plan_stage="physical", engine="streaming", optimized=True)
