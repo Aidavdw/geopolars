@@ -1,4 +1,4 @@
-"""The `geo` expression namespace."""
+"""Provides `geo` expression namespace API."""
 
 from __future__ import annotations
 

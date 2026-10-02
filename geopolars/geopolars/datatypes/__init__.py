@@ -1,8 +1,8 @@
 """GeoArrow extension data types.
 
-GeoArrow uses one extension name per geometry, covering every dimension. XY vs
-XYZ is a property of the coordinates it stores, so one registered name and one
-dispatching class covers them all.
+GeoArrow uses one extension name per geometry, covering every dimension.
+XY vs XYZ is a property of the coordinates it stores,
+so one registered name and one dispatching class covers them all.
 """
 
 from geopolars.datatypes.base import GeoArrowType

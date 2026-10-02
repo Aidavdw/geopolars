@@ -1,9 +1,4 @@
-"""The `geoarrow.linestring` extension type.
-
-Per the [GeoArrow spec](https://geoarrow.org/format.html), an array of
-linestrings is `List<Coordinate>`: the same coordinates a point stores, one list
-of them per linestring.
-"""
+"""The `geoarrow.linestring` extension type."""
 
 from __future__ import annotations
 

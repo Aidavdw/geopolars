@@ -1,9 +1,4 @@
-"""Building a geometry out of the parts it is made of.
-
-A geometry gathered from parts carries the parts' metadata over. Setting a
-`crs` the parts already declare is allowed; setting a different one is an
-error, since relabelling would silently put the coordinates in the wrong place.
-"""
+"""Building a geometry out of the parts it is made of."""
 
 from __future__ import annotations
 
@@ -64,9 +59,9 @@ def _from_columns(
     crs: str | None,
 ) -> pl.Expr:
     """Zip one nested coordinate column per axis into one geometry per row."""
-    # A plugin call rather than expressions: Polars can transpose a struct of
-    # lists into a list of structs only by exploding and regrouping, where the
-    # plugin reuses the offsets the columns already have.
+    # A plugin call rather than expressions:
+    # Polars can transpose a struct of lists into a list of structs only by exploding and regrouping,
+    # where the plugin reuses the offsets the columns already have.
     return register_plugin_function(
         plugin_path=LIB,
         args=[_named(value, name) for name, value in _given(x, y, z, m).items()],
@@ -144,8 +139,9 @@ def point(
     | `m`         | `PointXYM`  |
     | `z` and `m` | `PointXYZM` |
 
-    `z` is an elevation; `m` is an arbitrary measure carried along with the
-    vertex, such as a timestamp or a distance along a route.
+    `z` is an elevation.
+    `m` is an arbitrary measure carried along with the vertex,
+    such as a timestamp or a distance along a route.
 
     ```python
     df.select(geo.point("lon", "lat", crs="EPSG:4326"))
@@ -172,8 +168,8 @@ def linestring_from_vertices(
 ) -> pl.Expr:
     """Build a `geoarrow.linestring` column out of lists of vertices.
 
-    `vertices` is a list column holding one list per linestring, of either
-    `geoarrow.point`s or the bare coordinate structs a point wraps.
+    `vertices` is a list column holding one list per linestring,
+    of either `geoarrow.point`s or the bare coordinate structs a point wraps.
 
     Vertices normally arrive grouped:
 
@@ -368,8 +364,8 @@ def polygon_from_rings(rings: IntoExprColumn, *, crs: str | None = None) -> pl.E
     first ring of a polygon is its exterior ring; the rest are its holes.
 
     A ring is a closed linestring: its last vertex has to repeat its first.
-    That is the caller's to get right -- this does not check it, and does not
-    close a ring for you.
+    That is the caller's to get right this does not check it,
+    and does not close a ring for you.
 
     Rings normally arrive grouped, one linestring at a time:
 

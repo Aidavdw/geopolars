@@ -2,15 +2,15 @@
 
 Which geometry a column holds is in its dtype,
 and every operation has to be written differently per geometry.
-
-`Expr.pipe_with_dtype` hands us that dtype while Polars resolves the plan,
-before anything is optimised or run.
-So `build` is called once, with the one concrete geometry type,
+Using `Expr.pipe_with_dtype` we can switch dynamically based on the exact dtype
+to alter the plan that polars finally generates.
+`build` is called once, with the one concrete geometry type,
 and gives back a plain expression for just that geometry.
 It works the same for a column, an expression or a Series.
 
-A dtype that is no geometry of ours raises right there,
-so a bad input is a schema error rather than something that waits for the data.
+This allows us to raise errors on a type level at plan time,
+(which includes calling these functions on 'unknown' geometries or other polars data types)
+rather than at execution time.
 """
 
 from __future__ import annotations

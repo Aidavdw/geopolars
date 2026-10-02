@@ -1,7 +1,8 @@
 """A `pl.Expr` that a type checker can see this package's namespaces on.
 
+`pl.col("a").geo...` works in runtime, but type checking fails.
 `pl.api.register_expr_namespace` patches a namespace onto `pl.Expr` at runtime,
-which a type checker cannot follow. `pl.col("a").geo...` works regardless;
+which a type checker cannot follow.
 `gpl.col("a")` is the same thing with the namespaces declared ahead of time.
 """
 

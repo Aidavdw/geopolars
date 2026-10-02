@@ -1,6 +1,6 @@
-"""Registering the GeoArrow types, on both sides of the boundary.
-Importing this module registers the types in *both* the Polars registry and the
-cdylib. They *have to* agree on names.
+"""Registering the GeoArrow types on both sides of the boundary.
+Importing this module registers the types in *both* the Polars registry and the cdylib.
+They *have to* agree on names.
 """
 
 from __future__ import annotations

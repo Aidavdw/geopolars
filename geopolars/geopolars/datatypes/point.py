@@ -1,8 +1,9 @@
 """The `geoarrow.point` extension type.
 
-Per the [GeoArrow spec](https://geoarrow.org/format.html), an array of points is
-an array of coordinates; with "separated" coordinates that is
-`Struct<x: double, y: double, ...>`.
+Per the [GeoArrow spec](https://geoarrow.org/format.html):
+an array of points is an array of coordinates.
+In the 'separated' coordinates representation that we use,
+that is `Struct<x: double, y: double, ...>`.
 """
 
 from __future__ import annotations

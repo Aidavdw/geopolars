@@ -18,8 +18,7 @@ if TYPE_CHECKING:
 
 
 class GeoArrowType(pl.datatypes.BaseExtension):
-    """Functionality common between all GeoArrow types
-    implemented like an interface.
+    """Functionality common between all GeoArrow types implemented like an interface.
     Instantiate a concrete subclass (`PointXY()`), never one of these.
     """
 
@@ -56,17 +55,14 @@ class GeoArrowType(pl.datatypes.BaseExtension):
             cls._by_dimension[cls._dimension] = cls
 
     def __init__(self, *, crs: str | None = None) -> None:
-        """`crs` declares the coordinate reference system the coordinates are in,
+        """
+        `crs` declares the coordinate reference system the coordinates are in,
         in any form PROJ accepts: e.g. `"EPSG:4326"`, WKT or PROJJSON.
-        It is only a label: nothing is checked or reprojected."""
-        # Metadata is the slot GeoArrow reserves for `crs`, `crs_type` and
-        # `edges`, encoded as a JSON string -- the one place JSON is involved,
-        # and it describes the type, never the coordinates.
-        #
-        # `BaseExtension.__eq__` compares metadata as a *string*, byte for byte,
-        # and so does Rust. So the JSON is written by the same Rust code that
-        # writes it for the plugin's outputs, never by Python.
+        It is only a label: nothing is checked or reprojected.
+        """
+        # `BaseExtension.__eq__` and rust compare metadata as a *string*.
         # Two spellings of the same CRS still make two different dtypes.
+        # For this reason, we keep a single source of truth for JSON in Rust.
         super().__init__(
             name=self._extension_name,
             storage=self._geo_storage,

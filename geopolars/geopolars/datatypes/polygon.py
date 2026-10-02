@@ -1,10 +1,11 @@
 """The `geoarrow.polygon` extension type.
 
-Per the [GeoArrow spec](https://geoarrow.org/format.html), an array of polygons
-is `List<List<Coordinate>>`: one list of rings per polygon, and one list of
-vertices per ring. The first ring is the exterior one; any that follow are
-interior rings, the holes. Every ring is closed, meaning its last vertex repeats
-its first.
+Per the [GeoArrow spec](https://geoarrow.org/format.html),
+An array of polygons is `List<List<Coordinate>>`:
+one list of rings per polygon, and one list of vertices per ring.
+The first ring is the exterior one.
+Any that follow are interior rings, the holes.
+Every ring is closed, meaning its last vertex repeats its first.
 """
 
 from __future__ import annotations

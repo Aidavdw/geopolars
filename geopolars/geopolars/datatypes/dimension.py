@@ -38,8 +38,9 @@ def storage(dimension: Dimension, nesting: int) -> PolarsDataType:
 def dimension_of(storage: PolarsDataType, nesting: int) -> Dimension | None:
     """Read the dimension off such a storage type.
 
-    This is the *only* place the dimension is derived. Everything downstream
-    matches on the concrete class instead of re-inspecting struct fields.
+    This is the *only* place the dimension is derived.
+    Everything downstream matches on the concrete class
+    instead of re-inspecting struct fields.
     """
     inner = storage
     for _ in range(nesting):

@@ -1,7 +1,5 @@
-"""Expressions over GeoArrow geometry columns.
-
-The functional API: every `geo` namespace method forwards to a function
-here
+"""Provides the functional API for Expressions over GeoArrow geometry columns.
+Everything in the 'geo' namespace forwards to here.
 """
 
 from geopolars.geo.affine import translate
