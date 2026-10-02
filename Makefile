@@ -1,6 +1,6 @@
 SHELL=/bin/bash
 
-.PHONY: install install-release polars-src run-geo run-line run-centroid run-centroid-manual run-crs run-release rebuild test test-rust test-python clean
+.PHONY: install install-release polars-src run-geo run-line run-centroid run-centroid-manual run-crs rebuild test test-rust test-python clean
 
 # The polars commit we build against, for both Cargo and uv. 
 # Single source of truth.
@@ -40,7 +40,10 @@ $(POLARS_STAMP):
 rebuild: polars-src
 	uv sync --reinstall-package geopolars
 
-test: test-rust test-python
+# Rust tests can be a bit slower, so only run them if we ask specifically.
+test: test-python
+
+test-all: test-rust test-python
 
 ## Rust unit tests. 
 ## Run with --no-default-features  so pyo3's `extension-module` is dropped
