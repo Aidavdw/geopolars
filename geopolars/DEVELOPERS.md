@@ -20,7 +20,7 @@ which is the package directory.
 ### GeoArrow data types
 
 Geometries are stored as [GeoArrow](https://geoarrow.org/),
-using [Polars' Arrow extension types](https://docs.pola.rs/api/python/stable/reference/api/polars.datatypes.Extension.html)
+using [Polars' Arrow extension types](https://docs.pola.rs/api/python/stable/reference/api/polars.datatypes.Extension.html).
 An extension type consists of a name (`geoarrow.point`, `geoarrow.polygon`, ...),
 an ordinary Polars storage dtype, and optional metadata (where the CRS lives).
 The storage is a struct of separate `xy[/z][/m]` `f64` fields (referred to as *coordinates*),
@@ -85,7 +85,7 @@ and `src/geoarrow/` is the shared glue: dtypes, dispatch, and the conversion to 
 #### Type checker
 
 `register_expr_namespace` patches `.geo` onto `pl.Expr` at runtime, which a checker can't see.
-To fix this,we make `gpl.col` / `as_plugin` return a `PluginExpr` subclass that declares it.
+To fix this, we make `gpl.col` / `as_plugin` return a `PluginExpr` subclass that declares it.
 This is the purpose of `expr/plugin.py`.
 
 ## Testing
@@ -110,7 +110,7 @@ Such operations will always be the most efficient,
 and the planner will be able to apply further optimisations.
 
 You might want to change exactly what you want to put here using `pipe_with_dtype`
-(through `on_geometry`) here to change what you wish to lower it to based on the metadata.
+(through `on_geometry`) to change what you wish to lower it to based on the metadata.
 For that, you can dispatch on the input's geometry through `on_geometry` in `geo/_dispatch.py`.
 This wraps `Expr.pipe_with_dtype`, so the callback runs once at plan time
 with the concrete geometry class and returns a plain expression for that geometry only.
