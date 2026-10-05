@@ -31,11 +31,17 @@ def _squared_norm(dx: pl.Expr, dy: pl.Expr) -> pl.Expr:
     return dx.pow(2) + dy.pow(2)
 
 
+def _offset(a: pl.Expr, b: pl.Expr, axis: str) -> pl.Expr:
+    return b.struct.field(axis) - a.struct.field(axis)
+
+
 def _planar_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    """The squared distance between two coordinate structs."""
-    dx = b.struct.field("x") - a.struct.field("x")
-    dy = b.struct.field("y") - a.struct.field("y")
-    return _squared_norm(dx, dy)
+    """The squared distance between two coordinate structs, in the plane."""
+    return _squared_norm(_offset(a, b, "x"), _offset(a, b, "y"))
+
+
+def _both_have_z(a_dtype: GeoArrowType, b_dtype: GeoArrowType) -> bool:
+    return "z" in a_dtype._dimension and "z" in b_dtype._dimension
 
 
 def _geodesic_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
@@ -65,9 +71,15 @@ def _distance_squared(
 
     # Whether both declare the same CRS, and whether PROJ can use it,
     # is for the kernel to check while resolving the schema.
+    # The kernel counts the height itself, when both points carry one.
     if a_dtype._declares_crs() or b_dtype._declares_crs():
         return _geodesic_squared(a, b)
-    return _planar_squared(a.ext.storage(), b.ext.storage())
+
+    a, b = a.ext.storage(), b.ext.storage()
+    squared = _planar_squared(a, b)
+    if _both_have_z(a_dtype, b_dtype):
+        squared = squared + _offset(a, b, "z").pow(2)
+    return squared
 
 
 def distance_squared(a: IntoExprColumn, b: IntoExprColumn) -> pl.Expr:
@@ -89,7 +101,7 @@ def distance(a: IntoExprColumn, b: IntoExprColumn) -> pl.Expr:
 
     | `a` and `b`         | measured                     | in                  |
     |---------------------|------------------------------|---------------------|
-    | no CRS              | on the plane, by Pythagoras  | coordinate units    |
+    | no CRS              | in space, by Pythagoras      | coordinate units    |
     | the same CRS        | along the CRS's ellipsoid    | metres              |
 
     Without a CRS, longitude/latitude comes out in degrees,
@@ -100,8 +112,17 @@ def distance(a: IntoExprColumn, b: IntoExprColumn) -> pl.Expr:
     Points in different CRSs, or a CRS on only one of them, are refused:
     reproject one onto the other with `to_crs` first.
 
-    `z` and `m` are ignored. A missing point has no distance to anything.
-    Either side may be a single point, to measure every row against it.
+    When both points have a `z`, the difference in height counts too:
+    the distance is `sqrt(d² + Δz²)`, with `d` the distance above.
+    With a CRS, `z` is taken to be a height in metres,
+    and the geodesic is measured at the surface of the ellipsoid
+    (a few parts per million short at aircraft heights).
+    If only one of the points has a `z`, there is no height difference to count,
+    and they are measured as if neither had one.
+    `m` is always ignored.
+    Taking the distance from a two-dimensional point to a three-dimensional point (or vice-versa)
+    ignores any height difference.
+    Either side may be a single point, in which case its distance to all the other points is measured.
 
     ```python
     df.select(geo.distance("home", "work"))

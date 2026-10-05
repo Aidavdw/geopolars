@@ -11,9 +11,6 @@ use crate::geoarrow::crs::ExtensionMetadata;
 use crate::geoarrow::geodetic::GeodeticCrs;
 use crate::geoarrow::{describe, Kind};
 
-// FIXME: respect 3D-ness of points too!
-// 3D points are rare, they can have their own impl so it does not slow down the 2D calculation.
-
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
 ///
 /// Kept apart from the expression, so the length of a linestring can be
@@ -149,8 +146,47 @@ fn points(storage: &Series) -> PolarsResult<Vec<Option<(f64, f64)>>> {
         .collect())
 }
 
+/// A point's `(x, y)` and its `z`, kept apart so the `(x, y)` can go to PROJ as is.
+type WithHeight = ((f64, f64), f64);
+
+/// The `x` and `y` of every point with its `z`, `None` where either is missing.
+fn points_with_height(storage: &Series) -> PolarsResult<Vec<Option<WithHeight>>> {
+    let z = storage.struct_()?.field_by_name("z")?;
+    Ok(points(storage)?
+        .into_iter()
+        .zip(z.f64()?.iter())
+        .map(|(xy, z)| Some((xy?, z?)))
+        .collect())
+}
+
+/// `measure` applied row by row to two sides of the same length,
+/// or one side of a single point against every row of the other.
+fn pairwise<P: Copy>(
+    a: &[Option<P>],
+    b: &[Option<P>],
+    measure: impl Fn(P, P) -> PolarsResult<f64>,
+) -> PolarsResult<Float64Chunked> {
+    let len = match (a.len(), b.len()) {
+        (n, m) if n == m => n,
+        (1, m) => m,
+        (n, 1) => n,
+        (n, m) => polars_bail!(ShapeMismatch: "cannot measure {n} points against {m}"),
+    };
+    let at = |side: &[Option<P>], i: usize| side[if side.len() == 1 { 0 } else { i }];
+
+    (0..len)
+        .map(|i| match (at(a, i), at(b, i)) {
+            (Some(a), Some(b)) => measure(a, b).map(Some),
+            _ => Ok(None),
+        })
+        .collect()
+}
+
 /// The square of the geodesic distance between two points, row by row, in metres².
 /// Either side can be a single point, which is then measured against every row of the other.
+///
+/// When both points have a `z`, it is taken as a height in metres,
+/// and the difference in height is added to the geodesic by Pythagoras.
 #[polars_expr(output_type_func=squared_metres)]
 fn distance_squared_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let fields = [
@@ -158,22 +194,22 @@ fn distance_squared_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
         inputs[1].field().into_owned(),
     ];
     let metric = GeodesicMetric::new(&shared_crs(&fields)?)?;
+    let both_have_z =
+        describe(fields[0].dtype())?.dim.has_z() && describe(fields[1].dtype())?.dim.has_z();
 
-    let a = points(inputs[0].ext()?.storage())?;
-    let b = points(inputs[1].ext()?.storage())?;
-    let len = match (a.len(), b.len()) {
-        (n, m) if n == m => n,
-        (1, m) => m,
-        (n, 1) => n,
-        (n, m) => polars_bail!(ShapeMismatch: "cannot measure {n} points against {m}"),
+    let (a, b) = (inputs[0].ext()?.storage(), inputs[1].ext()?.storage());
+    // Chosen once per call, so the far more common 2D points
+    // go through a loop that never looks at a height.
+    let out = if both_have_z {
+        pairwise(
+            &points_with_height(a)?,
+            &points_with_height(b)?,
+            |(a, z_a), (b, z_b)| Ok(metric.distance_squared(a, b)? + (z_b - z_a).powi(2)),
+        )?
+    } else {
+        pairwise(&points(a)?, &points(b)?, |a, b| {
+            metric.distance_squared(a, b)
+        })?
     };
-    let at = |side: &[Option<(f64, f64)>], i: usize| side[if side.len() == 1 { 0 } else { i }];
-
-    let out = (0..len)
-        .map(|i| match (at(&a, i), at(&b, i)) {
-            (Some(a), Some(b)) => metric.distance_squared(a, b).map(Some),
-            _ => Ok(None),
-        })
-        .collect::<PolarsResult<Float64Chunked>>()?;
     Ok(out.with_name(inputs[0].name().clone()).into_series())
 }

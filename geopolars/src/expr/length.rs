@@ -30,7 +30,10 @@ fn crs_of_curve(field: &Field) -> PolarsResult<String> {
 /// `output_type_func` for [`length_geodesic`]: an `f64`, in metres.
 fn metres(input_fields: &[Field]) -> PolarsResult<Field> {
     crs_of_curve(&input_fields[0])?;
-    Ok(Field::new(input_fields[0].name().clone(), DataType::Float64))
+    Ok(Field::new(
+        input_fields[0].name().clone(),
+        DataType::Float64,
+    ))
 }
 
 /// One chunk of linestrings, each a list of coordinates.
@@ -63,7 +66,10 @@ fn linestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float6
             out.push(lines.length(i, metric)?);
         }
     }
-    Ok(Float64Chunked::from_iter_options(storage.name().clone(), out.into_iter()))
+    Ok(Float64Chunked::from_iter_options(
+        storage.name().clone(),
+        out.into_iter(),
+    ))
 }
 
 /// The sum of each multilinestring's parts.
@@ -84,7 +90,10 @@ fn multilinestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<F
             out.push(total?);
         }
     }
-    Ok(Float64Chunked::from_iter_options(storage.name().clone(), out.into_iter()))
+    Ok(Float64Chunked::from_iter_options(
+        storage.name().clone(),
+        out.into_iter(),
+    ))
 }
 
 /// The length of every linestring along its CRS's ellipsoid, in metres.

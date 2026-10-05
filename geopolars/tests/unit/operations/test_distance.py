@@ -67,13 +67,66 @@ def test_without_a_crs_lon_lat_comes_out_in_degrees() -> None:
     assert got == pytest.approx(math.hypot(73.8782, 10.7946))
 
 
-def test_z_and_m_are_left_out(coords: pl.DataFrame, dimension: Dimension) -> None:
+def test_against_a_point_without_z_the_height_is_left_out(
+    coords: pl.DataFrame, dimension: Dimension
+) -> None:
     df = coords.select(dimension.point())
     origin = pl.select(geo.point(pl.lit(0.0), pl.lit(0.0)).alias("origin"))
 
     got = df.select(geo.distance("point", origin["origin"])).to_series().to_list()
 
     assert got == pytest.approx([math.hypot(1.0, 3.0), math.hypot(2.5, 4.5), 0.0])
+
+
+def test_between_two_points_with_z_the_height_counts(
+    coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    """`m` is a measure, not a position, so it never counts."""
+    df = coords.select(dimension.point())
+    zeros = pl.DataFrame({axis: [0.0] for axis in ("x", "y", "z", "m")})
+    origin = zeros.select(dimension.point())["point"]
+
+    got = df.select(geo.distance("point", origin)).to_series().to_list()
+
+    z = (10.0, 20.0, 0.0) if dimension.has_z else (0.0, 0.0, 0.0)
+    expected = [
+        math.hypot(1.0, 3.0, z[0]),
+        math.hypot(2.5, 4.5, z[1]),
+        0.0,
+    ]
+    assert got == pytest.approx(expected)
+
+
+def _heights(
+    a: tuple[float, float, float], b: tuple[float, float, float], crs: str | None
+) -> pl.DataFrame:
+    """One pair of XYZ points, `a` and `b`."""
+    return pl.DataFrame({"i": [0]}).select(
+        geo.point(*map(pl.lit, a), crs=crs).alias("a"),
+        geo.point(*map(pl.lit, b), crs=crs).alias("b"),
+    )
+
+
+def test_without_a_crs_z_is_pythagoras_in_space() -> None:
+    df = _heights((0.0, 0.0, 0.0), (3.0, 4.0, 12.0), crs=None)
+
+    assert _distances(df) == [13.0]
+
+
+def test_with_a_crs_straight_up_is_the_difference_in_height() -> None:
+    df = _heights((*NEW_YORK, 10.0), (*NEW_YORK, 110.0), crs=WGS84)
+
+    assert _distances(df) == pytest.approx([100.0])
+
+
+def test_with_a_crs_the_height_is_added_to_the_geodesic() -> None:
+    climb = 10_000.0
+    df = _heights((*NEW_YORK, 0.0), (*LONDON, climb), crs=WGS84)
+    (flat,) = _distances(_pairs([NEW_YORK], [LONDON], crs=WGS84))
+
+    (got,) = _distances(df)
+
+    assert got == pytest.approx(math.hypot(flat, climb))
 
 
 def test_the_order_of_the_points_does_not_matter() -> None:
