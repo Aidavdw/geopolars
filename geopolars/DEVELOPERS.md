@@ -1,30 +1,144 @@
 # GeoPolars Developer Guide
 
+## Architecture
+
+### A Polars plugin
+
+GeoPolars is a [Polars plugin](https://docs.pola.rs/user-guide/plugins/):
+a Python package with a compiled Rust library (as `cdylib`).
+The two halves each have their own job:
+
+- **Python** (`geopolars/`) is what users interact with.
+  It defines the dtypes, builds the expressions,
+  and decides at plan time which implementation each geometry gets.
+- **Rust** (`src/`) holds the kernels that plain Polars expressions can't express.
+  Polars loads the library itself and looks up each plugin function by itself.
+
+The Python side points Polars at the library through `LIB` in `_utils.py`,
+which is the package directory.
+
+### GeoArrow data types
+
+Geometries are stored as [GeoArrow](https://geoarrow.org/),
+using [Polars' Arrow extension types](https://docs.pola.rs/api/python/stable/reference/api/polars.datatypes.Extension.html)
+An extension type consists of a name (`geoarrow.point`, `geoarrow.polygon`, ...),
+an ordinary Polars storage dtype, and optional metadata (where the CRS lives).
+The storage is a struct of separate `xy[/z][/m]` `f64` fields (referred to as *coordinates*),
+wrapped in a `List` per level of nesting (a point has 0, a linestring 1, a polygon 2).
+
+| What | Python | Rust |
+| - | - | - |
+| List of geometries | `GEOMETRIES` in `datatypes/registry.py` | `Kind::ALL` in `src/geoarrow/kind.rs` |
+| Common base type | `GeoArrowType` in `datatypes/base.py` | `Geo` in `src/geoarrow/geo.rs` |
+| One geometry | `datatypes/point.py`, `polygon.py`, ... | a `Kind` variant |
+| Dimension (`xy`, `xyzm`) | `datatypes/dimension.py` | `src/geoarrow/dimension.rs` |
+| CRS metadata | goes through `extension_metadata` (Rust) | `src/geoarrow/crs.rs` |
+
+Two things work differently on the two sides:
+
+- In Python, each geometry *and dimension* is its own class (`PointXY`, `PolygonXYZM`),
+  so users and type checkers can tell them apart.
+  In Rust, there is a single `Geo { kind, dim }` and code matches on its enums,
+  the same way Polars itself dispatches on dtypes.
+- Metadata JSON is only ever handled in Rust to keep a single source of truth.
+  Python calls `extension_metadata(crs=...)` rather than writing the JSON itself.
+  The reason for this is twofold:
+  It stops operations on the metadata from drifting (lowering maintenance burden),
+  and it ensures that metadata processed by both sides can be compared.
+  Dtypes compare their metadata as strings,
+  so if the two sides serialised the same CRS differently
+  you'd get two dtypes that don't compare equal.
+
+Rust expressions never name a concrete geometry.
+They call `geoarrow::describe(dtype)` to get a `GeoColumn` (kind and dimension),
+then either ignore it (`coords::map_coords`) or match exhaustively on `Kind`.
+That way, adding a geometry only touches `src/geoarrow/` and doesn't affect `src/expr/`.
+
+#### Extension registries
+
+There are two extension-type registries, one in the host `polars` wheel and one inside our `cdylib`,
+so **both Python and Rust have to register every type, and the names have to agree**.
+Importing `geopolars` handles both:
+`datatypes/registry.py` imports the compiled module,
+which runs `PyInit_geopolars` and registers the Rust side,
+then calls `pl.register_extension_type` for the Python side.
+
+### Expressions
+
+Expressions are the operations on these types.
+Each operation is written once, as a function in the **functional API** (`geopolars/geo/`),
+which is available as `from geopolars import geo` and then `geo.area("parcel")`.
+The **namespace API** (`geopolars/expr/geo.py`, `gpl.col("parcel").geo.area()`)
+is a thin wrapper in which every method just forwards to the functional version.
+New functionality is added in `geo/`, plus a one-line method in the namespace.
+
+Because of this, dependencies only go one way.
+Nothing in `datatypes` imports from `geo`, and nothing in `geo` imports from `expr`.
+
+```text
+expr (namespaces) →  geo (functional) →  datatypes.
+```
+
+On the Rust side, `src/expr/` mirrors `geo/` module by module (`area.rs`, `affine.rs`, `crs.rs`, ...),
+and `src/geoarrow/` is the shared glue: dtypes, dispatch, and the conversion to `rsgeo`.
+
+#### Type checker
+
+`register_expr_namespace` patches `.geo` onto `pl.Expr` at runtime, which a checker can't see.
+To fix this,we make `gpl.col` / `as_plugin` return a `PluginExpr` subclass that declares it.
+This is the purpose of `expr/plugin.py`.
+
+## Testing
+
+Prefer testing from the python side, as this saves a lot of compilation time.
+That way, you are also much more sure you are actually testing behaviour,
+rather than internal implementation details :)
+
+Rust tests can still be necessary if a certain functionality is only reachable from rust directly.
+
 ## Three-tier implementation
 
-1. Native. This functionality can be expressed directly using existing Polars nodes.
-   Example: The mean coordinate. We can directly access the individual coordinate columns,
-   and use Polars' mean implementation on it.
-   If this is possible, this is preferred because you will never re-invent the wheel.
-   Such operations will always be the most efficient,
-   and the planner will be able to apply further optimisations.
-   You might have to use `map_with_dtype` here to change what you wish to lower it to based on the
-   metadata of the columns.
+### 1. Native
 
-2. Plugin Expression. This functionality has a dedicated Rust kernel that lives in the plugin.
-   This makes them very fast, but they cannot be subdivided at plan-time.
-   These are ideally element-wise if possible.
+Native. This functionality can be expressed directly using existing Polars nodes.
+An example: The mean coordinate.
 
-3. Forward to Geo
-   The [geo ecosystem](https://georust.org/)
-   (which we refer to as *geors* in this crate to avoid confusion)
-   gives very fast implementations for many geo algorithms,
-   but their data encoding is not fully compatible with ours. We can use their algorithms,
-   but we incur at least one allocation and copy pass for every item processed this way
-   due to data conversion.
-   Example: area calculation.
-   In addition, geors has a couple of limitations:
-   - it only supports 2D operations
-   - No M (measure) values.
-   - No CRS-awareness on a data level (this has to be carried separately)
-   - no curved geometries
+We can directly access the individual coordinate columns,
+and use Polars' mean implementation on it.
+If this is possible, this is preferred because you will never re-invent the wheel.
+Such operations will always be the most efficient,
+and the planner will be able to apply further optimisations.
+
+You might want to change exactly what you want to put here using `pipe_with_dtype`
+(through `on_geometry`) here to change what you wish to lower it to based on the metadata.
+For that, you can dispatch on the input's geometry through `on_geometry` in `geo/_dispatch.py`.
+This wraps `Expr.pipe_with_dtype`, so the callback runs once at plan time
+with the concrete geometry class and returns a plain expression for that geometry only.
+Wrong input (not a geometry, or a geometry we don't support) therefore fails while the plan is built,
+rather than partway through execution.
+The callback can return native Polars expressions or a custom kernel call into Rust,
+imported using `register_plugin_function`.
+The tiers below cover that choice.
+
+### 2. Plugin Expression
+
+This functionality has a dedicated Rust kernel that lives in the plugin.
+This makes them very fast, but they cannot be subdivided at plan-time.
+These are ideally element-wise if possible.
+
+### 3. Forward to Geo
+
+A subcategory of the above.
+The [geo ecosystem](https://georust.org/)
+(which we refer to as *rsgeo* in this crate to avoid confusion with our own `geo`)
+gives very fast implementations for many geo algorithms,
+but their data encoding is not fully compatible with ours. We can use their algorithms,
+but we incur at least one allocation and copy pass for every item processed this way
+due to data conversion.
+Example: area calculation.
+In addition, rsgeo has a couple of limitations:
+
+- it only supports 2D operations
+- No M (measure) values.
+- No CRS-awareness on a data level (this has to be carried separately)
+- no curved geometries

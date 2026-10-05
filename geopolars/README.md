@@ -1,6 +1,6 @@
 # GeoPolars
 
-If you are interested in developing GeoPolars further, read [[Developers.md]].
+If you are interested in developing GeoPolars further, read [DEVELOPERS.md](DEVELOPERS.md).
 
 ## Two APIs
 
