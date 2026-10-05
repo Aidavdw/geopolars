@@ -37,24 +37,15 @@ def _names() -> str:
     return f"{', '.join(names[:-1])} or {names[-1]}"
 
 
-UNSUPPORTED = (
-    f"expected a {_names()} column with separated x/y[/z][/m] coordinates "
-    "and no extension metadata, which this version cannot carry through"
-)
+UNSUPPORTED = f"expected a {_names()} column with separated x/y[/z][/m] coordinates"
 
 
-def _geometry_of(dtype: pl.DataType, *, metadata: bool = False) -> type[GeoArrowType]:
-    """The concrete geometry class of `dtype`.
-    `metadata` allows extension metadata for operations that don't give back a geometry
-    (and so have no metadata to carry through).
-    """
-    geometry = type(dtype)
-    if geometry not in GEOMETRY_TYPES or (
-        not metadata and dtype.ext_metadata() is not None
-    ):
+def _geometry_of(dtype: pl.DataType) -> GeoArrowType:
+    """`dtype` as the concrete geometry it is, metadata and all."""
+    if type(dtype) not in GEOMETRY_TYPES:
         msg = f"{UNSUPPORTED}, got: {dtype!r}"
         raise TypeError(msg)
-    return geometry
+    return dtype  # type: ignore[return-value]
 
 
 def _to_expr(value: IntoExprColumn) -> pl.Expr:
@@ -67,9 +58,14 @@ def _to_expr(value: IntoExprColumn) -> pl.Expr:
 
 def on_geometry(
     value: IntoExprColumn,
-    build: Callable[[pl.Expr, type[GeoArrowType]], pl.Expr],
+    build: Callable[[pl.Expr, GeoArrowType], pl.Expr],
 ) -> pl.Expr:
-    """Wrapper for callbacks for pipe_with_dtype."""
+    """Wrapper for callbacks for pipe_with_dtype.
+
+    `build` gets the dtype itself rather than its class, metadata included.
+    A geometry it gives back has to carry that metadata through
+    (see `GeoArrowType._with_metadata_of`), or the CRS is lost.
+    """
     expr = _to_expr(value)
 
     def resolved(expr: pl.Expr, dtype: pl.DataType) -> pl.Expr:
@@ -85,19 +81,15 @@ def on_geometry_pair(
     second: IntoExprColumn,
     build: Callable[[pl.Expr, GeoArrowType, pl.Expr, GeoArrowType], pl.Expr],
 ) -> pl.Expr:
-    """`on_geometry` for an operation between two geometries that gives back a plain value.
-
-    `build` gets both dtypes themselves rather than their classes,
-    so it can read their metadata (e.g. the CRS).
+    """`on_geometry` for an operation between two geometries.
     The result is named after `first`, like a binary operator in Polars.
     """
 
     def resolved_first(first: pl.Expr, first_dtype: pl.DataType) -> pl.Expr:
-        _geometry_of(first_dtype, metadata=True)
+        first_geometry = _geometry_of(first_dtype)
 
         def resolved_second(second: pl.Expr, second_dtype: pl.DataType) -> pl.Expr:
-            _geometry_of(second_dtype, metadata=True)
-            built = build(first, first_dtype, second, second_dtype)  # type: ignore[arg-type]
+            built = build(first, first_geometry, second, _geometry_of(second_dtype))
             return built.alias(first.meta.output_name())
 
         return _to_expr(second).pipe_with_dtype(resolved_second)

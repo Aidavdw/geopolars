@@ -58,7 +58,7 @@ def _per_geometry(values: pl.Expr, layers: int, reduce: Reduce, rings: bool) -> 
     return values.list.eval(inner).list.sum()
 
 
-def _flat(geometry: type[GeoArrowType]) -> bool:
+def _flat(geometry: GeoArrowType) -> bool:
     """
     A polygon nests one layer deeper and repeats a coordinate
     per ring, so it has to go the long way round.
@@ -66,7 +66,7 @@ def _flat(geometry: type[GeoArrowType]) -> bool:
     return geometry._nesting == 1 and not geometry._rings
 
 
-def _mean(geometry: type[GeoArrowType], column: pl.Expr, axis: str) -> pl.Expr:
+def _mean(geometry: GeoArrowType, column: pl.Expr, axis: str) -> pl.Expr:
     """The mean of one axis over a geometry's coordinates, per row."""
     storage = column.ext.storage()
 
@@ -79,13 +79,13 @@ def _mean(geometry: type[GeoArrowType], column: pl.Expr, axis: str) -> pl.Expr:
     return total / count
 
 
-def _coordinates(geometry: type[GeoArrowType], column: pl.Expr) -> pl.Expr:
+def _coordinates(geometry: GeoArrowType, column: pl.Expr) -> pl.Expr:
     """How many coordinates a geometry holds, over all of its parts."""
     storage = column.ext.storage()
     return _per_geometry(storage, geometry._nesting, _count, geometry._rings)
 
 
-def _mean_coordinate(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
+def _mean_coordinate(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     """The mean coordinate of one geometry type, per row."""
     # A point is its own mean coordinate.
     if geometry._nesting == 0:
@@ -100,7 +100,7 @@ def _mean_coordinate(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
         # reads as false.
         pl.when(_coordinates(geometry, column) > 0)
         .then(pl.struct(means))
-        .ext.to(GeoPoint.of_dimension(dimension)())
+        .ext.to(GeoPoint.of_dimension(dimension)._with_metadata_of(geometry))
     )
 
 

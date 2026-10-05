@@ -113,7 +113,11 @@ You might want to change exactly what you want to put here using `pipe_with_dtyp
 (through `on_geometry`) to change what you wish to lower it to based on the metadata.
 For that, you can dispatch on the input's geometry through `on_geometry` in `geo/_dispatch.py`.
 This wraps `Expr.pipe_with_dtype`, so the callback runs once at plan time
-with the concrete geometry class and returns a plain expression for that geometry only.
+with the concrete geometry dtype and returns a plain expression for that geometry only.
+The dtype carries the column's metadata (such as the CRS).
+A callback that builds a geometry has to pass it on with `_with_metadata_of`,
+or the result silently loses its CRS (`tests/unit/operations/test_metadata.py` checks this).
+`on_geometry_pair` does the same for operations between two geometries.
 Wrong input (not a geometry, or a geometry we don't support) therefore fails while the plan is built,
 rather than partway through execution.
 The callback can return native Polars expressions or a custom kernel call into Rust,

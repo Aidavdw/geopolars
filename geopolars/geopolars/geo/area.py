@@ -42,9 +42,9 @@ def _polygon(column: pl.Expr) -> pl.Expr:
     return (2 * rings.list.first().fill_null(0.0) - rings.list.sum()) / 2
 
 
-def _area(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
+def _area(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     """The area of one geometry type, per row."""
-    if issubclass(geometry, GeoPolygon):
+    if isinstance(geometry, GeoPolygon):
         return _polygon(column)
     # Everything else has no defined area.
     return pl.when(column.is_not_null()).then(pl.lit(0.0, dtype=pl.Float64))
@@ -81,7 +81,7 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     return on_geometry(geometry, _area)
 
 
-def _area_rsgeo(column: pl.Expr, geometry: type[GeoArrowType]) -> pl.Expr:
+def _area_rsgeo(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     """The area of the geometry"""
     return register_plugin_function(
         plugin_path=LIB,

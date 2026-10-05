@@ -366,19 +366,43 @@ def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
         lf.collect_schema()
 
 
-def test_rejects_a_geometry_carrying_extension_metadata() -> None:
-    """Metadata is part of the dtype, and a dtype we cannot name is one we
-    cannot select on. Rejecting it beats dropping a CRS on the floor; this is
-    the check to lift when CRS lands."""
-    spherical = GeoPoint.ext_from_params(
-        "geoarrow.point", PointXY().ext_storage(), '{"edges":"spherical"}'
+def test_the_crs_is_carried_through(
+    line_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    """The mean of coordinates in a CRS is in that same CRS."""
+    plain = dimension.lines(line_coords)
+    rd = dimension.linestring_dtype(crs="EPSG:28992")
+    df = plain.select(pl.col("line").ext.storage().ext.to(rd))
+
+    out = df.select(geo.mean_coordinate("line"))
+
+    # Compared against a dtype whose metadata Rust wrote.
+    assert out.schema["line"] == dimension.point_dtype(crs="EPSG:28992")
+    expected = plain.select(geo.mean_coordinate("line"))
+    assert_frame_equal(coordinates(out, "line"), coordinates(expected, "line"))
+
+
+def test_metadata_is_carried_through_verbatim() -> None:
+    """Keys we don't know of either, spelled as they came in."""
+    metadata = '{ "edges": "spherical", "x-vendor": [1, 2] }'
+    spherical = LineStringXY._with_metadata_of(
+        GeoPoint.ext_from_params("geoarrow.point", PointXY().ext_storage(), metadata)
     )
-    df = pl.DataFrame({"x": [1.0], "y": [2.0]}).select(
-        pl.struct(x=pl.col("x"), y=pl.col("y")).ext.to(spherical).alias("point")
+    df = pl.DataFrame({"line": [_SQUARE]}, schema={"line": _XY_VERTICES}).select(
+        pl.col("line").ext.to(spherical)
     )
 
-    with pytest.raises(TypeError, match="no extension metadata"):
-        df.select(geo.mean_coordinate("point"))
+    out = df.select(geo.mean_coordinate("line"))
+
+    assert out.schema["line"].ext_metadata() == metadata
+
+
+def test_a_point_keeps_its_crs() -> None:
+    df = pl.DataFrame({"x": [1.0], "y": [2.0]}).select(
+        point=geo.point("x", "y", crs="EPSG:4326")
+    )
+
+    assert df.select(geo.mean_coordinate("point")).schema == df.schema
 
 
 def test_takes_an_expression_as_well_as_a_column(line_coords: pl.DataFrame) -> None:
