@@ -2,7 +2,7 @@
 
 Measured the same way as `distance`, segment by segment:
 along the ellipsoid in metres for a geometry that declares a CRS,
-on the plane in coordinate units for one that doesn't.
+in coordinate units for one that doesn't, with the height counted when there is a `z`.
 """
 
 from __future__ import annotations
@@ -15,25 +15,28 @@ from polars.plugins import register_plugin_function
 from geopolars._utils import LIB
 from geopolars.datatypes import GeoLineString, GeoMultiLineString
 from geopolars.geo._dispatch import on_geometry
-from geopolars.geo.distance import _squared_norm
+from geopolars.geo.distance import _has_z, _squared_norm
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
 
 
-def _planar(line: pl.Expr) -> pl.Expr:
-    """The planar length of one list of coordinates.
+def _planar(line: pl.Expr, *, has_z: bool) -> pl.Expr:
+    """The length in space of one list of coordinates.
 
-    Each vertex is diffed against the one before it, per axis.
+    Each vertex is diffed against the one before it, per axis,
+    `z` included only when the line has one.
     That is the distance between the two written for a whole line at once,
     and twice as fast as shifting the coordinate structs to pair them up.
     The first vertex has nothing before it, which `sum` skips,
     so an empty line or a single vertex has a length of `0.0`.
     """
-    x = pl.element().struct.field("x")
-    y = pl.element().struct.field("y")
-    return line.list.eval(_squared_norm(x.diff(), y.diff()).sqrt()).list.sum()
+    coord = pl.element().struct
+    squared = _squared_norm(coord.field("x").diff(), coord.field("y").diff())
+    if has_z:
+        squared = squared + coord.field("z").diff().pow(2)
+    return line.list.eval(squared.sqrt()).list.sum()
 
 
 def _geodesic(column: pl.Expr) -> pl.Expr:
@@ -54,14 +57,16 @@ def _length(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         )
         raise TypeError(msg)
 
+    # The kernel counts the height itself, when the line has one.
     if geometry._declares_crs():
         return _geodesic(column)
 
     storage = column.ext.storage()
+    has_z = _has_z(geometry)
     if isinstance(geometry, GeoLineString):
-        return _planar(storage)
+        return _planar(storage, has_z=has_z)
     # As long as its parts together.
-    return storage.list.eval(_planar(pl.element())).list.sum()
+    return storage.list.eval(_planar(pl.element(), has_z=has_z)).list.sum()
 
 
 def length(geometry: IntoExprColumn) -> pl.Expr:
@@ -69,14 +74,17 @@ def length(geometry: IntoExprColumn) -> pl.Expr:
 
     | in                  | measured                     | in                  |
     |---------------------|------------------------------|---------------------|
-    | no CRS              | on the plane, by Pythagoras  | coordinate units    |
+    | no CRS              | in space, by Pythagoras      | coordinate units    |
     | a CRS               | along the CRS's ellipsoid    | metres              |
 
     Every segment is measured as `distance` measures two points, and added up.
     A multilinestring is as long as its parts together.
     Other geometries are refused.
 
-    `z` and `m` are ignored.
+    For a line with a `z`, every segment counts its difference in height too,
+    as `distance` does between two points with a `z`
+    (with a CRS, `z` is taken to be a height in metres).
+    `m` is ignored.
     An empty linestring, or one of a single vertex, has a length of `0.0`.
     A missing geometry has no length.
 

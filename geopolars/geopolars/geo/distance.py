@@ -40,8 +40,12 @@ def _planar_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
     return _squared_norm(_offset(a, b, "x"), _offset(a, b, "y"))
 
 
+def _has_z(dtype: GeoArrowType) -> bool:
+    return "z" in dtype._dimension
+
+
 def _both_have_z(a_dtype: GeoArrowType, b_dtype: GeoArrowType) -> bool:
-    return "z" in a_dtype._dimension and "z" in b_dtype._dimension
+    return _has_z(a_dtype) and _has_z(b_dtype)
 
 
 def _geodesic_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:

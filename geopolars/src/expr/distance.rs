@@ -58,20 +58,47 @@ impl GeodesicMetric {
     }
 
     /// The length of the path through `coords`.
-    ///
     pub fn length(
         &self,
         coords: impl IntoIterator<Item = Option<(f64, f64)>>,
+    ) -> PolarsResult<Option<f64>> {
+        self.path(coords, |xy| self.lonlat(xy), |a, b| self.between(a, b))
+    }
+
+    /// The length of the path through `coords`, climbing and descending with their `z`.
+    ///
+    /// Each segment is its geodesic and its difference in height, by Pythagoras,
+    /// like [`distance_squared`](Self::distance_squared) between two points with a `z`.
+    pub fn length_with_height(
+        &self,
+        coords: impl IntoIterator<Item = Option<WithHeight>>,
+    ) -> PolarsResult<Option<f64>> {
+        self.path(
+            coords,
+            |(xy, z)| Ok((self.lonlat(xy)?, z)),
+            |(a, z_a), (b, z_b)| self.between(a, b).hypot(z_b - z_a),
+        )
+    }
+
+    /// Adds up `segment` between every two consecutive `coords`, once they are `prepared`.
+    ///
+    /// Generic so the 2D and 3D paths each get a loop of their own,
+    /// and 2D never looks at a height.
+    fn path<C, P: Copy>(
+        &self,
+        coords: impl IntoIterator<Item = Option<C>>,
+        prepare: impl Fn(C) -> PolarsResult<P>,
+        segment: impl Fn(P, P) -> f64,
     ) -> PolarsResult<Option<f64>> {
         // Each coordinate is reprojected once, and re-used for the next call.
         // Each segment is measured as a distance rather than squared and rooted again.
         let mut total = 0.0;
         let mut previous = None;
-        for xy in coords {
-            let Some(xy) = xy else { return Ok(None) };
-            let here = self.lonlat(xy)?;
+        for coord in coords {
+            let Some(coord) = coord else { return Ok(None) };
+            let here = prepare(coord)?;
             if let Some(previous) = previous {
-                total += self.between(previous, here);
+                total += segment(previous, here);
             }
             previous = Some(here);
         }
@@ -147,7 +174,7 @@ fn points(storage: &Series) -> PolarsResult<Vec<Option<(f64, f64)>>> {
 }
 
 /// A point's `(x, y)` and its `z`, kept apart so the `(x, y)` can go to PROJ as is.
-type WithHeight = ((f64, f64), f64);
+pub type WithHeight = ((f64, f64), f64);
 
 /// The `x` and `y` of every point with its `z`, `None` where either is missing.
 fn points_with_height(storage: &Series) -> PolarsResult<Vec<Option<WithHeight>>> {

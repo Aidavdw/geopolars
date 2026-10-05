@@ -3,7 +3,7 @@
 //! Geometries without a CRS are measured in plain Polars expressions instead, on the Python side.
 
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray};
+use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
 use pyo3_polars::derive::polars_expr;
 
 use super::distance::GeodesicMetric;
@@ -40,12 +40,15 @@ fn metres(input_fields: &[Field]) -> PolarsResult<Field> {
 struct Lines<'a> {
     lines: &'a ListArray<i64>,
     coords: Coords<'a>,
+    /// The height of every coordinate, if the line has one.
+    z: Option<&'a PrimitiveArray<f64>>,
 }
 
 impl<'a> Lines<'a> {
     fn new(lines: &'a ListArray<i64>) -> PolarsResult<Self> {
         let coords = Coords::new(lines.values().as_ref())?;
-        Ok(Self { lines, coords })
+        let z = heights(lines.values().as_ref())?;
+        Ok(Self { lines, coords, z })
     }
 
     /// The length of line `i`, `None` if it or any of its coordinates is missing.
@@ -54,8 +57,26 @@ impl<'a> Lines<'a> {
             return Ok(None);
         }
         let (start, end) = self.lines.offsets().start_end(i);
-        metric.length((start..end).map(|j| self.coords.xy(j)))
+        // Decided once per line, not per vertex: 2D lines take a loop that never reads `z`.
+        match self.z {
+            None => metric.length((start..end).map(|j| self.coords.xy(j))),
+            Some(z) => metric.length_with_height((start..end).map(|j| {
+                let xy = self.coords.xy(j)?;
+                z.is_valid(j).then(|| (xy, z.value(j)))
+            })),
+        }
     }
+}
+
+/// The `z` field of a chunk of coordinates, `None` for a dimension without one.
+fn heights(coords: &dyn Array) -> PolarsResult<Option<&PrimitiveArray<f64>>> {
+    let coords: &StructArray = downcast(coords, "a coordinate struct")?;
+    coords
+        .fields()
+        .iter()
+        .position(|field| field.name.as_str() == "z")
+        .map(|i| downcast(coords.values()[i].as_ref(), "f64 `z` coordinates"))
+        .transpose()
 }
 
 fn linestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float64Chunked> {
