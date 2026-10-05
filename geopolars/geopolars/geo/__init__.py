@@ -21,11 +21,14 @@ from geopolars.geo.construct import (
     validate,
 )
 from geopolars.geo.crs import to_crs
+from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.mean_coordinate import mean_coordinate
 
 __all__ = [
     "area",
     "area_rsgeo",
+    "distance",
+    "distance_squared",
     "linestring",
     "linestring_from_columns",
     "linestring_from_vertices",

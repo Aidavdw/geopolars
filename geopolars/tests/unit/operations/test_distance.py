@@ -1,0 +1,192 @@
+"""How far apart two points are: on the plane without a CRS, along the
+ellipsoid with one."""
+
+from __future__ import annotations
+
+import math
+
+import polars as pl
+import pytest
+from geopolars.datatypes import GeoPoint, PointXY
+from polars.exceptions import ComputeError
+from polars.testing import assert_series_equal
+
+import geopolars as gpl
+from geopolars import geo
+from tests.unit.conftest import XY, Dimension
+
+WGS84 = "EPSG:4326"
+
+# The example from the `geo` crate's `Geodesic` docs, in metres.
+NEW_YORK = (-74.006, 40.7128)
+LONDON = (-0.1278, 51.5074)
+NEW_YORK_TO_LONDON = 5_585_234.0
+
+
+def _pairs(
+    a: list[tuple[float, float] | None],
+    b: list[tuple[float, float] | None],
+    crs: str | None = None,
+) -> pl.DataFrame:
+    """Two XY point columns, `a` and `b`, with a missing point where it says `None`."""
+    xy = pl.Struct({"x": pl.Float64, "y": pl.Float64})
+
+    def column(points: list[tuple[float, float] | None]) -> pl.Series:
+        rows = [None if p is None else {"x": p[0], "y": p[1]} for p in points]
+        return pl.Series(rows, dtype=xy).ext.to(PointXY(crs=crs))
+
+    return pl.DataFrame({"a": column(a), "b": column(b)})
+
+
+def _distances(df: pl.DataFrame) -> list[float | None]:
+    return df.select(geo.distance("a", "b")).to_series().to_list()
+
+
+def test_without_a_crs_it_is_pythagoras() -> None:
+    df = _pairs([(0.0, 0.0), (1.0, 1.0)], [(3.0, 4.0), (1.0, 1.0)])
+
+    assert _distances(df) == [5.0, 0.0]
+
+
+def test_the_distance_is_the_root_of_the_squared_distance() -> None:
+    df = _pairs([(0.0, 0.0), (-1.0, 2.0)], [(3.0, 4.0), (5.0, -6.0)])
+
+    squared = df.select(geo.distance_squared("a", "b")).to_series().to_list()
+
+    assert squared == [25.0, 100.0]
+    assert _distances(df) == [5.0, 10.0]
+
+
+def test_without_a_crs_lon_lat_comes_out_in_degrees() -> None:
+    """Naive on purpose: a degree of longitude is counted as long as one of
+    latitude, wherever on the globe it is."""
+    df = _pairs([NEW_YORK], [LONDON])
+
+    (got,) = _distances(df)
+
+    assert got == pytest.approx(math.hypot(73.8782, 10.7946))
+
+
+def test_z_and_m_are_left_out(coords: pl.DataFrame, dimension: Dimension) -> None:
+    df = coords.select(dimension.point())
+    origin = pl.select(geo.point(pl.lit(0.0), pl.lit(0.0)).alias("origin"))
+
+    got = df.select(geo.distance("point", origin["origin"])).to_series().to_list()
+
+    assert got == pytest.approx([math.hypot(1.0, 3.0), math.hypot(2.5, 4.5), 0.0])
+
+
+def test_the_order_of_the_points_does_not_matter() -> None:
+    df = _pairs([(1.0, 2.0), NEW_YORK], [(4.0, 6.0), LONDON])
+
+    forward = df.select(geo.distance("a", "b")).to_series()
+    backward = df.select(geo.distance("b", "a").alias("a")).to_series()
+
+    assert_series_equal(forward, backward)
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_a_missing_point_has_no_distance(crs: str | None) -> None:
+    df = _pairs([(0.0, 0.0), None, None], [None, (3.0, 4.0), None], crs=crs)
+
+    assert _distances(df) == [None, None, None]
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_a_single_point_is_measured_against_every_row(crs: str | None) -> None:
+    df = _pairs([(0.0, 0.0), (3.0, 4.0)], [(0.0, 0.0), (0.0, 0.0)], crs=crs)
+    one = df["b"].head(1)
+
+    expected = df.select(geo.distance("a", "b")).to_series()
+
+    assert_series_equal(df.select(geo.distance("a", one)).to_series(), expected)
+    swapped = df.select(geo.distance(one, "a").alias("a")).to_series()
+    assert_series_equal(swapped, expected)
+
+
+def test_with_a_crs_it_is_the_geodesic_in_metres() -> None:
+    df = _pairs([NEW_YORK], [LONDON], crs=WGS84)
+
+    (got,) = _distances(df)
+
+    assert round(got) == NEW_YORK_TO_LONDON
+
+
+def test_a_projected_crs_measures_the_same_ground() -> None:
+    """The Dutch national grid is in metres already, but measured along the
+    ellipsoid it gives the same distance as the same points in lon/lat."""
+    amsterdam, utrecht = (4.9041, 52.3676), (5.1214, 52.0907)
+    lonlat = _pairs([amsterdam], [utrecht], crs=WGS84)
+    rd = lonlat.select(geo.to_crs(pl.all(), "EPSG:28992"))
+
+    (expected,) = _distances(lonlat)
+    (got,) = _distances(rd)
+
+    assert got == pytest.approx(expected, abs=1e-3)
+
+
+def test_metadata_without_a_crs_is_still_planar() -> None:
+    spherical = GeoPoint.ext_from_params(
+        "geoarrow.point", PointXY().ext_storage(), '{"edges":"spherical"}'
+    )
+    df = _pairs([(0.0, 0.0)], [(3.0, 4.0)]).select(
+        pl.all().ext.storage().ext.to(spherical)
+    )
+
+    assert _distances(df) == [5.0]
+
+
+def test_points_in_different_crss_are_refused_while_resolving_the_schema() -> None:
+    a = _pairs([NEW_YORK], [LONDON], crs=WGS84)
+    lf = a.lazy().select(geo.distance("a", geo.to_crs("b", "EPSG:3857")))
+
+    with pytest.raises(ComputeError, match="different CRSs"):
+        lf.collect_schema()
+
+
+def test_a_crs_on_only_one_point_is_refused_while_resolving_the_schema() -> None:
+    lf = pl.LazyFrame(
+        {
+            "a": _pairs([NEW_YORK], [LONDON], crs=WGS84)["a"],
+            "b": _pairs([NEW_YORK], [LONDON])["b"],
+        }
+    ).select(geo.distance("a", "b"))
+
+    with pytest.raises(ComputeError, match="only one of the points"):
+        lf.collect_schema()
+
+
+def test_only_points_are_measured(line_coords: pl.DataFrame) -> None:
+    lf = XY.lines(line_coords).lazy().select(geo.distance("line", "line"))
+
+    with pytest.raises(TypeError, match="between two `geoarrow.point` columns"):
+        lf.collect_schema()
+
+
+def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
+    lf = pl.LazyFrame({"a": [1.0], "b": [2.0]}).select(geo.distance("a", "b"))
+
+    with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
+        lf.collect_schema()
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_the_result_is_named_after_the_first_point(crs: str | None) -> None:
+    df = _pairs([(0.0, 0.0)], [(3.0, 4.0)], crs=crs)
+
+    out = df.select(geo.distance("b", "a"), geo.distance_squared("a", "b"))
+
+    assert out.schema == pl.Schema({"b": pl.Float64, "a": pl.Float64})
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_the_namespace_matches_the_function(crs: str | None) -> None:
+    df = _pairs([NEW_YORK, (0.0, 0.0)], [LONDON, (3.0, 4.0)], crs=crs)
+
+    for name in ("distance", "distance_squared"):
+        method = getattr(gpl.col("a").geo, name)
+        function = getattr(geo, name)
+        assert_series_equal(
+            df.select(method("b")).to_series(),
+            df.select(function("a", "b")).to_series(),
+        )

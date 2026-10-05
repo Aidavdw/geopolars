@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import polars as pl
 
 from geopolars.geo import affine, construct
@@ -13,8 +15,15 @@ from geopolars.geo.area import area_rsgeo as _area_rsgeo
 # bound directly: the method's `crs` argument would shadow the module.
 from geopolars.geo.crs import to_crs as _to_crs
 
+# bound directly: `geopolars.geo.distance` is the function, not the module.
+from geopolars.geo.distance import distance as _distance
+from geopolars.geo.distance import distance_squared as _distance_squared
+
 # bound directly: `geopolars.geo.mean_coordinate` is the function, not the module.
 from geopolars.geo.mean_coordinate import mean_coordinate as _mean_coordinate
+
+if TYPE_CHECKING:
+    from geopolars._typing import IntoExprColumn
 
 
 @pl.api.register_expr_namespace("geo")
@@ -45,6 +54,12 @@ class Geometry:
 
     def mean_coordinate(self) -> pl.Expr:
         return _mean_coordinate(self._expr)
+
+    def distance(self, other: IntoExprColumn) -> pl.Expr:
+        return _distance(self._expr, other)
+
+    def distance_squared(self, other: IntoExprColumn) -> pl.Expr:
+        return _distance_squared(self._expr, other)
 
     def area(self) -> pl.Expr:
         return _area(self._expr)

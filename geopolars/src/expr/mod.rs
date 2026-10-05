@@ -14,3 +14,4 @@ pub mod area;
 pub mod construct;
 pub mod coords;
 pub mod crs;
+pub mod distance;

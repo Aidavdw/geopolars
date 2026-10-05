@@ -73,6 +73,11 @@ impl ExtensionMetadata {
         }
     }
 
+    /// Whether the metadata names a CRS at all (whether or not PROJ can use it).
+    pub fn declares_crs(&self) -> bool {
+        self.0.get("crs").is_some_and(|crs| !crs.is_null())
+    }
+
     /// Consuming setter for CRS.
     pub fn with_crs(mut self, crs: &str) -> Self {
         self.0.insert("crs".to_owned(), crs_value(crs));

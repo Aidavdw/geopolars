@@ -43,12 +43,26 @@ UNSUPPORTED = (
 )
 
 
-def _geometry_of(dtype: pl.DataType) -> type[GeoArrowType]:
+def _geometry_of(dtype: pl.DataType, *, metadata: bool = False) -> type[GeoArrowType]:
+    """The concrete geometry class of `dtype`.
+    `metadata` allows extension metadata for operations that don't give back a geometry
+    (and so have no metadata to carry through).
+    """
     geometry = type(dtype)
-    if geometry not in GEOMETRY_TYPES or dtype.ext_metadata() is not None:
+    if geometry not in GEOMETRY_TYPES or (
+        not metadata and dtype.ext_metadata() is not None
+    ):
         msg = f"{UNSUPPORTED}, got: {dtype!r}"
         raise TypeError(msg)
     return geometry
+
+
+def _to_expr(value: IntoExprColumn) -> pl.Expr:
+    if isinstance(value, str):
+        return pl.col(value)
+    if isinstance(value, pl.Series):
+        return pl.lit(value)
+    return value
 
 
 def on_geometry(
@@ -56,12 +70,7 @@ def on_geometry(
     build: Callable[[pl.Expr, type[GeoArrowType]], pl.Expr],
 ) -> pl.Expr:
     """Wrapper for callbacks for pipe_with_dtype."""
-    if isinstance(value, str):
-        expr = pl.col(value)
-    elif isinstance(value, pl.Series):
-        expr = pl.lit(value)
-    else:
-        expr = value
+    expr = _to_expr(value)
 
     def resolved(expr: pl.Expr, dtype: pl.DataType) -> pl.Expr:
         # Whatever `build` returns is named after what it was built from last,
@@ -69,3 +78,28 @@ def on_geometry(
         return build(expr, _geometry_of(dtype)).alias(expr.meta.output_name())
 
     return expr.pipe_with_dtype(resolved)
+
+
+def on_geometry_pair(
+    first: IntoExprColumn,
+    second: IntoExprColumn,
+    build: Callable[[pl.Expr, GeoArrowType, pl.Expr, GeoArrowType], pl.Expr],
+) -> pl.Expr:
+    """`on_geometry` for an operation between two geometries that gives back a plain value.
+
+    `build` gets both dtypes themselves rather than their classes,
+    so it can read their metadata (e.g. the CRS).
+    The result is named after `first`, like a binary operator in Polars.
+    """
+
+    def resolved_first(first: pl.Expr, first_dtype: pl.DataType) -> pl.Expr:
+        _geometry_of(first_dtype, metadata=True)
+
+        def resolved_second(second: pl.Expr, second_dtype: pl.DataType) -> pl.Expr:
+            _geometry_of(second_dtype, metadata=True)
+            built = build(first, first_dtype, second, second_dtype)  # type: ignore[arg-type]
+            return built.alias(first.meta.output_name())
+
+        return _to_expr(second).pipe_with_dtype(resolved_second)
+
+    return _to_expr(first).pipe_with_dtype(resolved_first)

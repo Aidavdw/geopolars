@@ -69,6 +69,10 @@ class GeoArrowType(pl.datatypes.BaseExtension):
             metadata=_rust.extension_metadata(crs=crs),
         )
 
+    def _declares_crs(self) -> bool:
+        """Whether the metadata names a CRS. Read in Rust, like all metadata."""
+        return _rust.declares_crs(self.ext_metadata())
+
     def __repr__(self) -> str:
         return type(self).__name__
 
