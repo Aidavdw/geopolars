@@ -19,6 +19,9 @@ from geopolars.geo.crs import to_crs as _to_crs
 from geopolars.geo.distance import distance as _distance
 from geopolars.geo.distance import distance_squared as _distance_squared
 
+# bound directly: `geopolars.geo.length` is the function, not the module.
+from geopolars.geo.length import length as _length
+
 # bound directly: `geopolars.geo.mean_coordinate` is the function, not the module.
 from geopolars.geo.mean_coordinate import mean_coordinate as _mean_coordinate
 
@@ -60,6 +63,9 @@ class Geometry:
 
     def distance_squared(self, other: IntoExprColumn) -> pl.Expr:
         return _distance_squared(self._expr, other)
+
+    def length(self) -> pl.Expr:
+        return _length(self._expr)
 
     def area(self) -> pl.Expr:
         return _area(self._expr)

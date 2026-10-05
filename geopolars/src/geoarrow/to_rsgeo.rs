@@ -16,7 +16,7 @@ use rsgeo::{Coord, LineString, Polygon};
 
 /// Downcast one level of the storage to the array it has to be.
 /// [`describe`](super::describe) already checked the dtype, so this failing is a bug.
-fn downcast<'a, T: 'static>(array: &'a dyn Array, what: &str) -> PolarsResult<&'a T> {
+pub(crate) fn downcast<'a, T: 'static>(array: &'a dyn Array, what: &str) -> PolarsResult<&'a T> {
     array.as_any().downcast_ref::<T>().ok_or_else(
         || polars_err!(ComputeError: "expected {what} in geometry storage, got: {:?}", array.dtype()),
     )
@@ -24,19 +24,24 @@ fn downcast<'a, T: 'static>(array: &'a dyn Array, what: &str) -> PolarsResult<&'
 
 /// The `x` and `y` of one chunk's coordinates.
 /// Reads directly from the Arrow array, no allocation.
-struct Coords<'a> {
+pub(crate) struct Coords<'a> {
     coords: &'a StructArray,
     x: &'a PrimitiveArray<f64>,
     y: &'a PrimitiveArray<f64>,
 }
 
 impl<'a> Coords<'a> {
-    fn new(coords: &'a dyn Array) -> PolarsResult<Self> {
+    pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<Self> {
         let coords: &StructArray = downcast(coords, "a coordinate struct")?;
         // `coord::dimension_of` fixes the field order, so x and y always come first.
         let x = downcast(coords.values()[0].as_ref(), "f64 `x` coordinates")?;
         let y = downcast(coords.values()[1].as_ref(), "f64 `y` coordinates")?;
         Ok(Self { coords, x, y })
+    }
+
+    pub(crate) fn xy(&self, i: usize) -> Option<(f64, f64)> {
+        let present = self.coords.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i);
+        present.then(|| (self.x.value(i), self.y.value(i)))
     }
 
     /// The coordinates `start..end`.
@@ -45,13 +50,7 @@ impl<'a> Coords<'a> {
     /// (the same thing `validate` says).
     fn line_string(&self, start: usize, end: usize) -> Option<LineString<f64>> {
         (start..end)
-            .map(|i| {
-                let present = self.coords.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i);
-                present.then(|| Coord {
-                    x: self.x.value(i),
-                    y: self.y.value(i),
-                })
-            })
+            .map(|i| self.xy(i).map(|(x, y)| Coord { x, y }))
             .collect::<Option<Vec<_>>>()
             .map(LineString)
     }

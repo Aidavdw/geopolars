@@ -22,15 +22,20 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
-def _planar_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    """The squared distance between two coordinate structs, by Pythagoras.
+def _squared_norm(dx: pl.Expr, dy: pl.Expr) -> pl.Expr:
+    """The squared length of an offset, by Pythagoras.
 
-    Works on coordinates rather than on points, so a linestring can measure
-    its segments with it, between `pl.element()` and `pl.element().shift(-1)`.
+    Shared by everything measured on the plane:
+    two points subtract their coordinates, a linestring diffs its vertices.
     """
+    return dx.pow(2) + dy.pow(2)
+
+
+def _planar_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
+    """The squared distance between two coordinate structs."""
     dx = b.struct.field("x") - a.struct.field("x")
     dy = b.struct.field("y") - a.struct.field("y")
-    return dx.pow(2) + dy.pow(2)
+    return _squared_norm(dx, dy)
 
 
 def _geodesic_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
@@ -43,9 +48,14 @@ def _geodesic_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
     )
 
 
+# TODO: add expr for things with multiple points, get the 'closest distance'.
+# with flag to also interpolate between points / line?
+
+
 def _distance_squared(
     a: pl.Expr, a_dtype: GeoArrowType, b: pl.Expr, b_dtype: GeoArrowType
 ) -> pl.Expr:
+    # TODO: for other shapes, calculate centroid, and take distance on that.
     if not (isinstance(a_dtype, GeoPoint) and isinstance(b_dtype, GeoPoint)):
         msg = (
             "a distance is measured between two `geoarrow.point` columns, "
