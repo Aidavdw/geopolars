@@ -2,7 +2,7 @@
 //!
 //! Points without a CRS are measured in plain Polars expressions instead, on the Python side.
 
-use geographiclib_rs::{Geodesic, InverseGeodesic};
+use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use rsgeo::proj::Proj;
@@ -12,8 +12,8 @@ use crate::geoarrow::{describe, Kind};
 
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
 ///
-/// Kept apart from the expression, so the length of a linestring can be
-/// measured segment by segment with the same thing.
+/// Kept apart from the expression, so the length of a linestring
+/// and the area of a polygon can be measured with the same thing.
 pub struct GeodesicMetric {
     /// To the CRS's own longitude/latitude, so no datum is shifted.
     to_lonlat: Proj,
@@ -77,6 +77,25 @@ impl GeodesicMetric {
             |(xy, z)| Ok((self.lonlat(xy)?, z)),
             |(a, z_a), (b, z_b)| self.between(a, b).hypot(z_b - z_a),
         )
+    }
+
+    /// The area the closed ring through `coords` encloses on the ellipsoid, in metres².
+    /// Based on `geographiclib_rs`
+    pub fn ring_area(
+        &self,
+        coords: impl IntoIterator<Item = Option<(f64, f64)>>,
+    ) -> PolarsResult<Option<f64>> {
+        let mut ring = PolygonArea::new(&self.ellipsoid, Winding::CounterClockwise);
+        for coord in coords {
+            let Some(coord) = coord else { return Ok(None) };
+            let (lon, lat) = self.lonlat(coord)?;
+            // The repeated closing vertex adds an edge of length zero, which encloses nothing.
+            ring.add_point(lat, lon);
+        }
+        // Signed, then made positive: unsigned would take a clockwise ring
+        // to enclose everything outside of it.
+        let (_perimeter, area, _vertices) = ring.compute(true);
+        Ok(Some(area.abs()))
     }
 
     /// Adds up `segment` between every two consecutive `coords`, once they are `prepared`.

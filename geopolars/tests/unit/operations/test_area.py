@@ -1,11 +1,14 @@
-"""The planar area a geometry encloses."""
+"""The area a geometry encloses: on the plane without a CRS, along the
+ellipsoid with one."""
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 import polars as pl
 import pytest
+from polars.exceptions import ComputeError
 from polars.testing import assert_series_equal
 
 from geopolars import geo
@@ -24,10 +27,12 @@ _XY_VERTICES = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
 _XY_RINGS = pl.List(_XY_VERTICES)
 
 
-def _rings(rings: list[list[dict[str, float]]]) -> pl.DataFrame:
+def _rings(
+    rings: list[list[dict[str, float]]], crs: str | None = None
+) -> pl.DataFrame:
     """A one-row polygon column, built straight from XY rings."""
     return pl.DataFrame({"rings": [rings]}, schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings").alias("polygon")
+        geo.polygon("rings", crs=crs).alias("polygon")
     )
 
 
@@ -217,3 +222,130 @@ def test_both_implementations_agree_row_for_row(
         df.select(geo.area_rsgeo("polygon")).to_series(),
         df.select(geo.area("polygon")).to_series(),
     )
+
+
+WGS84 = "EPSG:4326"
+
+# A degree square on the equator, from GeographicLib's `PolygonArea` docs, in metres².
+_DEGREE_SQUARE = [
+    {"x": 0.0, "y": 0.0},
+    {"x": 1.0, "y": 0.0},
+    {"x": 1.0, "y": 1.0},
+    {"x": 0.0, "y": 1.0},
+    {"x": 0.0, "y": 0.0},
+]
+_DEGREE_SQUARE_AREA = 12_308_778_361.469_452
+
+
+def test_with_a_crs_it_is_the_area_on_the_ellipsoid_in_square_metres(
+    area: Area,
+) -> None:
+    """Not the 1.0 square degree it is on the plane."""
+    (got,) = _areas(area, _rings([_DEGREE_SQUARE], crs=WGS84))
+
+    assert got == pytest.approx(_DEGREE_SQUARE_AREA, rel=1e-9)
+
+
+def test_with_a_crs_winding_order_does_not_change_the_area(area: Area) -> None:
+    """A clockwise ring is not taken to enclose the rest of the planet."""
+    forward = _areas(area, _rings([_DEGREE_SQUARE], crs=WGS84))
+
+    assert _areas(area, _rings([_DEGREE_SQUARE[::-1]], crs=WGS84)) == forward
+
+
+def test_with_a_crs_a_hole_is_taken_out(area: Area) -> None:
+    """The square less the same square: whichever way the hole winds."""
+    for hole in (_DEGREE_SQUARE, _DEGREE_SQUARE[::-1]):
+        (got,) = _areas(area, _rings([_DEGREE_SQUARE, hole], crs=WGS84))
+
+        assert got == pytest.approx(0.0, abs=1e-3)
+
+
+def test_with_a_crs_the_ellipsoid_is_the_one_the_crs_declares(area: Area) -> None:
+    """On a unit sphere, the triangle from the equator to the pole over a
+    quarter turn of longitude is an eighth of the sphere."""
+    octant = [
+        {"x": 0.0, "y": 0.0},
+        {"x": 90.0, "y": 0.0},
+        {"x": 0.0, "y": 90.0},
+        {"x": 0.0, "y": 0.0},
+    ]
+    sphere = "+proj=longlat +R=1 +type=crs"
+
+    (got,) = _areas(area, _rings([octant], crs=sphere))
+
+    assert got == pytest.approx(4 * math.pi / 8)
+
+
+def test_a_projected_crs_is_measured_on_its_own_ellipsoid(area: Area) -> None:
+    """The Dutch national grid is in metres already, but measured along the
+    ellipsoid the area is the same as in the lon/lat it projects from
+    (Amersfoort, on Bessel 1841), not the planar area of the grid."""
+    ring = [
+        {"x": 4.9, "y": 52.0},
+        {"x": 5.1, "y": 52.0},
+        {"x": 5.1, "y": 52.2},
+        {"x": 4.9, "y": 52.2},
+        {"x": 4.9, "y": 52.0},
+    ]
+    lonlat = _rings([ring], crs="EPSG:4289")
+    rd = lonlat.select(geo.to_crs("polygon", "EPSG:28992"))
+
+    (expected,) = _areas(area, lonlat)
+    (got,) = _areas(area, rd)
+
+    # Projecting bends the geodesic edges a little, which moves the area by
+    # a few square metres out of hundreds of millions.
+    assert got == pytest.approx(expected, rel=1e-6)
+
+
+def test_with_a_crs_z_and_m_are_left_out(
+    area: Area, ring_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    def with_crs(df: pl.DataFrame, of: Dimension) -> pl.DataFrame:
+        dtype = of.polygon_dtype(crs=WGS84)
+        return df.select(pl.col("polygon").ext.storage().ext.to(dtype))
+
+    flat = _areas(area, with_crs(XY.polygons(ring_coords), XY))
+
+    got = _areas(area, with_crs(dimension.polygons(ring_coords), dimension))
+
+    assert got == flat
+
+
+def test_with_a_crs_a_missing_polygon_has_no_area(area: Area) -> None:
+    df = pl.DataFrame(
+        {"polygon": [[_DEGREE_SQUARE], None]}, schema={"polygon": _XY_RINGS}
+    )
+
+    df = df.select(pl.col("polygon").ext.to(PolygonXY(crs=WGS84)))
+
+    assert _areas(area, df) == [pytest.approx(_DEGREE_SQUARE_AREA), None]
+
+
+def test_with_a_crs_an_empty_polygon_encloses_nothing(area: Area) -> None:
+    assert _areas(area, _rings([], crs=WGS84)) == [0.0]
+
+
+def test_with_a_crs_a_point_still_has_an_area_of_zero(area: Area) -> None:
+    df = pl.DataFrame(
+        {"point": [{"x": 1.0, "y": 2.0}, None]},
+        schema={"point": pl.Struct({"x": pl.Float64, "y": pl.Float64})},
+    ).select(pl.col("point").ext.to(PointXY(crs=WGS84)))
+
+    assert _areas(area, df, "point") == [0.0, None]
+
+
+def test_a_crs_not_on_longitude_latitude_is_refused(area: Area) -> None:
+    """Earth-centred XYZ has no ellipsoid surface to measure an area on."""
+    df = _rings([_DEGREE_SQUARE], crs="EPSG:4978")
+
+    with pytest.raises(ComputeError, match="not defined on longitude/latitude"):
+        _areas(area, df)
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_the_result_is_named_after_the_geometry(area: Area, crs: str | None) -> None:
+    df = _rings([_DEGREE_SQUARE], crs=crs)
+
+    assert df.select(area("polygon")).schema == pl.Schema({"polygon": pl.Float64})

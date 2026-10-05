@@ -1,9 +1,10 @@
 """The area a geometry encloses.
 
-Planar area, in whatever units the coordinates are in. Nothing here knows about
-a CRS, so this is the area on the flat plane the coordinates lie in, not the
-area on the ellipsoid: for degrees (EPSG:4326) the number comes out in square
-degrees, which is not a unit anyone wants. Project first.
+Measured the same way as `distance`:
+geometries that declare a CRS are measured along the ellipsoid, in square metres.
+Geometries without one are measured on the flat plane their coordinates lie in,
+in whatever units those are squared:
+for longitude/latitude that is square degrees, which might be undesireable.
 """
 
 from __future__ import annotations
@@ -42,8 +43,21 @@ def _polygon(column: pl.Expr) -> pl.Expr:
     return (2 * rings.list.first().fill_null(0.0) - rings.list.sum()) / 2
 
 
+def _geodesic(column: pl.Expr) -> pl.Expr:
+    """The area along the ellipsoid of the CRS, in metres²."""
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[column],
+        function_name="area_geodesic",
+        is_elementwise=True,
+    )
+
+
 def _area(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     """The area of one geometry type, per row."""
+    # Whether PROJ can use the CRS is for the kernel to check.
+    if geometry._declares_crs():
+        return _geodesic(column)
     if isinstance(geometry, GeoPolygon):
         return _polygon(column)
     # Everything else has no defined area.
@@ -51,12 +65,24 @@ def _area(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 
 
 def area(geometry: IntoExprColumn) -> pl.Expr:
-    """The planar area a geometry encloses, as an `f64`.
+    """The area a geometry encloses, as an `f64`.
 
+    | in                  | measured                     | in                  |
+    |---------------------|------------------------------|---------------------|
+    | no CRS              | on the plane, by shoelace    | coordinate units²   |
+    | a CRS               | along the CRS's ellipsoid    | metres²             |
+
+    With a CRS, the coordinates are taken to the longitude/latitude
+    the CRS is defined on (for a projected CRS, the one it projects from;
+    no datum is shifted),
+    and every ring is measured as the region its geodesic edges enclose
+    on that CRS's own ellipsoid, as `distance` measures two points.
+    That is the smaller side of the ring:
+    a ring around more than half the ellipsoid is taken to enclose the rest of it.
 
     Only a polygon actually encloses something.
     This also considers its holes.
-    'z' and 'm' are ignored.
+    'z' and 'm' are ignored: this is the area of the footprint.
 
     This calculation assumes that the (closed) polygon is not self-intersecting.
 
@@ -77,12 +103,14 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     df.select(geo.area("parcel"))
     ```
     """
-    # CHECK: CCW/CW orientation of polygon should not matter, area should be positive only.
     return on_geometry(geometry, _area)
 
 
 def _area_rsgeo(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     """The area of the geometry"""
+    # rsgeo only measures on the plane, or on WGS 84 alone.
+    if geometry._declares_crs():
+        return _geodesic(column)
     return register_plugin_function(
         plugin_path=LIB,
         args=[column],
@@ -92,11 +120,12 @@ def _area_rsgeo(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 
 
 def area_rsgeo(geometry: IntoExprColumn) -> pl.Expr:
-    """The planar area a geometry encloses, as an `f64`, computed by the `geo` crate.
+    """The area a geometry encloses, as an `f64`, computed by the `geo` crate.
 
     Gives the same answers as `area`, which is written in plain Polars expressions;
     see there for what counts as an area. The two sit side by side so they can be
     compared, for correctness and for speed.
+    With a CRS, both measure along the ellipsoid in the same kernel.
 
     ```python
     df.select(geo.area_rsgeo("parcel"))
