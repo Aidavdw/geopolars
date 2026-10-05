@@ -1,5 +1,8 @@
+# GeoPolars
 
-# Two APIs
+If you are interested in developing GeoPolars further, read [[Developers.md]].
+
+## Two APIs
 
 We present two equivalent APIs.
 All functionality is is available through both.
@@ -20,3 +23,20 @@ Plain `pl.col("route").geo...` works at runtime,
 but a checker cannot see namespaces that `register_expr_namespace`
 patches onto `pl.Expr`.
 To avoid that, prefer `gpl.col` to keep static typing.
+
+## Geometry Operations
+
+All operations can be applied to all of the geometries.
+
+### Area
+
+### Centroid
+
+Gets the centre of mass of the geometry.
+This operation takes the CRS into consideration.
+For MultiPoint, this is the same as its mean coordinate.
+
+### Mean Coordinate
+
+This takes the average of all the coordinates that show up in this geometry.
+It does not have to be CRS-aware.
