@@ -37,6 +37,14 @@ geo-traits = "0.3.0"
 # Used by 'geo'. This sets it so that proj is bundled with the plugin,
 # rather than using the system installation (portability).
 proj = { version = "0.31", features = ["bundled_proj"] }
+# The C API under `proj`.
+# Used for what it does not expose (e.g. a CRS's ellipsoid).
+# Must match the version `proj` pins, so both link the same bundled PROJ.
+proj-sys = "0.27"
+# rsgeo uses this for its `Geodesic` suite.
+# rsgeo does not re-export it, but we need it for CRS ellipsoid distance measuring.
+# Keep on the version and features rsgeo pulls in.
+geographiclib-rs = { version = "0.2.7", default-features = false }
 geoparquet = "0.9.0"
 # Must match the version geoparquet pins.
 geoarrow-schema = "0.9.0"

@@ -105,6 +105,7 @@ def test_a_single_point_is_measured_against_every_row(crs: str | None) -> None:
 
 
 def test_with_a_crs_it_is_the_geodesic_in_metres() -> None:
+    """On WGS 84, for EPSG:4326."""
     df = _pairs([NEW_YORK], [LONDON], crs=WGS84)
 
     (got,) = _distances(df)
@@ -112,17 +113,40 @@ def test_with_a_crs_it_is_the_geodesic_in_metres() -> None:
     assert round(got) == NEW_YORK_TO_LONDON
 
 
-def test_a_projected_crs_measures_the_same_ground() -> None:
+def test_a_projected_crs_is_measured_on_its_own_ellipsoid() -> None:
     """The Dutch national grid is in metres already, but measured along the
-    ellipsoid it gives the same distance as the same points in lon/lat."""
+    ellipsoid it gives the same distance as the same points in the lon/lat it
+    projects from (Amersfoort, on Bessel 1841)."""
     amsterdam, utrecht = (4.9041, 52.3676), (5.1214, 52.0907)
-    lonlat = _pairs([amsterdam], [utrecht], crs=WGS84)
+    lonlat = _pairs([amsterdam], [utrecht], crs="EPSG:4289")
     rd = lonlat.select(geo.to_crs(pl.all(), "EPSG:28992"))
 
     (expected,) = _distances(lonlat)
     (got,) = _distances(rd)
 
     assert got == pytest.approx(expected, abs=1e-3)
+
+
+def test_the_ellipsoid_is_the_one_the_crs_declares() -> None:
+    """On a unit sphere, a quarter of the equator is a quarter turn long."""
+    sphere = "+proj=longlat +R=1 +type=crs"
+    df = _pairs([(0.0, 0.0), (0.0, 0.0)], [(90.0, 0.0), (0.0, 90.0)], crs=sphere)
+
+    assert _distances(df) == pytest.approx([math.pi / 2, math.pi / 2])
+
+
+def test_the_same_numbers_on_another_ellipsoid_are_another_distance() -> None:
+    """Bessel 1841 is 740 m smaller than WGS 84 at the equator, which shortens
+    the distance roughly in proportion. Only a sanity check on the size of the
+    difference: the unit sphere above pins the ellipsoid down exactly."""
+    wgs84 = _pairs([NEW_YORK], [LONDON], crs=WGS84)
+    bessel = _pairs([NEW_YORK], [LONDON], crs="EPSG:4289")
+
+    (on_wgs84,) = _distances(wgs84)
+    (on_bessel,) = _distances(bessel)
+
+    in_proportion = NEW_YORK_TO_LONDON * 739.845 / 6_378_137.0
+    assert on_wgs84 - on_bessel == pytest.approx(in_proportion, rel=0.2)
 
 
 def test_metadata_without_a_crs_is_still_planar() -> None:

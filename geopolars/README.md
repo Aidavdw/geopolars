@@ -28,6 +28,10 @@ To avoid that, prefer `gpl.col` to keep static typing.
 
 All operations can be applied to all of the geometries.
 
+### Distance
+
+Does not need to reproject: Uses the CRS geodetic.
+
 ### Area
 
 ### Centroid

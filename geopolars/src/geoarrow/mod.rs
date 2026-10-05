@@ -8,6 +8,7 @@ pub mod coord;
 pub mod crs;
 mod dimension;
 mod geo;
+pub mod geodetic;
 mod kind;
 pub mod to_rsgeo;
 

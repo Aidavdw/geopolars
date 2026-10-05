@@ -4,52 +4,51 @@
 
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
+use geographiclib_rs::{Geodesic, InverseGeodesic};
 use rsgeo::proj::Proj;
-use rsgeo::{Distance, Geodesic, Point};
 
 use crate::geoarrow::crs::ExtensionMetadata;
+use crate::geoarrow::geodetic::GeodeticCrs;
 use crate::geoarrow::{describe, Kind};
 
-// FIXME: distance should always be measured on the given ellipsoid.
-/// Longitude/latitude on WGS 84: what [`Geodesic`] measures on.
-const LONLAT: &str = "EPSG:4326";
-
-/// Measures coordinates in one CRS against each other along the WGS 84 ellipsoid.
+/// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
 ///
 /// Kept apart from the expression, so the length of a linestring can be
 /// measured segment by segment with the same thing.
-///
-/// Every CRS is measured on WGS 84, whatever ellipsoid it is defined on.
-/// Its datum puts both coordinates off by (nearly) the same amount,
-/// so this changes the distance between them far less than it changes where they are.
 pub struct GeodesicMetric {
+    /// To the CRS's own longitude/latitude, so no datum is shifted.
     to_lonlat: Proj,
+    ellipsoid: Geodesic,
 }
 
 impl GeodesicMetric {
     /// `crs` is anything PROJ accepts, as [`ExtensionMetadata::crs`] gives it.
     pub fn new(crs: &str) -> PolarsResult<Self> {
-        let to_lonlat = Proj::new_known_crs(crs, LONLAT, None).map_err(
+        let geodetic = GeodeticCrs::of(crs)?;
+        let to_lonlat = Proj::new_known_crs(crs, &geodetic.definition, None).map_err(
             |e| polars_err!(ComputeError: "cannot measure along the ellipsoid in {crs}: {e}"),
         )?;
-        Ok(Self { to_lonlat })
+        let ellipsoid = Geodesic::new(geodetic.semi_major, geodetic.flattening);
+        Ok(Self {
+            to_lonlat,
+            ellipsoid,
+        })
     }
 
-    fn lonlat(&self, (x, y): (f64, f64)) -> PolarsResult<Point<f64>> {
-        let (lon, lat) = self
-            .to_lonlat
+    /// `(lon, lat)` in degrees.
+    fn lonlat(&self, (x, y): (f64, f64)) -> PolarsResult<(f64, f64)> {
+        self.to_lonlat
             .convert((x, y))
-            .map_err(|e| polars_err!(ComputeError: "failed to reproject ({x}, {y}): {e}"))?;
-        Ok(Point::new(lon, lat))
+            .map_err(|e| polars_err!(ComputeError: "failed to reproject ({x}, {y}): {e}"))
     }
 
     /// The square of the geodesic distance between `a` and `b`, in metres².
     pub fn distance_squared(&self, a: (f64, f64), b: (f64, f64)) -> PolarsResult<f64> {
-        let distance = Geodesic.distance(self.lonlat(a)?, self.lonlat(b)?);
+        let ((lon_a, lat_a), (lon_b, lat_b)) = (self.lonlat(a)?, self.lonlat(b)?);
+        let distance: f64 = self.ellipsoid.inverse(lat_a, lon_a, lat_b, lon_b);
         Ok(distance * distance)
     }
 }
-
 /// The CRS two point columns share. Type operation only.
 ///
 /// Distances between points in different CRSs would have to pick one of them,

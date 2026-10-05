@@ -1,0 +1,178 @@
+//! The longitude/latitude CRS behind a CRS, and the ellipsoid it lies on.
+//!
+//! The `proj` crate only exposes transformations.
+//! So we need to interface directly through `proj-sys`.
+
+use std::ffi::{CStr, CString};
+use std::marker::PhantomData;
+use std::os::raw::c_int;
+use std::ptr;
+
+use polars::prelude::*;
+use proj_sys::{
+    proj_as_projjson, proj_context_create, proj_context_destroy, proj_context_errno,
+    proj_context_errno_string, proj_create, proj_crs_get_geodetic_crs, proj_destroy,
+    proj_ellipsoid_get_parameters, proj_get_ellipsoid, proj_get_type, PJ, PJ_CONTEXT,
+    PJ_TYPE_PJ_TYPE_GEOGRAPHIC_2D_CRS, PJ_TYPE_PJ_TYPE_GEOGRAPHIC_3D_CRS,
+};
+
+/// The geographic CRS a CRS is defined on: the CRS itself if it is one already,
+/// the CRS it projects from if it is projected.
+///
+/// Going from a CRS to its own geographic CRS never shifts datum:
+/// it only undoes the projection, so no accuracy is lost on the way.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GeodeticCrs {
+    /// The geographic CRS, as PROJJSON.
+    pub definition: String,
+    /// The ellipsoid's equatorial radius, in metres.
+    pub semi_major: f64,
+    /// The ellipsoid's flattening; `0.0` for a sphere.
+    pub flattening: f64,
+}
+
+impl GeodeticCrs {
+    /// `crs` is anything PROJ accepts.
+    pub fn of(crs: &str) -> PolarsResult<Self> {
+        let ctx = Context::new()?;
+        let c_crs = CString::new(crs)
+            .map_err(|_| polars_err!(ComputeError: "a CRS cannot contain a NUL byte: {crs:?}"))?;
+
+        // SAFETY: every pointer handed to PROJ comes from `ctx` and is checked
+        // for null by `Object::new`, which also frees it again.
+        unsafe {
+            let parsed = ctx.object(proj_create(ctx.0, c_crs.as_ptr()), crs)?;
+            let geodetic = ctx.object(proj_crs_get_geodetic_crs(ctx.0, parsed.0), crs)?;
+
+            let kind = proj_get_type(geodetic.0);
+            polars_ensure!(
+                kind == PJ_TYPE_PJ_TYPE_GEOGRAPHIC_2D_CRS || kind == PJ_TYPE_PJ_TYPE_GEOGRAPHIC_3D_CRS,
+                ComputeError: "{crs} is not defined on longitude/latitude, so there is no ellipsoid to measure on"
+            );
+
+            let ellipsoid = ctx.object(proj_get_ellipsoid(ctx.0, geodetic.0), crs)?;
+            let (mut semi_major, mut inverse_flattening) = (0.0, 0.0);
+            let ok = proj_ellipsoid_get_parameters(
+                ctx.0,
+                ellipsoid.0,
+                &mut semi_major,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                &mut inverse_flattening,
+            );
+            if ok == 0 {
+                return Err(ctx.error(crs));
+            }
+
+            let json = proj_as_projjson(ctx.0, geodetic.0, ptr::null());
+            if json.is_null() {
+                return Err(ctx.error(crs));
+            }
+            // Owned by `geodetic`: copy it out before that is freed.
+            let definition = CStr::from_ptr(json).to_string_lossy().into_owned();
+
+            Ok(Self {
+                definition,
+                semi_major,
+                // PROJ gives an inverse flattening of 0 for a sphere.
+                flattening: if inverse_flattening == 0.0 {
+                    0.0
+                } else {
+                    1.0 / inverse_flattening
+                },
+            })
+        }
+    }
+}
+
+/// A PROJ context of our own.
+/// Cannot be shared between threads.
+struct Context(*mut PJ_CONTEXT);
+
+impl Context {
+    fn new() -> PolarsResult<Self> {
+        // SAFETY: no preconditions; null is checked.
+        let ctx = unsafe { proj_context_create() };
+        polars_ensure!(!ctx.is_null(), ComputeError: "failed to create a PROJ context");
+        Ok(Self(ctx))
+    }
+
+    /// Takes ownership of `pj`, which PROJ created in this context.
+    fn object(&self, pj: *mut PJ, crs: &str) -> PolarsResult<Object<'_>> {
+        if pj.is_null() {
+            return Err(self.error(crs));
+        }
+        Ok(Object(pj, PhantomData))
+    }
+
+    /// What PROJ last reported going wrong in this context.
+    fn error(&self, crs: &str) -> PolarsError {
+        // SAFETY: the context is alive; PROJ owns the message, which is copied out.
+        let message = unsafe {
+            let errno: c_int = proj_context_errno(self.0);
+            let message = proj_context_errno_string(self.0, errno);
+            if message.is_null() {
+                "unknown error".to_owned()
+            } else {
+                CStr::from_ptr(message).to_string_lossy().into_owned()
+            }
+        };
+        polars_err!(ComputeError: "cannot find the ellipsoid of {crs}: {message}")
+    }
+}
+
+impl Drop for Context {
+    fn drop(&mut self) {
+        // SAFETY: every `Object` borrows the context, so they are all gone by now.
+        unsafe { proj_context_destroy(self.0) };
+    }
+}
+
+/// A PROJ object, freed when dropped. It cannot outlive its context.
+struct Object<'ctx>(*mut PJ, PhantomData<&'ctx Context>);
+
+impl Drop for Object<'_> {
+    fn drop(&mut self) {
+        // SAFETY: owned, non-null, and its context is still alive.
+        unsafe { proj_destroy(self.0) };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! What the Python suite cannot see: which ellipsoid PROJ handed back.
+
+    use super::*;
+
+    #[test]
+    fn a_geographic_crs_is_its_own_geodetic_crs() {
+        let wgs84 = GeodeticCrs::of("EPSG:4326").unwrap();
+
+        assert_eq!(wgs84.semi_major, 6_378_137.0);
+        assert!((wgs84.flattening - 1.0 / 298.257_223_563).abs() < 1e-15);
+    }
+
+    #[test]
+    fn a_projected_crs_is_measured_on_the_ellipsoid_it_projects_from() {
+        // The Dutch national grid lies on Bessel 1841, not WGS 84.
+        let rd = GeodeticCrs::of("EPSG:28992").unwrap();
+
+        assert_eq!(rd.semi_major, 6_377_397.155);
+        assert!((rd.flattening - 1.0 / 299.152_812_8).abs() < 1e-12);
+        assert!(rd.definition.contains("Amersfoort"), "{}", rd.definition);
+    }
+
+    #[test]
+    fn a_sphere_has_no_flattening() {
+        let sphere = GeodeticCrs::of("+proj=longlat +R=1000 +type=crs").unwrap();
+
+        assert_eq!((sphere.semi_major, sphere.flattening), (1000.0, 0.0));
+    }
+
+    #[test]
+    fn refuses_what_is_not_on_longitude_latitude() {
+        // Earth-centred XYZ: geodetic, but not geographic.
+        assert!(GeodeticCrs::of("EPSG:4978").is_err());
+        assert!(GeodeticCrs::of("EPSG:not-a-code").is_err());
+    }
+}

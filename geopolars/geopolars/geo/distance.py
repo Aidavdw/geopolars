@@ -80,12 +80,13 @@ def distance(a: IntoExprColumn, b: IntoExprColumn) -> pl.Expr:
     | `a` and `b`         | measured                     | in                  |
     |---------------------|------------------------------|---------------------|
     | no CRS              | on the plane, by Pythagoras  | coordinate units    |
-    | the same CRS        | along the WGS 84 ellipsoid   | metres              |
+    | the same CRS        | along the CRS's ellipsoid    | metres              |
 
     Without a CRS, longitude/latitude comes out in degrees,
     which are not the same length east-west as north-south.
-    With one, the points are taken to longitude/latitude
-    and measured along the geodesic between them, even for a projected CRS.
+    With one, the points are taken to the longitude/latitude the CRS is defined on
+    (for a projected CRS, the one it projects from; no datum is shifted)
+    and measured along the geodesic between them, on that CRS's own ellipsoid.
     Points in different CRSs, or a CRS on only one of them, are refused:
     reproject one onto the other with `to_crs` first.
 
