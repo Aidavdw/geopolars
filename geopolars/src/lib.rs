@@ -14,7 +14,8 @@ static ALLOC: PolarsAllocator = PolarsAllocator::new();
 #[pyo3(signature = (*, crs = None))]
 fn extension_metadata(crs: Option<String>) -> PyResult<Option<String>> {
     geoarrow::crs::MetadataKwargs { crs }
-        .apply(None)
+        .apply(Default::default())
+        .map(|metadata| metadata.serialize())
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 

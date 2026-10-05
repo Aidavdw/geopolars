@@ -7,7 +7,6 @@ use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
 use pyo3_polars::derive::polars_expr;
 
 use super::distance::GeodesicMetric;
-use crate::geoarrow::crs::ExtensionMetadata;
 use crate::geoarrow::to_rsgeo::{downcast, Coords};
 use crate::geoarrow::{describe, Kind};
 
@@ -19,12 +18,11 @@ fn crs_of_curve(field: &Field) -> PolarsResult<String> {
         SchemaMismatch: "a length is measured on a `{}` or `{}` column, got: {}",
         Kind::LineString.name(), Kind::MultiLineString.name(), field.dtype()
     );
-    let metadata = ExtensionMetadata::parse(geo.typ.serialize_metadata().as_deref())?;
     polars_ensure!(
-        metadata.declares_crs(),
+        geo.metadata.declares_crs(),
         SchemaMismatch: "the geometry declares no CRS, so there is no ellipsoid to measure on"
     );
-    metadata.crs()
+    geo.metadata.crs()
 }
 
 /// `output_type_func` for [`length_geodesic`]: an `f64`, in metres.

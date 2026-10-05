@@ -48,6 +48,8 @@ Two things work differently on the two sides:
   Dtypes compare their metadata as strings,
   so if the two sides serialised the same CRS differently
   you'd get two dtypes that don't compare equal.
+  In Rust, metadata is held parsed as an `ExtensionMetadata`, behind an `Arc`,
+  so it compares by content and is written back out as compact JSON.
 
 Rust expressions never name a concrete geometry.
 They call `geoarrow::describe(dtype)` to get a `GeoColumn` (kind and dimension),

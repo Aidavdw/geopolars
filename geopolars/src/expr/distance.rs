@@ -7,7 +7,6 @@ use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use rsgeo::proj::Proj;
 
-use crate::geoarrow::crs::ExtensionMetadata;
 use crate::geoarrow::geodetic::GeodeticCrs;
 use crate::geoarrow::{describe, Kind};
 
@@ -22,7 +21,7 @@ pub struct GeodesicMetric {
 }
 
 impl GeodesicMetric {
-    /// `crs` is anything PROJ accepts, as [`ExtensionMetadata::crs`] gives it.
+    /// `crs` is anything PROJ accepts, as [`ExtensionMetadata::crs`](crate::geoarrow::crs::ExtensionMetadata::crs) gives it.
     pub fn new(crs: &str) -> PolarsResult<Self> {
         let geodetic = GeodeticCrs::of(crs)?;
         let to_lonlat = Proj::new_known_crs(crs, &geodetic.definition, None).map_err(
@@ -122,9 +121,7 @@ fn shared_crs(fields: &[Field]) -> PolarsResult<String> {
             SchemaMismatch: "a distance is measured between two `{}` columns, got: {}",
             Kind::Point.name(), field.dtype()
         );
-        metadata.push(ExtensionMetadata::parse(
-            geo.typ.serialize_metadata().as_deref(),
-        )?);
+        metadata.push(geo.metadata);
     }
 
     match (metadata[0].declares_crs(), metadata[1].declares_crs()) {

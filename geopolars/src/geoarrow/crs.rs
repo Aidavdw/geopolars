@@ -1,4 +1,6 @@
 //! Home of [ExtensionMetadata].
+use std::sync::Arc;
+
 use geoarrow_schema::{Crs, CrsType};
 use polars::prelude::*;
 use serde::Deserialize;
@@ -17,7 +19,10 @@ use serde_json::{Map, Value};
 /// while also giving an anchoring point for functionality that has to do with the metadata.
 /// This is a slight deviation from the GeoArrow schema,
 /// but makes chaining with proprietary data producers more versatile.
-#[derive(Clone, Debug, Default, PartialEq)]
+///
+/// whitespace and key order do not make two metadata different,
+/// and [`serialize`](Self::serialize) always writes compact JSON.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ExtensionMetadata(Map<String, Value>);
 
 impl ExtensionMetadata {
@@ -110,14 +115,13 @@ impl MetadataKwargs {
     ///
     /// This labels and never reprojects. Parts that already declare a different
     /// CRS are an error rather than being relabelled into the wrong place.
-    pub fn apply(&self, metadata: Option<String>) -> PolarsResult<Option<String>> {
+    pub fn apply(&self, metadata: Arc<ExtensionMetadata>) -> PolarsResult<Arc<ExtensionMetadata>> {
         let Some(crs) = &self.crs else {
             return Ok(metadata);
         };
 
-        let parsed = ExtensionMetadata::parse(metadata.as_deref())?;
-        match parsed.0.get("crs") {
-            None | Some(Value::Null) => Ok(parsed.with_crs(crs).serialize()),
+        match metadata.0.get("crs") {
+            None | Some(Value::Null) => Ok(Arc::new(Arc::unwrap_or_clone(metadata).with_crs(crs))),
             Some(declared) if *declared == crs_value(crs) => Ok(metadata),
             Some(declared) => polars_bail!(
                 SchemaMismatch: "the parts already declare the CRS {declared}, not {}; \
@@ -200,14 +204,26 @@ mod tests {
         let kwargs = MetadataKwargs {
             crs: crs.map(str::to_owned),
         };
-        kwargs.apply(metadata.map(str::to_owned))
+        let metadata = Arc::new(ExtensionMetadata::parse(metadata)?);
+        Ok(kwargs.apply(metadata)?.serialize())
     }
 
     #[test]
-    fn nothing_to_set_keeps_metadata_verbatim() {
-        let metadata = r#"{ "crs" : "EPSG:4326", "x-extra": 1 }"#;
-        assert_eq!(apply(Some(metadata), None).unwrap().unwrap(), metadata);
+    fn nothing_to_set_keeps_every_key() {
+        let metadata = r#"{ "zz" : true, "crs" : "EPSG:4326", "x-extra": 1 }"#;
+        assert_eq!(
+            apply(Some(metadata), None).unwrap().unwrap(),
+            r#"{"zz":true,"crs":"EPSG:4326","x-extra":1}"#
+        );
         assert_eq!(apply(None, None).unwrap(), None);
+    }
+
+    /// This must hold, otherwise the python side might start disagreeing.
+    #[test]
+    fn spelling_does_not_make_metadata_different() {
+        let a = ExtensionMetadata::parse(Some(r#"{"crs":"EPSG:4326","edges":"karney"}"#));
+        let b = ExtensionMetadata::parse(Some(r#"{ "edges": "karney", "crs": "EPSG:4326" }"#));
+        assert_eq!(a.unwrap(), b.unwrap());
     }
 
     #[test]

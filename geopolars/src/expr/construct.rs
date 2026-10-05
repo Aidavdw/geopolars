@@ -1,12 +1,12 @@
 //! Building a geometry out of the parts it is made of.
 
-use std::borrow::Cow;
+use std::sync::Arc;
 
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 
 use super::coords::same_geometry;
-use crate::geoarrow::crs::MetadataKwargs;
+use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
 
 /// Used in error messages, don't care about allocation
@@ -24,7 +24,7 @@ fn coordinate_shape_of(kind: Kind) -> String {
 /// The dimension and metadata of the parts a geometry can be gathered from:
 /// a list of `part`s, each either a `part` geometry already or the bare storage
 /// one of those wraps.
-fn parts_of(dtype: &DataType, part: Kind) -> PolarsResult<(GeoDimension, Option<String>)> {
+fn parts_of(dtype: &DataType, part: Kind) -> PolarsResult<(GeoDimension, Arc<ExtensionMetadata>)> {
     let expected = format!(
         "expected a list of `{}`s or of {}",
         part.name(),
@@ -39,7 +39,7 @@ fn parts_of(dtype: &DataType, part: Kind) -> PolarsResult<(GeoDimension, Option<
         match describe(inner) {
             Ok(geo) if geo.kind == part => {
                 // metadata should be carried over
-                return Ok((geo.dim, geo.typ.serialize_metadata().map(Cow::into_owned)));
+                return Ok((geo.dim, geo.metadata.clone()));
             }
             _ => polars_bail!(
                 SchemaMismatch: "{} with separated x/y[/z][/m] coordinates, got: {}",
@@ -51,7 +51,7 @@ fn parts_of(dtype: &DataType, part: Kind) -> PolarsResult<(GeoDimension, Option<
     let Some(dim) = coord::dimension_of_storage(inner, part.nesting()) else {
         polars_bail!(SchemaMismatch: "{}, got: {}", expected, dtype);
     };
-    Ok((dim, None))
+    Ok((dim, Default::default()))
 }
 
 /// Small helper
@@ -229,7 +229,7 @@ fn coordinates_of(input_fields: &[Field], kind: Kind) -> PolarsResult<GeoDimensi
 /// Small helper
 fn zipped(input_fields: &[Field], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<Geo> {
     let dim = coordinates_of(input_fields, kind)?;
-    Ok(Geo::new(kind, dim, kwargs.apply(None)?))
+    Ok(Geo::new(kind, dim, kwargs.apply(Default::default())?))
 }
 
 /// `output_type_func_with_kwargs` for zipping coordinate columns into a `kind`.

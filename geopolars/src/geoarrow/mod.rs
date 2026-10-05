@@ -16,11 +16,13 @@ pub use dimension::GeoDimension;
 pub use geo::Geo;
 pub use kind::Kind;
 
+use std::any::Any;
 use std::sync::Arc;
 
 use polars::prelude::*;
 use polars_core::datatypes::extension::{register_extension_type, ExtensionTypeInstance};
 
+use crs::ExtensionMetadata;
 use geo::GeoFactory;
 
 /// Populate this library's extension-type registry.
@@ -44,6 +46,7 @@ pub struct GeoColumn<'a> {
     pub typ: &'a ExtensionTypeInstance,
     pub kind: Kind,
     pub dim: GeoDimension,
+    pub metadata: &'a Arc<ExtensionMetadata>,
 }
 
 /// Parses a geometry column's dtype (as a polars [DataType]) into a [GeoColumn].
@@ -54,13 +57,24 @@ pub fn describe(dtype: &DataType) -> PolarsResult<GeoColumn<'_>> {
     let Some(kind) = Kind::from_name(&typ.name()) else {
         polars_bail!(SchemaMismatch: "expected a {} column, got: {}", Kind::names(), dtype);
     };
-    let Some(dim) = coord::dimension_of_storage(storage, kind.nesting()) else {
-        // One of ours, over storage we do not implement -- an interleaved
-        // encoding, most likely. See `Unsupported`.
-        polars_bail!(
-            SchemaMismatch: "expected a `{}` column with separated \
-            x/y[/z][/m] coordinates, got: {}", kind.name(), dtype
-        );
-    };
-    Ok(GeoColumn { typ, kind, dim })
+    // `GeoFactory` already parsed everything, unless it had to give up.
+    if let Some(geo) = (typ.0.as_ref() as &dyn Any).downcast_ref::<Geo>() {
+        return Ok(GeoColumn {
+            typ,
+            kind: geo.kind(),
+            dim: geo.dim(),
+            metadata: geo.metadata(),
+        });
+    }
+
+    polars_ensure!(
+        coord::dimension_of_storage(storage, kind.nesting()).is_some(),
+        // An interleaved encoding, most likely.
+        SchemaMismatch: "expected a `{}` column with separated \
+        x/y[/z][/m] coordinates, got: {}", kind.name(), dtype
+    );
+    ExtensionMetadata::parse(typ.serialize_metadata().as_deref())?;
+    polars_bail!(
+        SchemaMismatch: "`{}` is not registered with this library, got: {}", kind.name(), dtype
+    )
 }

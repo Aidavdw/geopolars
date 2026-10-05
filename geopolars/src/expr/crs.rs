@@ -1,12 +1,13 @@
 //! Moving a geometry from one coordinate reference system to another.
 
+use std::sync::Arc;
+
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use rsgeo::proj::Proj;
 use serde::Deserialize;
 
 use super::coords::map_coords;
-use crate::geoarrow::crs::ExtensionMetadata;
 use crate::geoarrow::{describe, Geo, GeoDimension};
 
 #[derive(Deserialize)]
@@ -19,12 +20,8 @@ struct ToCrsKwargs {
 /// Type operation only.
 fn reprojected_geometry_type(dtype: &DataType, to: &str) -> PolarsResult<Geo> {
     let geo = describe(dtype)?;
-    let metadata = ExtensionMetadata::parse(geo.typ.serialize_metadata().as_deref())?;
-    Ok(Geo::new(
-        geo.kind,
-        geo.dim,
-        metadata.with_crs(to).serialize(),
-    ))
+    let metadata = Arc::unwrap_or_clone(geo.metadata.clone()).with_crs(to);
+    Ok(Geo::new(geo.kind, geo.dim, Arc::new(metadata)))
 }
 
 /// `output_type_func_with_kwargs` for [`to_crs`]: the same geometry, but the
@@ -89,7 +86,7 @@ fn reproject(coords: &Series, dim: GeoDimension, proj: &Proj) -> PolarsResult<Se
 #[polars_expr(output_type_func_with_kwargs=reprojected)]
 fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
-    let from = ExtensionMetadata::parse(geo.typ.serialize_metadata().as_deref())?.crs()?;
+    let from = geo.metadata.crs()?;
     let proj = Proj::new_known_crs(&from, &kwargs.to, None).map_err(
         |e| polars_err!(ComputeError: "cannot reproject from {from} to {}: {e}", kwargs.to),
     )?;

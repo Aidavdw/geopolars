@@ -6,6 +6,7 @@
 use std::any::Any;
 use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
 
 use polars_core::datatypes::extension::{
     ExtensionTypeFactory, ExtensionTypeImpl, ExtensionTypeInstance,
@@ -13,6 +14,7 @@ use polars_core::datatypes::extension::{
 use polars_core::prelude::DataType;
 
 use super::coord::dimension_of_storage;
+use super::crs::ExtensionMetadata;
 use super::{GeoDimension, Kind};
 
 /// A GeoArrow geometry column's type:
@@ -25,20 +27,30 @@ use super::{GeoDimension, Kind};
 pub struct Geo {
     kind: Kind,
     dim: GeoDimension,
-
-    // TODO: replace this with the new metadata type
-    metadata: Option<String>,
+    /// Behind an [`Arc`], since dtypes get cloned a lot during planning.
+    metadata: Arc<ExtensionMetadata>,
 }
 
 impl Geo {
-    // TODO: take metadata here as Metadata type.
-    /// A geometry of the given kind and dimension, carrying `metadata` verbatim.
-    pub fn new(kind: Kind, dim: GeoDimension, metadata: Option<String>) -> Self {
+    /// A geometry of the given kind and dimension, carrying `metadata`.
+    pub fn new(kind: Kind, dim: GeoDimension, metadata: Arc<ExtensionMetadata>) -> Self {
         Self {
             kind,
             dim,
             metadata,
         }
+    }
+
+    pub fn kind(&self) -> Kind {
+        self.kind
+    }
+
+    pub fn dim(&self) -> GeoDimension {
+        self.dim
+    }
+
+    pub fn metadata(&self) -> &Arc<ExtensionMetadata> {
+        &self.metadata
     }
 
     /// Produces a Polars Arrow extension type from this type.
@@ -60,7 +72,7 @@ impl ExtensionTypeImpl for Geo {
     }
 
     fn serialize_metadata(&self) -> Option<Cow<'_, str>> {
-        self.metadata.as_deref().map(Cow::Borrowed)
+        self.metadata.serialize().map(Cow::Owned)
     }
 
     fn dyn_clone(&self) -> Box<dyn ExtensionTypeImpl> {
@@ -93,7 +105,8 @@ impl ExtensionTypeImpl for Geo {
     }
 }
 
-/// A geometry whose storage this version does not implement.
+/// A geometry whose storage this version does not implement,
+/// or whose metadata is not a JSON object.
 /// If you see this, you might have an interleaved Arrow encoding.
 ///
 /// [`ExtensionTypeFactory::create_type_instance`] cannot return a `Result`,
@@ -104,6 +117,7 @@ impl ExtensionTypeImpl for Geo {
 pub struct Unsupported {
     kind: Kind,
     storage: DataType,
+    /// Kept verbatim, as it might not parse.
     metadata: Option<String>,
 }
 
@@ -156,15 +170,17 @@ impl ExtensionTypeFactory for GeoFactory {
         metadata: Option<&str>,
     ) -> Box<dyn ExtensionTypeImpl> {
         let kind = self.0;
-        let metadata = metadata.map(str::to_owned);
-        // We only have to get the dimension out of the storage type once.
+        // We only have to get the dimension and metadata out once.
         // Every later downstream expression can match on the dimension.
-        match dimension_of_storage(storage, kind.nesting()) {
-            Some(dim) => Box::new(Geo::new(kind, dim, metadata)),
-            None => Box::new(Unsupported {
+        match (
+            dimension_of_storage(storage, kind.nesting()),
+            ExtensionMetadata::parse(metadata),
+        ) {
+            (Some(dim), Ok(parsed)) => Box::new(Geo::new(kind, dim, Arc::new(parsed))),
+            _ => Box::new(Unsupported {
                 kind,
                 storage: storage.clone(),
-                metadata,
+                metadata: metadata.map(str::to_owned),
             }),
         }
     }
