@@ -119,7 +119,7 @@ fn multilinestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<F
 /// A multilinestring is as long as its parts together.
 #[polars_expr(output_type_func=metres)]
 fn length_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
-    let metric = GeodesicMetric::new(&crs_of_curve(&inputs[0].field())?)?;
+    let metric = GeodesicMetric::of(&crs_of_curve(&inputs[0].field())?)?;
     let storage = inputs[0].ext()?.storage();
 
     let out = match describe(inputs[0].dtype())?.kind {

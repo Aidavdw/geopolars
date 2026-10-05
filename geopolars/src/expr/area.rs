@@ -116,10 +116,10 @@ fn area_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let storage = inputs[0].ext()?.storage();
 
     let out = match describe(inputs[0].dtype())?.kind {
-        Kind::Polygon => polygons(storage, &GeodesicMetric::new(&crs)?)?,
+        Kind::Polygon => polygons(storage, &*GeodesicMetric::of(&crs)?)?,
         // Still refuses a CRS that has no ellipsoid, as a polygon in it would be.
         Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString => {
-            GeodesicMetric::new(&crs)?;
+            GeodesicMetric::of(&crs)?;
             nothing_enclosed(storage)
         }
     };

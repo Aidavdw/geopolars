@@ -2,6 +2,10 @@
 //!
 //! Points without a CRS are measured in plain Polars expressions instead, on the Python side.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
 use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
 use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
@@ -20,9 +24,39 @@ pub struct GeodesicMetric {
     ellipsoid: Geodesic,
 }
 
+/// How many CRSes to keep in cache.
+/// If more are used, it will start over.
+const CACHED_CRSS: usize = 16;
+
+thread_local! {
+    /// A cache of CRSes.
+    /// call to PROJ by parsing costs more than measuring a small morsel, so cached.
+    /// Per thread, because a [`Proj`] can't be shared between threads.
+    /// With this, CRS can be re-used over multiple morsels.
+    static METRICS: RefCell<HashMap<String, Rc<GeodesicMetric>>> = RefCell::new(HashMap::new());
+}
+
 impl GeodesicMetric {
+    /// Populates or gets the metric for `crs` from the cache.
+    ///
     /// `crs` is anything PROJ accepts, as [`ExtensionMetadata::crs`](crate::geoarrow::crs::ExtensionMetadata::crs) gives it.
-    pub fn new(crs: &str) -> PolarsResult<Self> {
+    pub fn of(crs: &str) -> PolarsResult<Rc<Self>> {
+        // A CRS that fails to build is not cached, and fails again the next time.
+        if let Some(metric) = METRICS.with_borrow(|metrics| metrics.get(crs).cloned()) {
+            return Ok(metric);
+        }
+        // Built outside the borrow, so nothing is held while PROJ runs.
+        let metric = Rc::new(Self::new(crs)?);
+        METRICS.with_borrow_mut(|metrics| {
+            if metrics.len() >= CACHED_CRSS {
+                metrics.clear();
+            }
+            metrics.insert(crs.to_owned(), Rc::clone(&metric));
+        });
+        Ok(metric)
+    }
+
+    fn new(crs: &str) -> PolarsResult<Self> {
         let geodetic = GeodeticCrs::of(crs)?;
         let to_lonlat = Proj::new_known_crs(crs, &geodetic.definition, None).map_err(
             |e| polars_err!(ComputeError: "cannot measure along the ellipsoid in {crs}: {e}"),
@@ -236,7 +270,7 @@ fn distance_squared_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
         inputs[0].field().into_owned(),
         inputs[1].field().into_owned(),
     ];
-    let metric = GeodesicMetric::new(&shared_crs(&fields)?)?;
+    let metric = GeodesicMetric::of(&shared_crs(&fields)?)?;
     let both_have_z =
         describe(fields[0].dtype())?.dim.has_z() && describe(fields[1].dtype())?.dim.has_z();
 
@@ -255,4 +289,40 @@ fn distance_squared_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
         })?
     };
     Ok(out.with_name(inputs[0].name().clone()).into_series())
+}
+
+#[cfg(test)]
+mod tests {
+    //! What the Python suite cannot see: whether a metric was built again.
+
+    use super::*;
+
+    #[test]
+    fn a_thread_builds_the_metric_for_a_crs_once() {
+        let first = GeodesicMetric::of("EPSG:4326").unwrap();
+
+        assert!(Rc::ptr_eq(
+            &first,
+            &GeodesicMetric::of("EPSG:4326").unwrap()
+        ));
+        assert!(!Rc::ptr_eq(
+            &first,
+            &GeodesicMetric::of("EPSG:4289").unwrap()
+        ));
+    }
+
+    #[test]
+    fn a_crs_that_fails_is_not_cached() {
+        assert!(GeodesicMetric::of("EPSG:4978").is_err());
+        assert!(GeodesicMetric::of("EPSG:4978").is_err());
+    }
+
+    #[test]
+    fn the_cache_starts_over_rather_than_growing() {
+        for zone in 1..=CACHED_CRSS + 1 {
+            GeodesicMetric::of(&format!("EPSG:{}", 32600 + zone)).unwrap();
+        }
+
+        assert!(METRICS.with_borrow(|metrics| metrics.len()) <= CACHED_CRSS);
+    }
 }
