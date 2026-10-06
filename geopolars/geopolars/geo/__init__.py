@@ -20,6 +20,7 @@ from geopolars.geo.construct import (
     polygon_from_rings,
     validate,
 )
+from geopolars.geo.coordinates import x, y
 from geopolars.geo.crs import to_crs
 from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.length import length
@@ -47,4 +48,6 @@ __all__ = [
     "to_crs",
     "translate",
     "validate",
+    "x",
+    "y",
 ]

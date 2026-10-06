@@ -173,3 +173,68 @@ the comment says when one without a CRS takes a different tier.
 | `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
+| `x` | 1 | plain `f64`, drops the CRS | - | | - | | - | | - | |
+| `y` | 1 | plain `f64`, drops the CRS | - | | - | | - | | - | |
+
+## Roadmap
+
+### Core IO
+
+- [ ] WKB / WKT encoding and decoding
+- [ ] GeoParquet read/write
+
+Later goals:
+
+- [ ] GeoJson read
+- [ ] PostGIS read
+- [ ] GDAL vector files
+
+### Per-geometry properties and ops
+
+- [x] Area
+- [x] Length
+- [ ] getters for coordinates
+- [ ] validity tests
+- [ ] mean coordinate
+- [ ] centroid
+- [ ] convex hull
+- [ ] simplify/decimate
+- [ ] equality
+
+affine transforms:
+
+- [ ] translate
+- [ ] rotate
+- [ ] scale
+- [ ] skew
+- [ ] transform (with a matrix)
+
+transfer transforms
+
+- [ ] interpolate
+- [ ] project
+
+geometry editing
+
+- [ ] Linestring joining
+- [ ] polygon construction from linestrings
+- [ ] Adding additional holes to polygons from linestrings
+
+### Binary predicates
+
+- [ ] intersect
+- [ ] contains
+- [ ] within
+- [ ] covers
+- [ ] covered_by
+- [ ] touches
+- [ ] crosses
+- [ ] overlaps
+- [ ] disjoint
+- [ ] distance_to
+
+creating new geometries
+
+- [ ] intersection
+- [ ] union
+- [ ] difference

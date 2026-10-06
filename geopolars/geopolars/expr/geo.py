@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.geo import affine, construct
+from geopolars.geo import affine, construct, coordinates
 
 # bound directly: `geopolars.geo.area` is the function, not the module.
 from geopolars.geo.area import area as _area
@@ -68,3 +68,9 @@ class Geometry:
 
     def area(self) -> pl.Expr:
         return _area(self._expr)
+
+    def x(self) -> pl.Expr:
+        return coordinates.x(self._expr)
+
+    def y(self) -> pl.Expr:
+        return coordinates.y(self._expr)
