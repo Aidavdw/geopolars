@@ -1,7 +1,8 @@
 """The area a geometry encloses.
 
 Measured the same way as `distance`:
-geometries that declare a CRS are measured along the ellipsoid, in square metres.
+geometries that declare a CRS are measured along the ellipsoid, in the unit of the CRS squared
+(square metres for a CRS in longitude/latitude).
 Geometries without one are measured on the flat plane their coordinates lie in,
 in whatever units those are squared:
 for longitude/latitude that is square degrees, which might be undesireable.
@@ -44,7 +45,7 @@ def _polygon(column: pl.Expr) -> pl.Expr:
 
 
 def _geodesic(column: pl.Expr) -> pl.Expr:
-    """The area along the ellipsoid of the CRS, in metres²."""
+    """The area along the ellipsoid of the CRS, in its unit²."""
     return register_plugin_function(
         plugin_path=LIB,
         args=[column],
@@ -70,13 +71,16 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     | in                  | measured                     | in                  |
     |---------------------|------------------------------|---------------------|
     | no CRS              | on the plane, by shoelace    | coordinate units²   |
-    | a CRS               | along the CRS's ellipsoid    | metres²             |
+    | a CRS               | along the CRS's ellipsoid    | CRS units²          |
 
     With a CRS, the coordinates are taken to the longitude/latitude
     the CRS is defined on (for a projected CRS, the one it projects from;
     no datum is shifted),
     and every ring is measured as the region its geodesic edges enclose
     on that CRS's own ellipsoid, as `distance` measures two points.
+    The result is in the unit of the CRS's `x` and `y` squared
+    (such as square US survey feet for EPSG:2263),
+    or in square metres when those are degrees.
     That is the smaller side of the ring:
     a ring around more than half the ellipsoid is taken to enclose the rest of it.
 

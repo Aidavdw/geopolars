@@ -78,13 +78,15 @@ impl GeodesicMetric {
             .map_err(|e| polars_err!(ComputeError: "failed to reproject ({x}, {y}): {e}"))
     }
 
-    /// The geodesic distance between two coordinates already in [`lonlat`](Self::lonlat), in metres.
+    /// The geodesic distance between two coordinates already in [`lonlat`](Self::lonlat),
+    /// in the unit of the CRS's `x` and `y` (metres if those are degrees),
+    /// which is the unit [`GeodeticCrs::semi_major`] gives the ellipsoid in.
     pub fn between(&self, (lon_a, lat_a): (f64, f64), (lon_b, lat_b): (f64, f64)) -> f64 {
         // CHECK: is this squared? if so, then change name.
         self.ellipsoid.inverse(lat_a, lon_a, lat_b, lon_b)
     }
 
-    /// The square of the geodesic distance between `a` and `b`, in metres².
+    /// The square of the geodesic distance between `a` and `b`, in the CRS's unit squared.
     pub fn distance_squared(&self, a: (f64, f64), b: (f64, f64)) -> PolarsResult<f64> {
         let distance = self.between(self.lonlat(a)?, self.lonlat(b)?);
         Ok(distance * distance)
@@ -113,7 +115,8 @@ impl GeodesicMetric {
         )
     }
 
-    /// The area the closed ring through `coords` encloses on the ellipsoid, in metres².
+    /// The area the closed ring through `coords` encloses on the ellipsoid,
+    /// in the CRS's unit squared, like [`between`](Self::between).
     /// Based on `geographiclib_rs`
     pub fn ring_area(
         &self,
@@ -197,7 +200,7 @@ fn shared_crs(fields: &[Field]) -> PolarsResult<String> {
 }
 
 /// `output_type_func` for [`distance_squared_geodesic`]: an `f64`, named after the first point.
-fn squared_metres(input_fields: &[Field]) -> PolarsResult<Field> {
+fn squared_distance(input_fields: &[Field]) -> PolarsResult<Field> {
     shared_crs(input_fields)?;
     Ok(Field::new(
         input_fields[0].name().clone(),
@@ -260,7 +263,7 @@ fn pairwise<P: Copy>(
 }
 
 /// See `distance_squared`.
-#[polars_expr(output_type_func=squared_metres)]
+#[polars_expr(output_type_func=squared_distance)]
 fn distance_squared_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let fields = [
         inputs[0].field().into_owned(),

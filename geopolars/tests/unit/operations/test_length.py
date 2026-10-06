@@ -111,6 +111,18 @@ def test_with_a_crs_straight_up_and_down_is_the_climb() -> None:
     assert _lengths(df) == pytest.approx([150.0])
 
 
+def test_with_a_crs_in_feet_the_length_is_in_feet() -> None:
+    # New York Long Island, in US survey feet: 5000 feet on the grid, then straight up.
+    line = [
+        (984_000.0, 200_000.0, 0.0),
+        (987_000.0, 204_000.0, 0.0),
+        (987_000.0, 204_000.0, 1000.0),
+    ]
+    df = _line_with_heights(line, "EPSG:2263")
+
+    assert _lengths(df) == pytest.approx([6000.0], rel=1e-4)
+
+
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
 def test_with_z_it_is_the_distance_between_consecutive_vertices(
     crs: str | None,

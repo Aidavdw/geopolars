@@ -287,6 +287,26 @@ def test_a_projected_crs_is_measured_on_its_own_ellipsoid(area: Area) -> None:
     assert got == pytest.approx(expected, rel=1e-6)
 
 
+def test_a_projected_crs_in_feet_is_measured_in_square_feet(area: Area) -> None:
+    """New York Long Island is in US survey feet, projected from NAD83:
+    the same ring is the same area, in square feet rather than square metres."""
+    ring = [
+        {"x": -74.0, "y": 40.7},
+        {"x": -73.9, "y": 40.7},
+        {"x": -73.9, "y": 40.8},
+        {"x": -74.0, "y": 40.8},
+        {"x": -74.0, "y": 40.7},
+    ]
+    lonlat = _rings([ring], crs="EPSG:4269")
+    feet = lonlat.select(geo.to_crs("polygon", "EPSG:2263"))
+    metres_per_us_foot = 1200 / 3937
+
+    (square_metres,) = _areas(area, lonlat)
+    (got,) = _areas(area, feet)
+
+    assert got == pytest.approx(square_metres / metres_per_us_foot**2, rel=1e-6)
+
+
 def test_with_a_crs_z_and_m_are_left_out(
     area: Area, ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:

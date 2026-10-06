@@ -119,6 +119,34 @@ def test_with_a_crs_straight_up_is_the_difference_in_height() -> None:
     assert _distances(df) == pytest.approx([100.0])
 
 
+# New York Long Island, in US survey feet.
+NY_FEET = "EPSG:2263"
+
+
+def test_with_a_crs_in_feet_the_distance_is_in_feet() -> None:
+    # 3000 by 4000 feet on the grid; the ellipsoid differs from the grid
+    # by the projection's scale factor, well under a part in ten thousand here.
+    df = _pairs([(984_000.0, 200_000.0)], [(987_000.0, 204_000.0)], crs=NY_FEET)
+
+    assert _distances(df) == pytest.approx([5000.0], rel=1e-4)
+
+
+def test_with_a_crs_in_feet_the_height_is_in_feet() -> None:
+    df = _heights((984_000.0, 200_000.0, 0.0), (984_000.0, 200_000.0, 1000.0), NY_FEET)
+
+    assert _distances(df) == pytest.approx([1000.0])
+
+
+def test_with_a_crs_in_feet_the_height_is_added_to_the_geodesic() -> None:
+    a, b = (984_000.0, 200_000.0), (987_000.0, 204_000.0)
+    df = _heights((*a, 0.0), (*b, 12_000.0), NY_FEET)
+    (flat,) = _distances(_pairs([a], [b], crs=NY_FEET))
+
+    (got,) = _distances(df)
+
+    assert got == pytest.approx(math.hypot(flat, 12_000.0))
+
+
 def test_with_a_crs_the_height_is_added_to_the_geodesic() -> None:
     climb = 10_000.0
     df = _heights((*NEW_YORK, 0.0), (*LONDON, climb), crs=WGS84)

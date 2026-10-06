@@ -27,9 +27,9 @@ fn crs_of_curve(field: &Field) -> PolarsResult<String> {
     geo.metadata.crs()
 }
 
-/// `output_type_func` for [`length_geodesic`]: an `f64` in metres,
+/// `output_type_func` for [`length_geodesic`]: an `f64` in the unit of the CRS,
 /// or a list of them for a multilinestring.
-fn metres(input_fields: &[Field]) -> PolarsResult<Field> {
+fn lengths(input_fields: &[Field]) -> PolarsResult<Field> {
     crs_of_curve(&input_fields[0])?;
     let dtype = match describe(input_fields[0].dtype())?.kind {
         Kind::MultiLineString => DataType::List(Box::new(DataType::Float64)),
@@ -125,7 +125,7 @@ fn multilinestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<L
 }
 
 /// See `length`.
-#[polars_expr(output_type_func=metres)]
+#[polars_expr(output_type_func=lengths)]
 fn length_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let metric = GeodesicMetric::of(&crs_of_curve(&inputs[0].field())?)?;
     let storage = inputs[0].ext()?.storage();

@@ -1,6 +1,7 @@
 """How far apart two points are.
 
-Points that declare a CRS are measured along the ellipsoid, in metres.
+Points that declare a CRS are measured along the ellipsoid, in the unit of the CRS
+(metres for a CRS in longitude/latitude).
 Points without one are measured on the flat plane their coordinates lie in,
 in whatever units those are: for longitude/latitude that is degrees,
 which shrink east-west towards the poles. Declare the CRS to get metres.
@@ -49,7 +50,7 @@ def _both_have_z(a_dtype: GeoArrowType, b_dtype: GeoArrowType) -> bool:
 
 
 def _geodesic_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    """The squared geodesic distance between two points in the same CRS, in metres²."""
+    """The squared geodesic distance between two points in the same CRS, in its unit²."""
     return register_plugin_function(
         plugin_path=LIB,
         args=[a, b],
@@ -106,19 +107,21 @@ def distance(a: IntoExprColumn, b: IntoExprColumn) -> pl.Expr:
     | `a` and `b`         | measured                     | in                  |
     |---------------------|------------------------------|---------------------|
     | no CRS              | in space, by Pythagoras      | coordinate units    |
-    | the same CRS        | along the CRS's ellipsoid    | metres              |
+    | the same CRS        | along the CRS's ellipsoid    | CRS units           |
 
     Without a CRS, longitude/latitude comes out in degrees,
     which are not the same length east-west as north-south.
     With one, the points are taken to the longitude/latitude the CRS is defined on
     (for a projected CRS, the one it projects from; no datum is shifted)
     and measured along the geodesic between them, on that CRS's own ellipsoid.
+    The result is in the unit of the CRS's `x` and `y` (such as US survey feet for EPSG:2263),
+    or in metres when those are degrees.
     Points in different CRSs, or a CRS on only one of them, are refused:
     reproject one onto the other with `to_crs` first.
 
     When both points have a `z`, the difference in height counts too:
     the distance is `sqrt(d² + Δz²)`, with `d` the distance above.
-    With a CRS, `z` is taken to be a height in metres,
+    With a CRS, `z` is taken to be in the same unit as the result,
     and the geodesic is measured at the surface of the ellipsoid
     (a few parts per million short at aircraft heights).
     If only one of the points has a `z`, there is no height difference to count,

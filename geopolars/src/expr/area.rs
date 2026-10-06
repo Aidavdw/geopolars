@@ -31,8 +31,8 @@ fn crs_of(field: &Field) -> PolarsResult<String> {
     geo.metadata.crs()
 }
 
-/// `output_type_func` for [`area_geodesic`]: an `f64`, in metres².
-fn square_metres(input_fields: &[Field]) -> PolarsResult<Field> {
+/// `output_type_func` for [`area_geodesic`]: an `f64`, in the unit of the CRS squared.
+fn areas(input_fields: &[Field]) -> PolarsResult<Field> {
     crs_of(&input_fields[0])?;
     Ok(Field::new(
         input_fields[0].name().clone(),
@@ -77,7 +77,7 @@ fn polygons(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float64Ch
 }
 
 /// See `area`.
-#[polars_expr(output_type_func=square_metres)]
+#[polars_expr(output_type_func=areas)]
 fn area_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let crs = crs_of(&inputs[0].field())?;
     let storage = inputs[0].ext()?.storage();

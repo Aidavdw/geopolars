@@ -1,7 +1,8 @@
 """How long a linestring is.
 
 Measured the same way as `distance`, segment by segment:
-along the ellipsoid in metres for a geometry that declares a CRS,
+along the ellipsoid in the unit of the CRS for a geometry that declares one
+(metres for a CRS in longitude/latitude),
 in coordinate units for one that doesn't, with the height counted when there is a `z`.
 """
 
@@ -40,7 +41,7 @@ def _planar(line: pl.Expr, *, has_z: bool) -> pl.Expr:
 
 
 def _geodesic(column: pl.Expr) -> pl.Expr:
-    """The length along the ellipsoid of the CRS, in metres."""
+    """The length along the ellipsoid of the CRS, in its unit."""
     return register_plugin_function(
         plugin_path=LIB,
         args=[column],
@@ -74,7 +75,7 @@ def length(geometry: IntoExprColumn) -> pl.Expr:
     | in                  | measured                     | in                  |
     |---------------------|------------------------------|---------------------|
     | no CRS              | in space, by Pythagoras      | coordinate units    |
-    | a CRS               | along the CRS's ellipsoid    | metres              |
+    | a CRS               | along the CRS's ellipsoid    | CRS units           |
 
     Every segment is measured as `distance` measures two points, and added up.
     A multilinestring gets the length of each of its parts, in order, as a list;
@@ -83,7 +84,8 @@ def length(geometry: IntoExprColumn) -> pl.Expr:
 
     For a line with a `z`, every segment counts its difference in height too,
     as `distance` does between two points with a `z`
-    (with a CRS, `z` is taken to be a height in metres).
+    (with a CRS, `z` is taken to be in the same unit as the length:
+    that of `x` and `y`, or metres when those are degrees).
     `m` is ignored.
     An empty linestring, or one of a single vertex, has a length of `0.0`.
     A missing geometry has no length.

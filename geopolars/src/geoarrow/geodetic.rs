@@ -11,8 +11,10 @@ use std::ptr;
 use polars::prelude::*;
 use proj_sys::{
     proj_as_projjson, proj_context_create, proj_context_destroy, proj_context_errno,
-    proj_context_errno_string, proj_create, proj_crs_get_geodetic_crs, proj_destroy,
-    proj_ellipsoid_get_parameters, proj_get_ellipsoid, proj_get_type, PJ, PJ_CONTEXT,
+    proj_context_errno_string, proj_create, proj_crs_get_coordinate_system,
+    proj_crs_get_geodetic_crs, proj_crs_get_sub_crs, proj_cs_get_axis_info, proj_cs_get_type,
+    proj_destroy, proj_ellipsoid_get_parameters, proj_get_ellipsoid, proj_get_type, PJ, PJ_CONTEXT,
+    PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL, PJ_TYPE_PJ_TYPE_COMPOUND_CRS,
     PJ_TYPE_PJ_TYPE_GEOGRAPHIC_2D_CRS, PJ_TYPE_PJ_TYPE_GEOGRAPHIC_3D_CRS,
 };
 
@@ -25,7 +27,9 @@ use proj_sys::{
 pub struct GeodeticCrs {
     /// The geographic CRS, as PROJJSON.
     pub definition: String,
-    /// The ellipsoid's equatorial radius, in metres.
+    /// The ellipsoid's equatorial radius, in the unit of the CRS's own `x` and `y`,
+    /// or in metres when those are degrees.
+    /// Everything measured on this ellipsoid comes out in that unit.
     pub semi_major: f64,
     /// The ellipsoid's flattening; `0.0` for a sphere.
     pub flattening: f64,
@@ -43,6 +47,7 @@ impl GeodeticCrs {
         unsafe {
             let parsed = ctx.object(proj_create(ctx.0, c_crs.as_ptr()), crs)?;
             let geodetic = ctx.object(proj_crs_get_geodetic_crs(ctx.0, parsed.0), crs)?;
+            let metres_per_unit = ctx.metres_per_horizontal_unit(&parsed, crs)?;
 
             let kind = proj_get_type(geodetic.0);
             polars_ensure!(
@@ -73,7 +78,8 @@ impl GeodeticCrs {
 
             Ok(Self {
                 definition,
-                semi_major,
+                // PROJ gives it in metres.
+                semi_major: semi_major / metres_per_unit,
                 // PROJ gives an inverse flattening of 0 for a sphere.
                 flattening: if inverse_flattening == 0.0 {
                     0.0
@@ -103,6 +109,41 @@ impl Context {
             return Err(self.error(crs));
         }
         Ok(Object(pj, PhantomData))
+    }
+
+    /// How many metres one unit of `crs`'s `x` and `y` is, `1.0` if they are angles.
+    ///
+    /// # Safety
+    /// `crs` must be a CRS created in this context.
+    unsafe fn metres_per_horizontal_unit(&self, crs: &Object<'_>, name: &str) -> PolarsResult<f64> {
+        // A compound CRS (horizontal + vertical) puts `x` and `y` in its first part.
+        let horizontal = if proj_get_type(crs.0) == PJ_TYPE_PJ_TYPE_COMPOUND_CRS {
+            Some(self.object(proj_crs_get_sub_crs(self.0, crs.0, 0), name)?)
+        } else {
+            None
+        };
+        let horizontal = horizontal.as_ref().unwrap_or(crs);
+        let cs = self.object(proj_crs_get_coordinate_system(self.0, horizontal.0), name)?;
+        if proj_cs_get_type(self.0, cs.0) == PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL {
+            return Ok(1.0);
+        }
+        let mut factor = 0.0;
+        let ok = proj_cs_get_axis_info(
+            self.0,
+            cs.0,
+            0,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut factor,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+        );
+        if ok == 0 {
+            return Err(self.error(name));
+        }
+        Ok(factor)
     }
 
     /// What PROJ last reported going wrong in this context.
@@ -160,6 +201,31 @@ mod tests {
         assert_eq!(rd.semi_major, 6_377_397.155);
         assert!((rd.flattening - 1.0 / 299.152_812_8).abs() < 1e-12);
         assert!(rd.definition.contains("Amersfoort"), "{}", rd.definition);
+    }
+
+    #[test]
+    fn the_ellipsoid_is_in_the_unit_of_x_and_y() {
+        // GRS 1980, which NAD83 lies on, in US survey feet.
+        let grs80_in_feet = 6_378_137.0 * 3937.0 / 1200.0;
+        // New York Long Island, in US survey feet.
+        let ny = GeodeticCrs::of("EPSG:2263").unwrap();
+        assert!(
+            (ny.semi_major - grs80_in_feet).abs() < 1e-6,
+            "{}",
+            ny.semi_major
+        );
+        // The same, with NAVD88 heights in US survey feet on top.
+        let compound = GeodeticCrs::of("EPSG:2263+6360").unwrap();
+        assert!(
+            (compound.semi_major - grs80_in_feet).abs() < 1e-6,
+            "{}",
+            compound.semi_major
+        );
+        // Its own longitude/latitude: degrees, so metres.
+        assert_eq!(
+            GeodeticCrs::of("EPSG:4269").unwrap().semi_major,
+            6_378_137.0
+        );
     }
 
     #[test]
