@@ -105,30 +105,3 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     """
     return on_geometry(geometry, _area)
 
-
-def _area_rsgeo(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    """The area of the geometry"""
-    # rsgeo only measures on the plane, or on WGS 84 alone.
-    if geometry._declares_crs():
-        return _geodesic(column)
-    return register_plugin_function(
-        plugin_path=LIB,
-        args=[column],
-        function_name="area_rsgeo",
-        is_elementwise=True,
-    )
-
-
-def area_rsgeo(geometry: IntoExprColumn) -> pl.Expr:
-    """The area a geometry encloses, as an `f64`, computed by the `geo` crate.
-
-    Gives the same answers as `area`, which is written in plain Polars expressions;
-    see there for what counts as an area. The two sit side by side so they can be
-    compared, for correctness and for speed.
-    With a CRS, both measure along the ellipsoid in the same kernel.
-
-    ```python
-    df.select(geo.area_rsgeo("parcel"))
-    ```
-    """
-    return on_geometry(geometry, _area_rsgeo)

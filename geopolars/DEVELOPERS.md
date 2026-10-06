@@ -82,7 +82,7 @@ expr (namespaces) →  geo (functional) →  datatypes.
 ```
 
 On the Rust side, `src/expr/` mirrors `geo/` module by module (`area.rs`, `affine.rs`, `crs.rs`, ...),
-and `src/geoarrow/` is the shared glue: dtypes, dispatch, and the conversion to `rsgeo`.
+and `src/geoarrow/` is the shared glue: dtypes, dispatch, and reading the Arrow storage in a kernel.
 
 #### Type checker
 
@@ -141,7 +141,6 @@ gives very fast implementations for many geo algorithms,
 but their data encoding is not fully compatible with ours. We can use their algorithms,
 but we incur at least one allocation and copy pass for every item processed this way
 due to data conversion.
-Example: area calculation.
 In addition, rsgeo has a couple of limitations:
 
 - it only supports 2D operations

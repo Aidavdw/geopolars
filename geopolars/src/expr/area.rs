@@ -1,44 +1,14 @@
-//! The area a geometry encloses:
-//! - on the plane, computed by `rsgeo`,
-//! - along the ellipsoid, for geometries that declare a CRS.
+//! The area a geometry encloses along the ellipsoid, for geometries that declare a CRS.
 //!
-//! Planar areas are also written in plain Polars expressions, on the Python side.
+//! Planar areas are written in plain Polars expressions instead, on the Python side.
 
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
-use rsgeo::Area;
 
 use super::distance::GeodesicMetric;
-use crate::geoarrow::to_rsgeo::{downcast, Coords};
-use crate::geoarrow::{describe, to_rsgeo, Kind};
-
-// TODO: Move this up into a shareable thing?
-/// `output_type_func` for an operation that gives one `f64` per geometry.
-fn float_output(input_fields: &[Field]) -> PolarsResult<Field> {
-    let field = &input_fields[0];
-    describe(field.dtype())?;
-    Ok(Field::new(field.name().clone(), DataType::Float64))
-}
-
-/// See `area_rsgeo`.
-#[polars_expr(output_type_func=float_output)]
-fn area_rsgeo(inputs: &[Series]) -> PolarsResult<Series> {
-    let geo = describe(inputs[0].dtype())?;
-    let storage = inputs[0].ext()?.storage();
-    let name = inputs[0].name().clone();
-
-    let out = match geo.kind {
-        Kind::Polygon => Float64Chunked::from_iter_options(
-            name,
-            to_rsgeo::polygons(storage)?.map(|polygon| polygon.map(|p| p.unsigned_area())),
-        ),
-        Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString => {
-            nothing_enclosed(storage)
-        }
-    };
-    Ok(out.into_series())
-}
+use crate::geoarrow::storage::{downcast, CoordsView};
+use crate::geoarrow::{describe, Kind};
 
 /// `0.0` for every geometry that is there, for kinds that cannot enclose anything.
 fn nothing_enclosed(storage: &Series) -> Float64Chunked {
@@ -76,7 +46,7 @@ fn polygons(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float64Ch
     let mut out = Vec::with_capacity(storage.len());
     for chunk in storage.list()?.downcast_iter() {
         let rings: &ListArray<i64> = downcast(chunk.values().as_ref(), "a list of rings")?;
-        let coords = Coords::new(rings.values().as_ref())?;
+        let coords = CoordsView::new(rings.values().as_ref())?;
         let ring_area = |ring: usize| {
             if rings.is_null(ring) {
                 return Ok(None);

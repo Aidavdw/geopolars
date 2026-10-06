@@ -39,10 +39,9 @@ def _rings(
 Area = Callable[[str | pl.Expr | pl.Series], pl.Expr]
 
 
-@pytest.fixture(params=[geo.area, geo.area_rsgeo], ids=["expr", "rsgeo"])
-def area(request: pytest.FixtureRequest) -> Area:
-    """Every test runs against both implementations, which have to agree."""
-    return request.param  # type: ignore[no-any-return]
+@pytest.fixture
+def area() -> Area:
+    return geo.area
 
 
 def _areas(area: Area, df: pl.DataFrame, name: str = "polygon") -> list[float | None]:
@@ -211,17 +210,6 @@ def test_rejects_a_non_geometry_while_resolving_the_schema(area: Area) -> None:
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         lf.collect_schema()
-
-
-def test_both_implementations_agree_row_for_row(
-    ring_coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    df = dimension.polygons(ring_coords)
-
-    assert_series_equal(
-        df.select(geo.area_rsgeo("polygon")).to_series(),
-        df.select(geo.area("polygon")).to_series(),
-    )
 
 
 WGS84 = "EPSG:4326"

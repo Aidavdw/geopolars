@@ -10,7 +10,7 @@ mod dimension;
 mod geo;
 pub mod geodetic;
 mod kind;
-pub mod to_rsgeo;
+pub mod storage;
 
 pub use dimension::GeoDimension;
 pub use geo::Geo;

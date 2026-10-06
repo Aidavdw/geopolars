@@ -9,7 +9,7 @@ use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
 use super::distance::GeodesicMetric;
-use crate::geoarrow::to_rsgeo::{downcast, Coords};
+use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
 
 /// The CRS of a column that has a length. Type operation only.
@@ -41,14 +41,14 @@ fn metres(input_fields: &[Field]) -> PolarsResult<Field> {
 /// One chunk of linestrings, each a list of coordinates.
 struct Lines<'a> {
     lines: &'a ListArray<i64>,
-    coords: Coords<'a>,
+    coords: CoordsView<'a>,
     /// The height of every coordinate, if the line has one.
     z: Option<&'a PrimitiveArray<f64>>,
 }
 
 impl<'a> Lines<'a> {
     fn new(lines: &'a ListArray<i64>) -> PolarsResult<Self> {
-        let coords = Coords::new(lines.values().as_ref())?;
+        let coords = CoordsView::new(lines.values().as_ref())?;
         let z = heights(lines.values().as_ref())?;
         Ok(Self { lines, coords, z })
     }

@@ -3,7 +3,7 @@ Everything in the 'geo' namespace forwards to here.
 """
 
 from geopolars.geo.affine import translate
-from geopolars.geo.area import area, area_rsgeo
+from geopolars.geo.area import area
 from geopolars.geo.construct import (
     linestring,
     linestring_from_columns,
@@ -27,7 +27,6 @@ from geopolars.geo.mean_coordinate import mean_coordinate
 
 __all__ = [
     "area",
-    "area_rsgeo",
     "distance",
     "distance_squared",
     "length",
