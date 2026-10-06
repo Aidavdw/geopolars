@@ -65,8 +65,7 @@ def _length(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     has_z = _has_z(geometry)
     if isinstance(geometry, GeoLineString):
         return _planar(storage, has_z=has_z)
-    # As long as its parts together.
-    return storage.list.eval(_planar(pl.element(), has_z=has_z)).list.sum()
+    return storage.list.eval(_planar(pl.element(), has_z=has_z))
 
 
 def length(geometry: IntoExprColumn) -> pl.Expr:
@@ -78,7 +77,8 @@ def length(geometry: IntoExprColumn) -> pl.Expr:
     | a CRS               | along the CRS's ellipsoid    | metres              |
 
     Every segment is measured as `distance` measures two points, and added up.
-    A multilinestring is as long as its parts together.
+    A multilinestring gets the length of each of its parts, in order, as a list;
+    sum it with `.list.sum()` for the length of the whole.
     Other geometries are refused.
 
     For a line with a `z`, every segment counts its difference in height too,

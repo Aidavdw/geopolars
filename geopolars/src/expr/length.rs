@@ -4,6 +4,8 @@
 
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
+use polars_arrow::datatypes::ArrowDataType;
+use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
 use super::distance::GeodesicMetric;
@@ -25,13 +27,15 @@ fn crs_of_curve(field: &Field) -> PolarsResult<String> {
     geo.metadata.crs()
 }
 
-/// `output_type_func` for [`length_geodesic`]: an `f64`, in metres.
+/// `output_type_func` for [`length_geodesic`]: an `f64` in metres,
+/// or a list of them for a multilinestring.
 fn metres(input_fields: &[Field]) -> PolarsResult<Field> {
     crs_of_curve(&input_fields[0])?;
-    Ok(Field::new(
-        input_fields[0].name().clone(),
-        DataType::Float64,
-    ))
+    let dtype = match describe(input_fields[0].dtype())?.kind {
+        Kind::MultiLineString => DataType::List(Box::new(DataType::Float64)),
+        _ => DataType::Float64,
+    };
+    Ok(Field::new(input_fields[0].name().clone(), dtype))
 }
 
 /// One chunk of linestrings, each a list of coordinates.
@@ -91,43 +95,48 @@ fn linestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float6
     ))
 }
 
-/// The sum of each multilinestring's parts.
-/// A missing part makes the whole missing, as GeoArrow has no nulls inside a geometry.
-fn multilinestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float64Chunked> {
-    let mut out = Vec::with_capacity(storage.len());
-    for chunk in storage.list()?.downcast_iter() {
-        let lines = Lines::new(downcast(chunk.values().as_ref(), "a list of linestrings")?)?;
-        for i in 0..chunk.len() {
-            if chunk.is_null(i) {
-                out.push(None);
-                continue;
-            }
-            let (start, end) = chunk.offsets().start_end(i);
-            // Stops at the first error, or the first missing part.
-            let total: PolarsResult<Option<f64>> =
-                (start..end).map(|line| lines.length(line, metric)).sum();
-            out.push(total?);
-        }
-    }
-    Ok(Float64Chunked::from_iter_options(
-        storage.name().clone(),
-        out.into_iter(),
-    ))
+/// The length of each part of every multilinestring, in order.
+/// A missing part (or one with a missing coordinate) gets a missing length,
+/// without taking its siblings with it.
+fn multilinestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<ListChunked> {
+    let name = storage.name().clone();
+    let chunks = storage
+        .list()?
+        .downcast_iter()
+        .map(|chunk| -> PolarsResult<_> {
+            let lines = Lines::new(downcast(chunk.values().as_ref(), "a list of linestrings")?)?;
+            // Only the parts this chunk points at: it may be a slice of a larger one.
+            let (first, last) = (
+                *chunk.offsets().first() as usize,
+                *chunk.offsets().last() as usize,
+            );
+            let parts = (first..last)
+                .map(|line| lines.length(line, metric))
+                .collect::<PolarsResult<PrimitiveArray<f64>>>()?;
+            let offsets = Offsets::try_from_lengths(chunk.offsets().lengths())?;
+            Ok(ListArray::<i64>::new(
+                ListArray::<i64>::default_datatype(ArrowDataType::Float64),
+                offsets.into(),
+                parts.boxed(),
+                chunk.validity().cloned(),
+            ))
+        });
+    ListChunked::try_from_chunk_iter(name, chunks)
 }
 
 /// The length of every linestring along its CRS's ellipsoid, in metres.
-/// A multilinestring is as long as its parts together.
+/// A multilinestring gets the length of each of its parts, as a list.
 #[polars_expr(output_type_func=metres)]
 fn length_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let metric = GeodesicMetric::of(&crs_of_curve(&inputs[0].field())?)?;
     let storage = inputs[0].ext()?.storage();
 
     let out = match describe(inputs[0].dtype())?.kind {
-        Kind::LineString => linestrings(storage, &metric)?,
-        Kind::MultiLineString => multilinestrings(storage, &metric)?,
+        Kind::LineString => linestrings(storage, &metric)?.into_series(),
+        Kind::MultiLineString => multilinestrings(storage, &metric)?.into_series(),
         kind @ (Kind::Point | Kind::Polygon | Kind::MultiPoint) => polars_bail!(
             SchemaMismatch: "a `{}` has no length", kind.name()
         ),
     };
-    Ok(out.with_name(inputs[0].name().clone()).into_series())
+    Ok(out.with_name(inputs[0].name().clone()))
 }

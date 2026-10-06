@@ -45,7 +45,7 @@ def _multilines(
     return pl.DataFrame(storage.ext.to(MultiLineStringXY(crs=crs)))
 
 
-def _lengths(df: pl.DataFrame) -> list[float | None]:
+def _lengths(df: pl.DataFrame) -> list:
     (name,) = df.columns
     return df.select(geo.length(name)).to_series().to_list()
 
@@ -172,25 +172,37 @@ def test_a_projected_crs_is_measured_on_its_own_ellipsoid() -> None:
 
 
 @pytest.mark.parametrize("crs", [None, UNIT_SPHERE], ids=["planar", "geodesic"])
-def test_a_multilinestring_is_as_long_as_its_parts(crs: str | None) -> None:
+def test_a_multilinestring_lists_the_length_of_each_part(crs: str | None) -> None:
     parts: list[Line] = [
         [(0.0, 0.0), (30.0, 0.0)],
         [(0.0, 10.0), (0.0, 20.0), (0.0, 50.0)],
         [],
     ]
-    multi = _multilines([parts], crs=crs)
-    separate = _lines(parts, crs=crs)
+    multi = _multilines([parts, parts[1:]], crs=crs)
+    separate = _lengths(_lines(parts, crs=crs))
 
-    (got,) = _lengths(multi)
+    got = _lengths(multi)
 
-    assert got == pytest.approx(sum(_lengths(separate)))  # type: ignore[arg-type]
+    assert got == [pytest.approx(separate), pytest.approx(separate[1:])]
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_a_multilinestring_without_parts_has_no_length(crs: str | None) -> None:
+def test_a_multilinestring_without_parts_has_no_lengths(crs: str | None) -> None:
     df = _multilines([[], [[]], None], crs=crs)
 
-    assert _lengths(df) == [0.0, 0.0, None]
+    assert _lengths(df) == [[], [0.0], None]
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_a_sliced_multilinestring_keeps_its_own_parts(crs: str | None) -> None:
+    df = _multilines(
+        [[[(0.0, 0.0), (3.0, 4.0)]], [[(0.0, 0.0), (0.0, 1.0)], [(0.0, 0.0)]]],
+        crs=crs,
+    )
+
+    (got,) = _lengths(df.slice(1))
+
+    assert got == pytest.approx(_lengths(df)[1])
 
 
 def test_every_dimension_of_multilinestring_is_measured(
@@ -207,8 +219,9 @@ def test_every_dimension_of_multilinestring_is_measured(
         + math.hypot(2.0, 2.0, climb)
         + math.hypot(2.0, 2.0 * climb)
     )
-    expected = [16.0 + 2.0 + math.sqrt(2.0), last_ring]
-    assert _lengths(df) == pytest.approx(expected)
+    got = _lengths(df)
+    assert got[0] == pytest.approx([16.0, 2.0 + math.sqrt(2.0)])
+    assert got[1] == pytest.approx([last_ring])
 
 
 def test_metadata_without_a_crs_is_still_planar() -> None:
