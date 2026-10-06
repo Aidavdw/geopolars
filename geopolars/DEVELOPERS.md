@@ -173,8 +173,8 @@ the comment says when one without a CRS takes a different tier.
 | `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
-| `x` | 1 | plain `f64`, drops the CRS | - | | - | | - | | - | |
-| `y` | 1 | plain `f64`, drops the CRS | - | | - | | - | | - | |
+| `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` |
+| `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` |
 
 ## Roadmap
 

@@ -11,6 +11,7 @@ import polars as pl
 
 from geopolars.datatypes import GeoPoint
 from geopolars.geo._dispatch import on_geometry
+from geopolars.geo.coordinates import _axis
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
@@ -18,15 +19,6 @@ if TYPE_CHECKING:
 
 # A reduction over the coordinates of one innermost part of a geometry.
 Reduce = Callable[[pl.Expr, bool], pl.Expr]
-
-
-def _axis(values: pl.Expr, layers: int, axis: str) -> pl.Expr:
-    """One axis of the coordinates."""
-    # should keep this element-wise,
-    # so not all geometries are walked at the same time.
-    if layers == 0:
-        return values.struct.field(axis)
-    return values.list.eval(_axis(pl.element(), layers - 1, axis))
 
 
 def _total(part: pl.Expr, rings: bool) -> pl.Expr:

@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GeoPoint
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -15,43 +14,54 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
-def _axis(axis: str) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
-    """Reads one axis off a point's storage."""
+def _axis(values: pl.Expr, layers: int, axis: str) -> pl.Expr:
+    """One axis of the coordinates."""
+    # should keep this element-wise,
+    # so not all geometries are walked at the same time.
+    if layers == 0:
+        return values.struct.field(axis)
+    return values.list.eval(_axis(pl.element(), layers - 1, axis))
+
+
+def _getter(axis: str) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+    """Reads one axis off a geometry's storage, keeping its nesting."""
 
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-        if not isinstance(geometry, GeoPoint):
-            msg = f"`{axis}` is read off a `geoarrow.point` column, got: {geometry!r}"
-            raise TypeError(msg)
-        return column.ext.storage().struct.field(axis)
+        return _axis(column.ext.storage(), geometry._nesting, axis)
 
     return build
 
 
 def x(geometry: IntoExprColumn) -> pl.Expr:
-    """The `x` coordinate of a point, as an `f64`.
+    """The `x` coordinates of a geometry, nested as the geometry is.
 
-    The value is returned as it is stored, in the unit of the CRS.
+    | in                  | out                    |
+    |---------------------|------------------------|
+    | `Point`             | `f64`                  |
+    | `LineString`        | `list[f64]`            |
+    | `MultiPoint`        | `list[f64]`            |
+    | `Polygon`           | `list[list[f64]]`      |
+    | `MultiLineString`   | `list[list[f64]]`      |
+
+    The values are returned as they are stored, in the unit of the CRS.
     The CRS itself is not carried over: the result is a plain float column.
-    Other geometries are refused.
-    A missing point has no `x`.
+    Every stored coordinate is included, so a polygon's rings keep their closing coordinate.
+    A missing geometry has no `x`; an empty one gives an empty list.
 
     ```python
     df.select(geo.x("location"))
     ```
     """
-    return on_geometry(geometry, _axis("x"))
+    return on_geometry(geometry, _getter("x"))
 
 
 def y(geometry: IntoExprColumn) -> pl.Expr:
-    """The `y` coordinate of a point, as an `f64`.
+    """The `y` coordinates of a geometry, nested as the geometry is.
 
-    The value is returned as it is stored, in the unit of the CRS.
-    The CRS itself is not carried over: the result is a plain float column.
-    Other geometries are refused.
-    A missing point has no `y`.
+    Works exactly like `x`, for the `y` axis.
 
     ```python
     df.select(geo.y("location"))
     ```
     """
-    return on_geometry(geometry, _axis("y"))
+    return on_geometry(geometry, _getter("y"))
