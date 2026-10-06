@@ -36,12 +36,8 @@ print(f"We start with one row per vertex: {df}")
 # linestring is made of.
 lines = df.group_by("route", maintain_order=True).agg(
     xy=geo.linestring_from_vertices(geo.point("lon", "lat").implode()),
-    xyz=geo.linestring_from_vertices(
-        geo.point("lon", "lat", z="elevation").implode()
-    ),
-    xym=geo.linestring_from_vertices(
-        geo.point("lon", "lat", m="distance").implode()
-    ),
+    xyz=geo.linestring_from_vertices(geo.point("lon", "lat", z="elevation").implode()),
+    xym=geo.linestring_from_vertices(geo.point("lon", "lat", m="distance").implode()),
     xyzm=geo.linestring_from_vertices(
         geo.point("lon", "lat", z="elevation", m="distance").implode()
     ),

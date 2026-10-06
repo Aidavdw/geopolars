@@ -115,9 +115,13 @@ print("  the same lines:", direct.equals(lines), "\n")
 print("Declaring a different CRS than the vertices already have is refused:")
 print("that would put every vertex somewhere else without moving it.")
 try:
-    lines_lf = vertices.lazy().group_by("route").agg(
-        geo.linestring_from_vertices(
-            geo.point("lon", "lat", crs=WGS84).implode(), crs="EPSG:28992"
+    lines_lf = (
+        vertices.lazy()
+        .group_by("route")
+        .agg(
+            geo.linestring_from_vertices(
+                geo.point("lon", "lat", crs=WGS84).implode(), crs="EPSG:28992"
+            )
         )
     )
     lines_lf.collect_schema()
