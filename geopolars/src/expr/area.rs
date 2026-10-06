@@ -21,8 +21,7 @@ fn float_output(input_fields: &[Field]) -> PolarsResult<Field> {
     Ok(Field::new(field.name().clone(), DataType::Float64))
 }
 
-/// The planar area of every geometry. Only a polygon encloses anything.
-/// Everything else is `0.0`, and a missing geometry has no area.
+/// See `area_rsgeo`.
 #[polars_expr(output_type_func=float_output)]
 fn area_rsgeo(inputs: &[Series]) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
@@ -107,9 +106,7 @@ fn polygons(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float64Ch
     ))
 }
 
-/// The area of every geometry along its CRS's ellipsoid, in metres².
-/// Only a polygon encloses anything; `z` and `m` are left out.
-/// Everything else is `0.0`, and a missing geometry has no area.
+/// See `area`.
 #[polars_expr(output_type_func=square_metres)]
 fn area_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let crs = crs_of(&inputs[0].field())?;

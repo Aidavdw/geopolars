@@ -124,8 +124,7 @@ fn multilinestrings(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<L
     ListChunked::try_from_chunk_iter(name, chunks)
 }
 
-/// The length of every linestring along its CRS's ellipsoid, in metres.
-/// A multilinestring gets the length of each of its parts, as a list.
+/// See `length`.
 #[polars_expr(output_type_func=metres)]
 fn length_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let metric = GeodesicMetric::of(&crs_of_curve(&inputs[0].field())?)?;

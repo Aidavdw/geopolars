@@ -82,7 +82,7 @@ fn reproject(coords: &Series, dim: GeoDimension, proj: &Proj) -> PolarsResult<Se
     Ok(out.into_series())
 }
 
-/// Reproject every coordinate from the CRS the column declares to `to`.
+/// See `to_crs`.
 #[polars_expr(output_type_func_with_kwargs=reprojected)]
 fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;

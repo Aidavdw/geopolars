@@ -8,8 +8,7 @@ mod geoarrow;
 #[global_allocator]
 static ALLOC: PolarsAllocator = PolarsAllocator::new();
 
-/// Parses metadata used as extra `kwargs`.
-/// Used for constructing dtype in Python, keeping stuff on the python and rust side in agreement.
+/// See `GeoArrowType.__init__`.
 #[pyfunction]
 #[pyo3(signature = (*, crs = None))]
 fn extension_metadata(crs: Option<String>) -> PyResult<Option<String>> {
@@ -19,8 +18,7 @@ fn extension_metadata(crs: Option<String>) -> PyResult<Option<String>> {
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
-/// Whether extension metadata names a CRS.
-/// Lets Python pick an implementation at plan time without reading the JSON itself.
+/// See `GeoArrowType._declares_crs`.
 #[pyfunction]
 #[pyo3(signature = (metadata))]
 fn declares_crs(metadata: Option<&str>) -> PyResult<bool> {

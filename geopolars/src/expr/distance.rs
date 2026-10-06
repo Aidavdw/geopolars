@@ -259,11 +259,7 @@ fn pairwise<P: Copy>(
         .collect()
 }
 
-/// The square of the geodesic distance between two points, row by row, in metres².
-/// Either side can be a single point, which is then measured against every row of the other.
-///
-/// When both points have a `z`, it is taken as a height in metres,
-/// and the difference in height is added to the geodesic by Pythagoras.
+/// See `distance_squared`.
 #[polars_expr(output_type_func=squared_metres)]
 fn distance_squared_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let fields = [

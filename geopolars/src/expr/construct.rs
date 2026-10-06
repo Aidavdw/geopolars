@@ -158,35 +158,32 @@ fn gather(parts: &Series, kwargs: &MetadataKwargs, kind: Kind, part: Kind) -> Po
     Ok(only_complete(storage.into_series(), kind.nesting())?.into_extension(geo.instance()))
 }
 
-/// Gather lists of vertices into linestrings.
+/// See `linestring_from_vertices`.
 #[polars_expr(output_type_func_with_kwargs=linestring_type)]
 fn linestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     gather(&inputs[0], &kwargs, Kind::LineString, Kind::Point)
 }
 
-/// Gather lists of rings into polygons.
+/// See `polygon_from_rings`.
 #[polars_expr(output_type_func_with_kwargs=polygon_type)]
 fn polygon(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     gather(&inputs[0], &kwargs, Kind::Polygon, Kind::LineString)
 }
 
-/// Gather lists of points into multipoints.
+/// See `multipoint_from_points`.
 #[polars_expr(output_type_func_with_kwargs=multipoint_type)]
 fn multipoint(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     // Note that this is basically the same as linestring, but just a different [Kind].
     gather(&inputs[0], &kwargs, Kind::MultiPoint, Kind::Point)
 }
 
-/// Gather lists of linestrings into multilinestrings.
-///
-/// See Python: `multilinestring_from_linestrings()`
+/// See `multilinestring_from_linestrings`.
 #[polars_expr(output_type_func_with_kwargs=multilinestring_type)]
 fn multilinestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     gather(&inputs[0], &kwargs, Kind::MultiLineString, Kind::LineString)
 }
 
-/// Null out every geometry that is missing a part, or a coordinate of one.
-/// See python doc
+/// See `validate`.
 #[polars_expr(output_type_func=same_geometry)]
 fn validate(inputs: &[Series]) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
@@ -317,25 +314,25 @@ fn zip(inputs: &[Series], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<S
     Ok(only_complete(storage, kind.nesting())?.into_extension(geo.instance()))
 }
 
-/// Zip lists of coordinates into linestrings.
+/// See `linestring_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=linestring_coords_type)]
 fn linestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, Kind::LineString)
 }
 
-/// Zip lists of lists of coordinates into polygons.
+/// See `polygon_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=polygon_coords_type)]
 fn polygon_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, Kind::Polygon)
 }
 
-/// Zip lists of coordinates into multipoints.
+/// See `multipoint_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=multipoint_coords_type)]
 fn multipoint_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, Kind::MultiPoint)
 }
 
-/// Zip lists of lists of coordinates into multilinestrings.
+/// See `multilinestring_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=multilinestring_coords_type)]
 fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, Kind::MultiLineString)

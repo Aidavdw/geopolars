@@ -46,7 +46,7 @@ fn shift(coords: &Series, dim: GeoDimension, kwargs: &TranslateKwargs) -> Polars
     Ok(out.into_series())
 }
 
-/// Shift every coordinate by a constant offset.
+/// See `translate`.
 #[polars_expr(output_type_func=same_geometry)]
 fn translate(inputs: &[Series], kwargs: TranslateKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
