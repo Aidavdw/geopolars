@@ -14,6 +14,7 @@ from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.linestring import GeoLineString
 from geopolars.datatypes.multilinestring import GeoMultiLineString
 from geopolars.datatypes.multipoint import GeoMultiPoint
+from geopolars.datatypes.multipolygon import GeoMultiPolygon
 from geopolars.datatypes.point import GeoPoint
 from geopolars.datatypes.polygon import GeoPolygon
 
@@ -24,6 +25,7 @@ GEOMETRIES: tuple[type[GeoArrowType], ...] = (
     GeoPolygon,
     GeoMultiPoint,
     GeoMultiLineString,
+    GeoMultiPolygon,
 )
 
 for _geometry in GEOMETRIES:

@@ -13,6 +13,7 @@ from geopolars.datatypes import (
     LineStringXY,
     MultiLineStringXY,
     MultiPointXY,
+    MultiPolygonXY,
     PointXY,
     PolygonXY,
 )
@@ -41,6 +42,15 @@ def _lines(crs: str | None = None) -> pl.DataFrame:
         pl.DataFrame({"x": [0.0, 1.0, 0.0, 0.0], "y": [0.0, 0.0, 1.0, 0.0]})
         .select(line=geo.linestring(geo.point("x", "y", crs=crs).implode()))
         .select(pl.col("line").repeat_by(2))
+    )
+
+
+def _polygons(crs: str | None = None) -> pl.DataFrame:
+    """One list of two polygons per row, ready to be gathered."""
+    return (
+        _lines(crs)
+        .select(polygon=geo.polygon("line"))
+        .select(pl.col("polygon").repeat_by(2))
     )
 
 
@@ -79,8 +89,9 @@ def test_point_declares_its_crs(coords: pl.DataFrame, dimension: Dimension) -> N
         (geo.multipoint_from_columns, 1, MultiPointXY),
         (geo.polygon_from_columns, 2, PolygonXY),
         (geo.multilinestring_from_columns, 2, MultiLineStringXY),
+        (geo.multipolygon_from_columns, 3, MultiPolygonXY),
     ],
-    ids=["linestring", "multipoint", "polygon", "multilinestring"],
+    ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
 def test_coordinate_columns_declare_a_crs(
     ring_coords: pl.DataFrame,
@@ -90,8 +101,10 @@ def test_coordinate_columns_declare_a_crs(
 ) -> None:
     grouped = ring_coords.group_by("polygon", "ring", maintain_order=True)
     nested = grouped.agg("x", "y")
-    if nesting == 2:
+    if nesting >= 2:
         nested = nested.group_by("polygon", maintain_order=True).agg("x", "y")
+    if nesting == 3:
+        nested = nested.select(pl.col("x", "y").implode())
 
     df = nested.select(geometry=constructor("x", "y", crs=WGS84))
 
@@ -105,8 +118,9 @@ def test_coordinate_columns_declare_a_crs(
         (geo.multipoint_from_points, _points, MultiPointXY),
         (geo.polygon_from_rings, _lines, PolygonXY),
         (geo.multilinestring_from_linestrings, _lines, MultiLineStringXY),
+        (geo.multipolygon_from_polygons, _polygons, MultiPolygonXY),
     ],
-    ids=["linestring", "multipoint", "polygon", "multilinestring"],
+    ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
 class TestGatheringParts:
     def test_parts_without_a_crs_get_one(

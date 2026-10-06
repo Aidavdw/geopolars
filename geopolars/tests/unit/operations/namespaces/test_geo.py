@@ -19,6 +19,7 @@ from tests.unit.conftest import (
     line_coordinates,
     multilinestring_coordinates,
     multipoint_coordinates,
+    multipolygon_coordinates,
     ring_coordinates,
 )
 
@@ -289,6 +290,53 @@ def test_translate_keeps_empty_and_missing_polygons(dimension: Dimension) -> Non
     assert_frame_equal(out, df)
 
 
+def test_translate_shifts_every_vertex_of_every_polygon(
+    multipolygon_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    """A multipolygon moves as a whole, and keeps its polygons and rings."""
+    df = dimension.multipolygons(multipolygon_coords)
+    out = df.select(
+        geo.translate("multipolygon", dx=1.5, dy=-2.0).alias("multipolygon")
+    )
+    polygons = pl.col("multipolygon").ext.storage()
+    rings = polygons.explode(empty_as_null=False)
+
+    assert out.schema["multipolygon"] == dimension.multipolygon_dtype()
+    assert_frame_equal(
+        multipolygon_coordinates(out),
+        multipolygon_coordinates(df).with_columns(pl.col("x") + 1.5, pl.col("y") - 2.0),
+    )
+    for structure in (polygons, rings, rings.explode(empty_as_null=False)):
+        assert_frame_equal(
+            out.select(structure.list.len()), df.select(structure.list.len())
+        )
+
+
+def test_translate_rejects_dz_on_a_multipolygon_with_no_z(
+    multipolygon_coords: pl.DataFrame,
+) -> None:
+    df = XY.multipolygons(multipolygon_coords)
+
+    with pytest.raises(ComputeError, match="cannot translate by dz"):
+        df.select(geo.translate("multipolygon", dx=0.0, dy=0.0, dz=1.0))
+
+
+def test_translate_keeps_empty_and_missing_multipolygons(
+    dimension: Dimension,
+) -> None:
+    df = pl.DataFrame(
+        {"polygons": [[], [[]], [[[]]], None]},
+        schema={
+            "polygons": pl.List(
+                pl.List(pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64))))
+            )
+        },
+    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    out = df.select(geo.translate("multipolygon", dx=1.0, dy=1.0).alias("multipolygon"))
+
+    assert_frame_equal(out, df)
+
+
 def test_namespace_matches_the_functional_api(coords: pl.DataFrame) -> None:
     df = coords.select(XYZ.point())
 
@@ -351,6 +399,28 @@ def test_multilinestring_namespace_matches_the_functional_api(
     assert_frame_equal(
         lines.select(gpl.col("line").geo.multilinestring().alias("multilinestring")),
         lines.select(geo.multilinestring("line").alias("multilinestring")),
+    )
+
+
+def test_multipolygon_namespace_matches_the_functional_api(
+    multipolygon_coords: pl.DataFrame,
+) -> None:
+    polygons = (
+        multipolygon_coords.group_by(
+            "multipolygon", "polygon", "ring", maintain_order=True
+        )
+        .agg(XYZ.point())
+        .select("multipolygon", "polygon", XYZ.linestring())
+        .group_by("multipolygon", "polygon", maintain_order=True)
+        .agg("line")
+        .select("multipolygon", XYZ.polygon())
+        .group_by("multipolygon", maintain_order=True)
+        .agg("polygon")
+    )
+
+    assert_frame_equal(
+        polygons.select(gpl.col("polygon").geo.multipolygon().alias("multipolygon")),
+        polygons.select(geo.multipolygon("polygon").alias("multipolygon")),
     )
 
 

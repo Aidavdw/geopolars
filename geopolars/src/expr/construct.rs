@@ -98,6 +98,10 @@ fn multilinestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> Polar
     )
 }
 
+fn multipolygon_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    gathered_type(input_fields, &kwargs, Kind::MultiPolygon, Kind::Polygon)
+}
+
 /// Elementwise check:
 /// is this geometry there in full, down to the last coordinate?
 ///
@@ -183,6 +187,12 @@ fn multilinestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Se
     gather(&inputs[0], &kwargs, Kind::MultiLineString, Kind::LineString)
 }
 
+/// See `multipolygon_from_polygons`.
+#[polars_expr(output_type_func_with_kwargs=multipolygon_type)]
+fn multipolygon(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    gather(&inputs[0], &kwargs, Kind::MultiPolygon, Kind::Polygon)
+}
+
 /// See `validate`.
 #[polars_expr(output_type_func=same_geometry)]
 fn validate(inputs: &[Series]) -> PolarsResult<Series> {
@@ -252,6 +262,10 @@ fn multilinestring_coords_type(
     kwargs: MetadataKwargs,
 ) -> PolarsResult<Field> {
     zipped_type(input_fields, &kwargs, Kind::MultiLineString)
+}
+
+fn multipolygon_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
+    zipped_type(input_fields, &kwargs, Kind::MultiPolygon)
 }
 
 /// Interleave columns that each nest their coordinate `nesting` `List` layers
@@ -336,4 +350,10 @@ fn multipoint_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<
 #[polars_expr(output_type_func_with_kwargs=multilinestring_coords_type)]
 fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, Kind::MultiLineString)
+}
+
+/// See `multipolygon_from_columns`.
+#[polars_expr(output_type_func_with_kwargs=multipolygon_coords_type)]
+fn multipolygon_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
+    zip(inputs, &kwargs, Kind::MultiPolygon)
 }

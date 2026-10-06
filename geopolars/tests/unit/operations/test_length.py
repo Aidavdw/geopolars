@@ -247,17 +247,19 @@ def test_metadata_without_a_crs_is_still_planar() -> None:
     assert _lengths(df) == [5.0]
 
 
-@pytest.mark.parametrize("geometry", ["point", "polygon", "multipoint"])
+@pytest.mark.parametrize("geometry", ["point", "polygon", "multipoint", "multipolygon"])
 def test_other_geometries_are_refused_while_resolving_the_schema(
     geometry: str,
     coords: pl.DataFrame,
     line_coords: pl.DataFrame,
     ring_coords: pl.DataFrame,
+    multipolygon_coords: pl.DataFrame,
 ) -> None:
     df = {
         "point": lambda: coords.select(XY.point()),
         "polygon": lambda: XY.polygons(ring_coords),
         "multipoint": lambda: XY.multipoints(line_coords),
+        "multipolygon": lambda: XY.multipolygons(multipolygon_coords),
     }[geometry]()
 
     lf = df.lazy().select(geo.length(geometry))

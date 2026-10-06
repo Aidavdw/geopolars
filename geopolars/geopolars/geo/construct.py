@@ -429,3 +429,80 @@ def polygon(
         return polygon_from_rings(x, crs=crs)
 
     return polygon_from_columns(x, y, z, m, crs=crs)
+
+
+def multipolygon_from_polygons(
+    polygons: IntoExprColumn, *, crs: str | None = None
+) -> pl.Expr:
+    """Build a `geoarrow.multipolygon` column out of lists of polygons.
+    Takes either a list of polygons, or bare lists of rings.
+
+    ```python
+    (
+        df.group_by("country", "island", "ring", maintain_order=True)
+        .agg(
+            geo.linestring_from_vertices(
+                geo.point("lon", "lat").implode()
+            ).alias("ring")
+        )
+        .group_by("country", "island", maintain_order=True)
+        .agg(geo.polygon_from_rings(pl.col("ring").implode()).alias("island"))
+        .group_by("country", maintain_order=True)
+        .agg(
+            geo.multipolygon_from_polygons(
+                pl.col("island").implode()
+            ).alias("country")
+        )
+    )
+    ```
+
+    As for `polygon_from_rings`, every ring has to be closed already.
+    """
+    return _gather("multipolygon", polygons, crs)
+
+
+def multipolygon_from_columns(
+    x: IntoExprColumn,
+    y: IntoExprColumn,
+    z: IntoExprColumn | None = None,
+    m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
+) -> pl.Expr:
+    """Build a `geoarrow.multipolygon` column from one column per axis.
+    Each is a `List[List[List[Float64]]]`: polygons, then rings, then coordinates.
+
+    ```python
+    df.select(geo.multipolygon_from_columns("lon", "lat"))
+    ```
+
+    The first ring of every polygon is its exterior ring,
+    and the rest are its holes.
+    """
+    return _from_columns("multipolygon_coords", x, y, z, m, crs)
+
+
+def multipolygon(
+    x: IntoExprColumn,
+    y: IntoExprColumn | None = None,
+    z: IntoExprColumn | None = None,
+    m: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
+) -> pl.Expr:
+    """Build a `geoarrow.multipolygon` column, from polygons or from coordinates.
+    Dispatches to either:
+    - [`multipolygon_from_polygons`][geopolars.geo.multipolygon_from_polygons]
+    - [`multipolygon_from_columns`][geopolars.geo.multipolygon_from_columns]
+    """
+    if y is None:
+        if z is not None or m is not None:
+            msg = (
+                "multipolygon() got a z or m coordinate without a y "
+                "coordinate; pass x and y as columns, or call "
+                "multipolygon_from_polygons()"
+            )
+            raise TypeError(msg)
+        return multipolygon_from_polygons(x, crs=crs)
+
+    return multipolygon_from_columns(x, y, z, m, crs=crs)

@@ -11,6 +11,7 @@ from geopolars.datatypes import (
     GeoLineString,
     GeoMultiLineString,
     GeoMultiPoint,
+    GeoMultiPolygon,
     GeoPoint,
     GeoPolygon,
     LineStringXY,
@@ -25,6 +26,10 @@ from geopolars.datatypes import (
     MultiPointXYM,
     MultiPointXYZ,
     MultiPointXYZM,
+    MultiPolygonXY,
+    MultiPolygonXYM,
+    MultiPolygonXYZ,
+    MultiPolygonXYZM,
     PointXY,
     PointXYM,
     PointXYZ,
@@ -53,6 +58,7 @@ class Dimension(NamedTuple):
     polygon_dtype: type[GeoPolygon]
     multipoint_dtype: type[GeoMultiPoint]
     multilinestring_dtype: type[GeoMultiLineString]
+    multipolygon_dtype: type[GeoMultiPolygon]
     coords: tuple[str, ...]
 
     @property
@@ -91,6 +97,10 @@ class Dimension(NamedTuple):
     def multilinestring(self) -> pl.Expr:
         """Build a multilinestring of this dimension from a `line` list column."""
         return geo.multilinestring("line").alias("multilinestring")
+
+    def multipolygon(self) -> pl.Expr:
+        """Build a multipolygon of this dimension from a `polygon` list column."""
+        return geo.multipolygon("polygon").alias("multipolygon")
 
     def lines(self, vertices: pl.DataFrame) -> pl.DataFrame:
         """One linestring of this dimension per `line` in a vertex frame."""
@@ -134,6 +144,21 @@ class Dimension(NamedTuple):
             .select(self.multilinestring())
         )
 
+    def multipolygons(self, vertices: pl.DataFrame) -> pl.DataFrame:
+        """One multipolygon of this dimension per `multipolygon` in a vertex
+        frame, with one polygon per `polygon` and one ring per `ring` within it."""
+        return (
+            vertices.group_by("multipolygon", "polygon", "ring", maintain_order=True)
+            .agg(self.point())
+            .select("multipolygon", "polygon", self.linestring())
+            .group_by("multipolygon", "polygon", maintain_order=True)
+            .agg("line")
+            .select("multipolygon", self.polygon())
+            .group_by("multipolygon", maintain_order=True)
+            .agg("polygon")
+            .select(self.multipolygon())
+        )
+
     def lines_from_coords(self, vertices: pl.DataFrame) -> pl.DataFrame:
         """The same lines as `lines`, out of one coordinate column per axis."""
         return (
@@ -172,9 +197,28 @@ class Dimension(NamedTuple):
             .select(self.of_coords(geo.multilinestring).alias("multilinestring"))
         )
 
+    def multipolygons_from_coords(self, vertices: pl.DataFrame) -> pl.DataFrame:
+        """The same multipolygons as `multipolygons`, out of one coordinate
+        column per axis."""
+        return (
+            vertices.group_by("multipolygon", "polygon", "ring", maintain_order=True)
+            .agg(COORDS)
+            .group_by("multipolygon", "polygon", maintain_order=True)
+            .agg(COORDS)
+            .group_by("multipolygon", maintain_order=True)
+            .agg(COORDS)
+            .select(self.of_coords(geo.multipolygon).alias("multipolygon"))
+        )
+
 
 XY = Dimension(
-    PointXY, LineStringXY, PolygonXY, MultiPointXY, MultiLineStringXY, ("x", "y")
+    PointXY,
+    LineStringXY,
+    PolygonXY,
+    MultiPointXY,
+    MultiLineStringXY,
+    MultiPolygonXY,
+    ("x", "y"),
 )
 XYZ = Dimension(
     PointXYZ,
@@ -182,6 +226,7 @@ XYZ = Dimension(
     PolygonXYZ,
     MultiPointXYZ,
     MultiLineStringXYZ,
+    MultiPolygonXYZ,
     ("x", "y", "z"),
 )
 XYM = Dimension(
@@ -190,6 +235,7 @@ XYM = Dimension(
     PolygonXYM,
     MultiPointXYM,
     MultiLineStringXYM,
+    MultiPolygonXYM,
     ("x", "y", "m"),
 )
 XYZM = Dimension(
@@ -198,6 +244,7 @@ XYZM = Dimension(
     PolygonXYZM,
     MultiPointXYZM,
     MultiLineStringXYZM,
+    MultiPolygonXYZM,
     ("x", "y", "z", "m"),
 )
 
@@ -278,6 +325,31 @@ def ring_coords() -> pl.DataFrame:
     )
 
 
+@pytest.fixture
+def multipolygon_coords(ring_coords: pl.DataFrame) -> pl.DataFrame:
+    """The polygons of `ring_coords`, plus a third, `c`, grouped into multipolygons.
+
+    `multipolygon` says which multipolygon a vertex belongs to:
+    `p` holds polygons `a` (15.5, with its hole) and `b` (2.0),
+    `q` holds only `c`, a 3x3 square (9.0).
+    """
+    square = pl.DataFrame(
+        {
+            "polygon": ["c"] * 5,
+            "ring": [0] * 5,
+            "x": [20.0, 23.0, 23.0, 20.0, 20.0],
+            "y": [20.0, 20.0, 23.0, 23.0, 20.0],
+            "z": [7.0] * 5,
+            "m": [400.0, 401.0, 402.0, 403.0, 400.0],
+        }
+    )
+    vertices = pl.concat([ring_coords, square])
+    multipolygon = pl.when(pl.col("polygon") == "c").then(pl.lit("q"))
+    return vertices.select(
+        multipolygon.otherwise(pl.lit("p")).alias("multipolygon"), *vertices.columns
+    )
+
+
 def coordinates(df: pl.DataFrame, name: str = "point") -> pl.DataFrame:
     """The coordinates behind a point column, as plain float columns.
 
@@ -317,3 +389,21 @@ def multilinestring_coordinates(
     df: pl.DataFrame, name: str = "multilinestring"
 ) -> pl.DataFrame:
     return ring_coordinates(df, name)
+
+
+def multipolygon_coordinates(
+    df: pl.DataFrame, name: str = "multipolygon"
+) -> pl.DataFrame:
+    """The vertices behind a multipolygon column, every ring of every polygon
+    after the other."""
+    return (
+        df.select(
+            pl.col(name)
+            .ext.storage()
+            .explode(empty_as_null=False)
+            .explode(empty_as_null=False)
+            .explode(empty_as_null=False)
+        )
+        .to_series()
+        .struct.unnest()
+    )

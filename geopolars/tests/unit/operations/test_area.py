@@ -12,7 +12,7 @@ from polars.exceptions import ComputeError
 from polars.testing import assert_series_equal
 
 from geopolars import geo
-from geopolars.datatypes import PointXY, PolygonXY
+from geopolars.datatypes import GeoArrowType, MultiPolygonXY, PointXY, PolygonXY
 from tests.unit.conftest import XY, Dimension
 
 _SQUARE = [
@@ -27,9 +27,7 @@ _XY_VERTICES = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
 _XY_RINGS = pl.List(_XY_VERTICES)
 
 
-def _rings(
-    rings: list[list[dict[str, float]]], crs: str | None = None
-) -> pl.DataFrame:
+def _rings(rings: list[list[dict[str, float]]], crs: str | None = None) -> pl.DataFrame:
     """A one-row polygon column, built straight from XY rings."""
     return pl.DataFrame({"rings": [rings]}, schema={"rings": _XY_RINGS}).select(
         geo.polygon("rings", crs=crs).alias("polygon")
@@ -357,3 +355,77 @@ def test_the_result_is_named_after_the_geometry(area: Area, crs: str | None) -> 
     df = _rings([_DEGREE_SQUARE], crs=crs)
 
     assert df.select(area("polygon")).schema == pl.Schema({"polygon": pl.Float64})
+
+
+def _declaring(
+    df: pl.DataFrame, dtype: type[GeoArrowType], crs: str | None
+) -> pl.DataFrame:
+    """`df`'s only column, declaring `crs`."""
+    (name,) = df.columns
+    return df.select(pl.col(name).ext.storage().ext.to(dtype(crs=crs)))
+
+
+def _multipolygons(
+    multis: list[list[list[list[dict[str, float]]]] | None], crs: str | None = None
+) -> pl.DataFrame:
+    """A multipolygon column, built straight from XY polygons."""
+    storage = pl.Series("multipolygon", multis, dtype=pl.List(_XY_RINGS))
+    return pl.DataFrame(storage.ext.to(MultiPolygonXY(crs=crs)))
+
+
+def test_a_multipolygon_lists_the_area_of_each_polygon(
+    area: Area, multipolygon_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    """`p` is the 15.5 square with its hole and the triangle of 2.0;
+    `q` is a 3x3 square."""
+    df = dimension.multipolygons(multipolygon_coords)
+
+    assert _areas(area, df, "multipolygon") == [[15.5, 2.0], [9.0]]
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_a_multipolygon_measures_each_polygon_as_a_polygon(
+    area: Area, crs: str | None, multipolygon_coords: pl.DataFrame
+) -> None:
+    multis = _declaring(XY.multipolygons(multipolygon_coords), MultiPolygonXY, crs)
+    separate = _areas(
+        area, _declaring(XY.polygons(multipolygon_coords), PolygonXY, crs)
+    )
+
+    got = _areas(area, multis, "multipolygon")
+
+    assert got == [pytest.approx(separate[:2]), pytest.approx(separate[2:])]
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_a_multipolygon_without_polygons_has_no_areas(
+    area: Area, crs: str | None
+) -> None:
+    """An empty polygon inside one still encloses nothing, like on its own."""
+    df = _multipolygons([[], [[]], None], crs=crs)
+
+    assert _areas(area, df, "multipolygon") == [[], [0.0], None]
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_a_sliced_multipolygon_keeps_its_own_polygons(
+    area: Area, crs: str | None
+) -> None:
+    df = _multipolygons(
+        [[[_SQUARE]], [[_DEGREE_SQUARE], [_SQUARE, _DEGREE_SQUARE]]], crs=crs
+    )
+
+    (got,) = _areas(area, df.slice(1), "multipolygon")
+
+    assert got == pytest.approx(_areas(area, df, "multipolygon")[1])
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_a_multipolygon_gives_a_list_named_after_the_geometry(
+    area: Area, crs: str | None
+) -> None:
+    df = _multipolygons([[[_DEGREE_SQUARE]]], crs=crs)
+
+    assert df.select(area("multipolygon")).schema == pl.Schema(
+        {"multipolygon": pl.List(pl.Float64)}
+    )

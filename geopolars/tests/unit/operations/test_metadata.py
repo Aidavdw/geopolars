@@ -39,6 +39,7 @@ def _geometries(
     coords: pl.DataFrame,
     line_coords: pl.DataFrame,
     ring_coords: pl.DataFrame,
+    multipolygon_coords: pl.DataFrame,
 ) -> list[pl.DataFrame]:
     """One column of every geometry, all declaring `RD`."""
     plain = [
@@ -47,6 +48,7 @@ def _geometries(
         (dimension.polygons(ring_coords), dimension.polygon_dtype),
         (dimension.multipoints(line_coords), dimension.multipoint_dtype),
         (dimension.multilinestrings(ring_coords), dimension.multilinestring_dtype),
+        (dimension.multipolygons(multipolygon_coords), dimension.multipolygon_dtype),
     ]
     return [_with_crs(df, dtype) for df, dtype in plain]
 
@@ -57,8 +59,12 @@ def test_every_geometry_keeps_its_crs(
     coords: pl.DataFrame,
     line_coords: pl.DataFrame,
     ring_coords: pl.DataFrame,
+    multipolygon_coords: pl.DataFrame,
 ) -> None:
-    for df in _geometries(dimension, coords, line_coords, ring_coords):
+    geometries = _geometries(
+        dimension, coords, line_coords, ring_coords, multipolygon_coords
+    )
+    for df in geometries:
         (name,) = df.columns
 
         out = df.lazy().select(operation(name))

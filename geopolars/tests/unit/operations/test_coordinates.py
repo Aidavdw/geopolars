@@ -84,6 +84,19 @@ def test_a_multilinestring_gives_a_list_per_linestring(
 
 
 @AXES
+def test_a_multipolygon_gives_a_list_per_polygon_per_ring(
+    axis: str, getter: Getter, multipolygon_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    df = dimension.multipolygons(multipolygon_coords)
+    out = df.select(getter("multipolygon")).to_series()
+
+    assert out.dtype == pl.List(pl.List(pl.List(pl.Float64)))
+    assert out.to_list() == _per(
+        multipolygon_coords, axis, "multipolygon", "polygon", "ring"
+    )
+
+
+@AXES
 def test_a_missing_point_has_no_coordinate(axis: str, getter: Getter) -> None:
     df = pl.DataFrame({"x": [1.0, 2.0], "y": [3.0, 4.0]}).select(
         pl.when(pl.col("x") > 1.0).then(XY.point())

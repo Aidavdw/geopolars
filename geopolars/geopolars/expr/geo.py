@@ -45,6 +45,9 @@ class Geometry:
     def polygon(self, *, crs: str | None = None) -> pl.Expr:
         return construct.polygon_from_rings(self._expr, crs=crs)
 
+    def multipolygon(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.multipolygon_from_polygons(self._expr, crs=crs)
+
     def validate(self) -> pl.Expr:
         return construct.validate(self._expr)
 

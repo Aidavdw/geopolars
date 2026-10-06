@@ -165,16 +165,16 @@ All dimensions of a geometry share a column.
 Geometries usually carry a CRS, so the tier given is for a geometry with a CRS;
 the comment says when one without a CRS takes a different tier.
 
-| Operation | Point | | LineString | | Polygon | | MultiPoint | | MultiLineString | |
-| - | - | - | - | - | - | - | - | - | - | - |
-| `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + geographiclib; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 |
-| `length` | - | | 3 | PROJ + geographiclib; no CRS: 1 | - | | - | | 3 | calls LineString impl as list; no CRS: 1 |
-| `distance` | 3 | point to point only; PROJ + geographiclib; no CRS: 1 | - | | - | | - | | - | |
-| `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | |
-| `translate` | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
-| `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` |
-| `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` |
+| Operation | Point | | LineString | | Polygon | | MultiPoint | | MultiLineString | | MultiPolygon | |
+| - | - | - | - | - | - | - | - | - | - | - | - | - |
+| `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + geographiclib; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | calls Polygon impl as list |
+| `length` | - | | 3 | PROJ + geographiclib; no CRS: 1 | - | | - | | 3 | calls LineString impl as list; no CRS: 1 | - | |
+| `distance` | 3 | point to point only; PROJ + geographiclib; no CRS: 1 | - | | - | | - | | - | | - | |
+| `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | | 1 | skips each ring's closing coordinate |
+| `translate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
+| `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
+| `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 
 ## Roadmap
 

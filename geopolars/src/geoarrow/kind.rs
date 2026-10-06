@@ -11,15 +11,17 @@ pub enum Kind {
     Polygon,
     MultiPoint,
     MultiLineString,
+    MultiPolygon,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 5] = [
+    pub const ALL: [Kind; 6] = [
         Kind::Point,
         Kind::LineString,
         Kind::Polygon,
         Kind::MultiPoint,
         Kind::MultiLineString,
+        Kind::MultiPolygon,
     ];
 
     /// The `ARROW:extension:name` this geometry is registered under.
@@ -31,6 +33,7 @@ impl Kind {
             Kind::Polygon => "geoarrow.polygon",
             Kind::MultiPoint => "geoarrow.multipoint",
             Kind::MultiLineString => "geoarrow.multilinestring",
+            Kind::MultiPolygon => "geoarrow.multipolygon",
         }
     }
 
@@ -42,6 +45,7 @@ impl Kind {
             Kind::Polygon => "polygon",
             Kind::MultiPoint => "multipoint",
             Kind::MultiLineString => "multilinestring",
+            Kind::MultiPolygon => "multipolygon",
         }
     }
 
@@ -53,12 +57,14 @@ impl Kind {
             Kind::Polygon => "Polygon",
             Kind::MultiPoint => "MultiPoint",
             Kind::MultiLineString => "MultiLineString",
+            Kind::MultiPolygon => "MultiPolygon",
         }
     }
 
     /// Tells us how deeply nested the data type is.
     /// A geoarrow.linestring is a collection of points, so it is 1.
     /// A geoarrow.polygon is a collection of linestings, so it is 2.
+    /// A geoarrow.multipolygon is a collection of polygons, so it is 3.
     ///
     /// Warning: This does not uniquely identify a geometry kind:
     /// E.g. geoarrow.linestring and geoarrow.multipoint both have a nesting of 1.
@@ -70,6 +76,7 @@ impl Kind {
             Kind::Point => 0,
             Kind::LineString | Kind::MultiPoint => 1,
             Kind::Polygon | Kind::MultiLineString => 2,
+            Kind::MultiPolygon => 3,
         }
     }
 

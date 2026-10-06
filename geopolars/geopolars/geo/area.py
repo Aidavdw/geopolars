@@ -16,7 +16,7 @@ import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import GeoPolygon
+from geopolars.datatypes import GeoMultiPolygon, GeoPolygon
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -33,15 +33,15 @@ def _twice_signed(ring: pl.Expr) -> pl.Expr:
     return ring.list.eval(dx * dy.shift(-1) - dx.shift(-1) * dy).list.sum()
 
 
-def _polygon(column: pl.Expr) -> pl.Expr:
-    """A polygon's area: its exterior ring, less the holes inside it."""
+def _polygon(rings: pl.Expr) -> pl.Expr:
+    """A polygon's area, from its list of rings: its exterior ring, less the holes inside it."""
     # Per ring, unsigned
     # First ring is the 'positive' area,
     # everything after that is a hole.
-    rings = column.ext.storage().list.eval(_twice_signed(pl.element()).abs())
+    areas = rings.list.eval(_twice_signed(pl.element()).abs())
 
     # exterior - holes == first - (sum - first).
-    return (2 * rings.list.first().fill_null(0.0) - rings.list.sum()) / 2
+    return (2 * areas.list.first().fill_null(0.0) - areas.list.sum()) / 2
 
 
 def _geodesic(column: pl.Expr) -> pl.Expr:
@@ -60,13 +60,16 @@ def _area(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     if geometry._declares_crs():
         return _geodesic(column)
     if isinstance(geometry, GeoPolygon):
-        return _polygon(column)
+        return _polygon(column.ext.storage())
+    if isinstance(geometry, GeoMultiPolygon):
+        return column.ext.storage().list.eval(_polygon(pl.element()))
     # Everything else has no defined area.
     return pl.when(column.is_not_null()).then(pl.lit(0.0, dtype=pl.Float64))
 
 
 def area(geometry: IntoExprColumn) -> pl.Expr:
-    """The area a geometry encloses, as an `f64`.
+    """The area a geometry encloses, as an `f64`,
+    or a list of them for a multipolygon.
 
     | in                  | measured                     | in                  |
     |---------------------|------------------------------|---------------------|
@@ -86,6 +89,9 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
 
     Only a polygon actually encloses something.
     This also considers its holes.
+    A multipolygon gets the area of each of its polygons, in order, as a list;
+    sum it with `.list.sum()` for the area of the whole
+    (which assumes its polygons do not overlap, as the spec requires).
     'z' and 'm' are ignored: this is the area of the footprint.
 
     This calculation assumes that the (closed) polygon is not self-intersecting.
@@ -97,6 +103,7 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     |------------------------|--------------|
     | `PolygonXY`            | `0.0` and up |
     | `PolygonXYZ`           | `0.0` and up |
+    | `MultiPolygonXY`       | `list[f64]`  |
     | `LineStringXY`         | `0.0`        |
     | `PointXYZM`            | `0.0`        |
 
@@ -108,4 +115,3 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     ```
     """
     return on_geometry(geometry, _area)
-

@@ -223,13 +223,60 @@ def test_an_empty_or_missing_multilinestring_has_no_mean_coordinate(
     assert out["multilinestring"].is_null().to_list() == [True, True, True]
 
 
+def test_a_multipolygon_averages_the_vertices_of_all_its_polygons(
+    multipolygon_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    """Every ring of every polygon counts, holes included,
+    each without the coordinate that closes it."""
+    df = dimension.multipolygons(multipolygon_coords)
+    out = df.select(geo.mean_coordinate("multipolygon"))
+
+    assert_frame_equal(
+        coordinates(out, "multipolygon"),
+        _mean_per(_opened(multipolygon_coords), "multipolygon", dimension),
+    )
+
+
+def test_a_multipolygon_of_one_polygon_agrees_with_the_polygon() -> None:
+    polygon = pl.DataFrame({"rings": [[_SQUARE]]}, schema={"rings": _XY_RINGS}).select(
+        geo.polygon("rings").alias("polygon")
+    )
+    multipolygon = polygon.select(
+        geo.multipolygon(pl.col("polygon").implode()).alias("polygon")
+    )
+
+    assert_frame_equal(
+        multipolygon.select(geo.mean_coordinate("polygon").ext.storage()),
+        polygon.select(geo.mean_coordinate("polygon").ext.storage()),
+    )
+
+
+def test_an_empty_or_missing_multipolygon_has_no_mean_coordinate(
+    dimension: Dimension,
+) -> None:
+    df = pl.DataFrame(
+        {"polygons": [[], [[]], [[[]]], None]},
+        schema={
+            "polygons": pl.List(
+                pl.List(pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64))))
+            )
+        },
+    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+
+    out = df.select(geo.mean_coordinate("multipolygon"))
+
+    assert out["multipolygon"].is_null().to_list() == [True, True, True, True]
+
+
 @pytest.mark.parametrize(
-    "builder", ["point", "line", "polygon", "multipoint", "multilinestring"]
+    "builder",
+    ["point", "line", "polygon", "multipoint", "multilinestring", "multipolygon"],
 )
 def test_the_result_is_a_point_of_the_same_dimension(
     coords: pl.DataFrame,
     line_coords: pl.DataFrame,
     ring_coords: pl.DataFrame,
+    multipolygon_coords: pl.DataFrame,
     dimension: Dimension,
     builder: str,
 ) -> None:
@@ -242,6 +289,8 @@ def test_the_result_is_a_point_of_the_same_dimension(
         df = dimension.multipoints(line_coords)
     elif builder == "multilinestring":
         df = dimension.multilinestrings(ring_coords)
+    elif builder == "multipolygon":
+        df = dimension.multipolygons(multipolygon_coords)
     else:
         df = dimension.polygons(ring_coords)
     name = df.columns[0]

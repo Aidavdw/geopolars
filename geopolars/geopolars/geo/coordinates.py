@@ -35,13 +35,14 @@ def _getter(axis: str) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
 def x(geometry: IntoExprColumn) -> pl.Expr:
     """The `x` coordinates of a geometry, nested as the geometry is.
 
-    | in                  | out                    |
-    |---------------------|------------------------|
-    | `Point`             | `f64`                  |
-    | `LineString`        | `list[f64]`            |
-    | `MultiPoint`        | `list[f64]`            |
-    | `Polygon`           | `list[list[f64]]`      |
-    | `MultiLineString`   | `list[list[f64]]`      |
+    | in                  | out                     |
+    |---------------------|-------------------------|
+    | `Point`             | `f64`                   |
+    | `LineString`        | `list[f64]`             |
+    | `MultiPoint`        | `list[f64]`             |
+    | `Polygon`           | `list[list[f64]]`       |
+    | `MultiLineString`   | `list[list[f64]]`       |
+    | `MultiPolygon`      | `list[list[list[f64]]]` |
 
     The values are returned as they are stored, in the unit of the CRS.
     The CRS itself is not carried over: the result is a plain float column.

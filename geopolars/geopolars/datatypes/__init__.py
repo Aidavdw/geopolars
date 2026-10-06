@@ -27,6 +27,13 @@ from geopolars.datatypes.multipoint import (
     MultiPointXYZ,
     MultiPointXYZM,
 )
+from geopolars.datatypes.multipolygon import (
+    GeoMultiPolygon,
+    MultiPolygonXY,
+    MultiPolygonXYM,
+    MultiPolygonXYZ,
+    MultiPolygonXYZM,
+)
 from geopolars.datatypes.point import (
     GeoPoint,
     PointXY,
@@ -49,6 +56,7 @@ __all__ = [
     "GeoLineString",
     "GeoMultiLineString",
     "GeoMultiPoint",
+    "GeoMultiPolygon",
     "GeoPoint",
     "GeoPolygon",
     "LineStringXY",
@@ -63,6 +71,10 @@ __all__ = [
     "MultiPointXYM",
     "MultiPointXYZ",
     "MultiPointXYZM",
+    "MultiPolygonXY",
+    "MultiPolygonXYM",
+    "MultiPolygonXYZ",
+    "MultiPolygonXYZM",
     "PointXY",
     "PointXYM",
     "PointXYZ",

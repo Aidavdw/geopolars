@@ -133,9 +133,11 @@ fn length_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let out = match describe(inputs[0].dtype())?.kind {
         Kind::LineString => linestrings(storage, &metric)?.into_series(),
         Kind::MultiLineString => multilinestrings(storage, &metric)?.into_series(),
-        kind @ (Kind::Point | Kind::Polygon | Kind::MultiPoint) => polars_bail!(
-            SchemaMismatch: "a `{}` has no length", kind.name()
-        ),
+        kind @ (Kind::Point | Kind::Polygon | Kind::MultiPoint | Kind::MultiPolygon) => {
+            polars_bail!(
+                SchemaMismatch: "a `{}` has no length", kind.name()
+            )
+        }
     };
     Ok(out.with_name(inputs[0].name().clone()))
 }
