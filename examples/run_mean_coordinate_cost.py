@@ -79,21 +79,21 @@ def layers(plain: pl.DataFrame, geo_df: pl.DataFrame) -> dict[str, pl.LazyFrame]
     nothing = pl.lit(None, dtype=pl.Float64)
 
     # 1. What the mean coordinate is, and nothing else.
-    minimal = plain.lazy().select(centre=pl.struct(means(SAMPLES)))
+    minimal = plain.lazy().select(center=pl.struct(means(SAMPLES)))
 
     # 2. ...plus `_defined`: one null scan per axis, on top of the sums.
     whole = SAMPLES.list.len() > 0
     for a in AXES:
         whole = whole & (axis(SAMPLES, a).list.count_matches(None) == 0)
     checked = plain.lazy().select(
-        centre=pl.when(SAMPLES.is_not_null() & whole).then(pl.struct(means(SAMPLES)))
+        center=pl.when(SAMPLES.is_not_null() & whole).then(pl.struct(means(SAMPLES)))
     )
 
     # By the time the optimiser has run,
     # the selectors have pruned all but one branch,
     # so every one of these coalesces has a single argument left and is a no-op.
     wrapped = plain.lazy().select(
-        centre=pl.coalesce(
+        center=pl.coalesce(
             [
                 pl.when(
                     pl.coalesce([SAMPLES.is_not_null() & whole, pl.lit(False)])
@@ -108,7 +108,7 @@ def layers(plain: pl.DataFrame, geo_df: pl.DataFrame) -> dict[str, pl.LazyFrame]
     for a in AXES:
         intact = intact & (axis(storage, a).list.count_matches(None) == 0)
     typed = geo_df.lazy().select(
-        centre=pl.coalesce(
+        center=pl.coalesce(
             [
                 pl.when(pl.coalesce([SAMPLES.is_not_null() & intact, pl.lit(False)]))
                 .then(pl.struct([pl.coalesce([m, nothing]) for m in means(storage)]))
@@ -123,7 +123,7 @@ def layers(plain: pl.DataFrame, geo_df: pl.DataFrame) -> dict[str, pl.LazyFrame]
         "3.  + the dispatch coalesces": wrapped,
         "4.  + ext.storage() / ext.to()": typed,
         "5. geo.mean_coordinate": geo_df.lazy().select(
-            centre=geo.mean_coordinate("samples")
+            center=geo.mean_coordinate("samples")
         ),
     }
 
@@ -185,9 +185,9 @@ breakdown(rows=200_000, vertices=20)
 # Plain Polars does exactly the same thing, with no geometry in sight:
 plain, geo_df = frames(rows=1_000, vertices=4)
 print("\nThe mean coordinate alone, given a geometry column that already exists:")
-centre = geo_df.lazy().select(centre=geo.mean_coordinate("samples"))
-print(centre.explain(engine="streaming"))
-centre.show_graph(plan_stage="physical", engine="streaming", optimized=True)
+center = geo_df.lazy().select(center=geo.mean_coordinate("samples"))
+print(center.explain(engine="streaming"))
+center.show_graph(plan_stage="physical", engine="streaming", optimized=True)
 
 print("\nAnd `implode()` on a plain float column, for comparison:")
 pl.LazyFrame({"a": [1.0, 2.0]}).select(pl.col("a").implode()).show_graph(

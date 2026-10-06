@@ -47,7 +47,7 @@ impl GeodeticCrs {
         unsafe {
             let parsed = ctx.object(proj_create(ctx.0, c_crs.as_ptr()), crs)?;
             let geodetic = ctx.object(proj_crs_get_geodetic_crs(ctx.0, parsed.0), crs)?;
-            let metres_per_unit = ctx.metres_per_horizontal_unit(&parsed, crs)?;
+            let meters_per_unit = ctx.meters_per_horizontal_unit(&parsed, crs)?;
 
             let kind = proj_get_type(geodetic.0);
             polars_ensure!(
@@ -79,7 +79,7 @@ impl GeodeticCrs {
             Ok(Self {
                 definition,
                 // PROJ gives it in metres.
-                semi_major: semi_major / metres_per_unit,
+                semi_major: semi_major / meters_per_unit,
                 // PROJ gives an inverse flattening of 0 for a sphere.
                 flattening: if inverse_flattening == 0.0 {
                     0.0
@@ -115,7 +115,7 @@ impl Context {
     ///
     /// # Safety
     /// `crs` must be a CRS created in this context.
-    unsafe fn metres_per_horizontal_unit(&self, crs: &Object<'_>, name: &str) -> PolarsResult<f64> {
+    unsafe fn meters_per_horizontal_unit(&self, crs: &Object<'_>, name: &str) -> PolarsResult<f64> {
         // A compound CRS (horizontal + vertical) puts `x` and `y` in its first part.
         let horizontal = if proj_get_type(crs.0) == PJ_TYPE_PJ_TYPE_COMPOUND_CRS {
             Some(self.object(proj_crs_get_sub_crs(self.0, crs.0, 0), name)?)

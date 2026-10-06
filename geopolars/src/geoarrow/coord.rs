@@ -68,7 +68,7 @@ mod tests {
     /// The path into [`Unsupported`](super::super::Geo):
     /// Can be reached by reading someone's GeoArrow file using rust only (no python).
     #[test]
-    fn unrecognised_layouts_are_rejected() {
+    fn unrecognized_layouts_are_rejected() {
         // Wrong order: the spec fixes x before y, and z before m.
         assert_eq!(dimension_of(&struct_of(&["y", "x"])), None);
         assert_eq!(dimension_of(&struct_of(&["x", "y", "m", "z"])), None);

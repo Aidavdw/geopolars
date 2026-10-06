@@ -40,19 +40,19 @@ collection = points.select(pl.col("point").implode()).select(
 print("\nGathered into one geometry, the four samples are one row:")
 print(collection.collect())
 
-centre = collection.select(centre=geo.mean_coordinate("samples"))
+center = collection.select(center=geo.mean_coordinate("samples"))
 
 print(
     "The plan behind it: Ideally, all abstractions fall away, \
         and it is as cheap as manually building everything \
         after Polars is allowed to optimise it."
 )
-print(centre.explain())
+print(center.explain())
 print("\nThe physical plan, node by node:")
-centre.show_graph(plan_stage="physical", engine="streaming", optimized=True)
+center.show_graph(plan_stage="physical", engine="streaming", optimized=True)
 
 print("\nThe mean coordinate of the four samples:")
-print(centre.collect())
+print(center.collect())
 
 print("\nThe same numbers, averaged column by column:")
 print(
@@ -60,7 +60,7 @@ print(
 )
 
 print("\nThe whole thing is one lazy query, so it streams:")
-print(centre.collect(engine="streaming"))
+print(center.collect(engine="streaming"))
 
 print("\nThe namespace spelling is the same expression:")
-print(collection.select(centre=gpl.col("samples").geo.mean_coordinate()).collect())
+print(collection.select(center=gpl.col("samples").geo.mean_coordinate()).collect())

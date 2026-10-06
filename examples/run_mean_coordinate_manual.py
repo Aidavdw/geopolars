@@ -36,7 +36,7 @@ point = pl.struct(x=pl.col("x"), y=pl.col("y"), m=pl.col("value"))
 
 # One mean per axis, mapped over the fields of that struct.
 mean = lf.select(
-    centre=pl.struct(
+    center=pl.struct(
         # [point.struct.field(axis).mean().alias(axis) for axis in ("x", "y", "m")]
         point.struct.field("x").mean().alias("x_mean"),
         point.struct.field("y").mean().alias("y_mean"),

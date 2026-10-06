@@ -225,7 +225,7 @@ _DEGREE_SQUARE = [
 _DEGREE_SQUARE_AREA = 12_308_778_361.469_452
 
 
-def test_with_a_crs_it_is_the_area_on_the_ellipsoid_in_square_metres(
+def test_with_a_crs_it_is_the_area_on_the_ellipsoid_in_square_meters(
     area: Area,
 ) -> None:
     """Not the 1.0 square degree it is on the plane."""
@@ -299,12 +299,12 @@ def test_a_projected_crs_in_feet_is_measured_in_square_feet(area: Area) -> None:
     ]
     lonlat = _rings([ring], crs="EPSG:4269")
     feet = lonlat.select(geo.to_crs("polygon", "EPSG:2263"))
-    metres_per_us_foot = 1200 / 3937
+    meters_per_us_foot = 1200 / 3937
 
-    (square_metres,) = _areas(area, lonlat)
+    (square_meters,) = _areas(area, lonlat)
     (got,) = _areas(area, feet)
 
-    assert got == pytest.approx(square_metres / metres_per_us_foot**2, rel=1e-6)
+    assert got == pytest.approx(square_meters / meters_per_us_foot**2, rel=1e-6)
 
 
 def test_with_a_crs_z_and_m_are_left_out(

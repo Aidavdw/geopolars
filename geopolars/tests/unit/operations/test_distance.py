@@ -185,7 +185,7 @@ def test_a_single_point_is_measured_against_every_row(crs: str | None) -> None:
     assert_series_equal(swapped, expected)
 
 
-def test_with_a_crs_it_is_the_geodesic_in_metres() -> None:
+def test_with_a_crs_it_is_the_geodesic_in_meters() -> None:
     """On WGS 84, for EPSG:4326."""
     df = _pairs([NEW_YORK], [LONDON], crs=WGS84)
 
