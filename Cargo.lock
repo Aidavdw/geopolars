@@ -1148,6 +1148,7 @@ dependencies = [
  "pyo3-polars",
  "serde",
  "serde_json",
+ "wkb",
 ]
 
 [[package]]

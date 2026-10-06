@@ -38,6 +38,7 @@ impl Kind {
     }
 
     /// How the geometry is shown in a DataFrame header: `point[xy]`.
+    /// Should not be confused with [std::fmt::Display]'s `display`!
     pub const fn display(self) -> &'static str {
         match self {
             Kind::Point => "point",
@@ -82,6 +83,11 @@ impl Kind {
 
     pub fn from_name(name: &str) -> Option<Kind> {
         Kind::ALL.into_iter().find(|kind| kind.name() == name)
+    }
+
+    /// Inverse of [`Kind::display`].
+    pub fn from_display(display: &str) -> Option<Kind> {
+        Kind::ALL.into_iter().find(|kind| kind.display() == display)
     }
 
     /// The names, for an error message:

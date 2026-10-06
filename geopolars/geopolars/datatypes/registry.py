@@ -17,6 +17,7 @@ from geopolars.datatypes.multipoint import GeoMultiPoint
 from geopolars.datatypes.multipolygon import GeoMultiPolygon
 from geopolars.datatypes.point import GeoPoint
 from geopolars.datatypes.polygon import GeoPolygon
+from geopolars.datatypes.wkb import Wkb
 
 # Mirrors `Kind::ALL`
 GEOMETRIES: tuple[type[GeoArrowType], ...] = (
@@ -30,3 +31,5 @@ GEOMETRIES: tuple[type[GeoArrowType], ...] = (
 
 for _geometry in GEOMETRIES:
     pl.register_extension_type(_geometry._extension_name, _geometry)
+
+pl.register_extension_type(Wkb._extension_name, Wkb)

@@ -175,12 +175,15 @@ the comment says when one without a CRS takes a different tier.
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
 | `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
+| `to_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `from_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
 
 ## Roadmap
 
 ### Core IO
 
-- [ ] WKB / WKT encoding and decoding
+- [x] WKB encoding and decoding
+- [ ] WKT encoding and decoding
 - [ ] GeoParquet read/write
 
 Later goals:

@@ -16,3 +16,4 @@ pub mod coords;
 pub mod crs;
 pub mod distance;
 pub mod length;
+pub mod wkb;

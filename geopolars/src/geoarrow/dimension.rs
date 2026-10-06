@@ -57,6 +57,11 @@ impl GeoDimension {
         }
     }
 
+    /// The inverse of [`GeoDimension::tag`].
+    pub fn from_tag(tag: &str) -> Option<GeoDimension> {
+        GeoDimension::ALL.into_iter().find(|dim| dim.tag() == tag)
+    }
+
     /// `true` if this dimension has a `z` (elevation) coordinate.
     pub const fn has_z(self) -> bool {
         matches!(self, GeoDimension::XYZ | GeoDimension::XYZM)

@@ -9,8 +9,10 @@ pub mod crs;
 mod dimension;
 mod geo;
 pub mod geodetic;
+pub mod geotraits;
 mod kind;
 pub mod storage;
+pub mod wkb;
 
 pub use dimension::GeoDimension;
 pub use geo::Geo;
@@ -36,6 +38,7 @@ pub fn register() -> PolarsResult<()> {
     for kind in Kind::ALL {
         register_extension_type(kind.name(), Some(Arc::new(GeoFactory(kind))))?;
     }
+    register_extension_type(wkb::Wkb::NAME, Some(Arc::new(wkb::WkbFactory)))?;
     Ok(())
 }
 

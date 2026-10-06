@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.geo import affine, construct, coordinates
+from geopolars.geo import affine, construct, coordinates, wkb
 
 # bound directly: `geopolars.geo.area` is the function, not the module.
 from geopolars.geo.area import area as _area
@@ -26,6 +26,7 @@ from geopolars.geo.mean_coordinate import mean_coordinate as _mean_coordinate
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
+    from geopolars.datatypes import GeoArrowType
 
 
 @pl.api.register_expr_namespace("geo")
@@ -77,3 +78,11 @@ class Geometry:
 
     def y(self) -> pl.Expr:
         return coordinates.y(self._expr)
+
+    def to_wkb(self) -> pl.Expr:
+        return wkb.to_wkb(self._expr)
+
+    def from_wkb(
+        self, geometry: type[GeoArrowType], *, crs: str | None = None
+    ) -> pl.Expr:
+        return wkb.from_wkb(self._expr, geometry, crs=crs)
