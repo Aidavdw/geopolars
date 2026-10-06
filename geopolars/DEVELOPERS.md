@@ -132,18 +132,44 @@ This functionality has a dedicated Rust kernel that lives in the plugin.
 This makes them very fast, but they cannot be subdivided at plan-time.
 These are ideally element-wise if possible.
 
-### 3. Forward to Geo
+### 3. Forward to external
 
-A subcategory of the above.
-The [geo ecosystem](https://georust.org/)
-(which we refer to as *rsgeo* in this crate to avoid confusion with our own `geo`)
-gives very fast implementations for many geo algorithms,
-but their data encoding is not fully compatible with ours. We can use their algorithms,
-but we incur at least one allocation and copy pass for every item processed this way
-due to data conversion.
-In addition, rsgeo has a couple of limitations:
+A subcategory of the above:
+the Rust kernel hands our data to an external library,
+putting it into that library's own data type.
+This usually means at least one allocation and copy pass
+for every item processed this way, so prefer tier 2 where it is feasible.
+In return we don't have to re-implement (and maintain) well-tested algorithms.
 
-- it only supports 2D operations
-- No M (measure) values.
-- No CRS-awareness on a data level (this has to be carried separately)
-- no curved geometries
+Examples are:
+
+- [PROJ](https://proj.org/) (through `rsgeo::proj`), to reproject coordinates.
+  Each coordinate is passed to it as a tuple, one by one.
+- [geographiclib](https://geographiclib.sourceforge.io/), to measure along an ellipsoid.
+- The [geo ecosystem](https://georust.org/)
+  (which we refer to as *rsgeo* in this crate to avoid confusion with our own `geo`),
+  which has very fast implementations for many geo algorithms,
+  but whose data encoding is not compatible with ours.
+  In addition, rsgeo has a couple of limitations:
+  - it only supports 2D operations
+  - no M (measure) values
+  - no CRS-awareness on a data level (this has to be carried separately)
+  - no curved geometries
+
+### Tier per operation
+
+Which tier each operation uses, per geometry type.
+`1` is native, `2` a plugin expression, `3` forwarded to an external library,
+and `-` means the operation refuses that geometry.
+All dimensions of a geometry share a column.
+Geometries usually carry a CRS, so the tier given is for a geometry with a CRS;
+the comment says when one without a CRS takes a different tier.
+
+| Operation | Point | | LineString | | Polygon | | MultiPoint | | MultiLineString | |
+| - | - | - | - | - | - | - | - | - | - | - |
+| `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + geographiclib; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 |
+| `length` | - | | 3 | PROJ + geographiclib; no CRS: 1 | - | | - | | 3 | calls LineString impl as list; no CRS: 1 |
+| `distance` | 3 | point to point only; PROJ + geographiclib; no CRS: 1 | - | | - | | - | | - | |
+| `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | |
+| `translate` | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
