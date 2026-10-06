@@ -29,12 +29,14 @@ from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.wkb import from_wkb, to_wkb
+from geopolars.geo.wkt import from_wkt, to_wkt
 
 __all__ = [
     "area",
     "distance",
     "distance_squared",
     "from_wkb",
+    "from_wkt",
     "length",
     "linestring",
     "linestring_from_columns",
@@ -55,6 +57,7 @@ __all__ = [
     "polygon_from_rings",
     "to_crs",
     "to_wkb",
+    "to_wkt",
     "translate",
     "validate",
     "x",

@@ -167,8 +167,8 @@ the comment says when one without a CRS takes a different tier.
 
 | Operation | Point | | LineString | | Polygon | | MultiPoint | | MultiLineString | | MultiPolygon | |
 | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + geographiclib; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | calls Polygon impl as list |
-| `length` | - | | 3 | PROJ + geographiclib; no CRS: 1 | - | | - | | 3 | calls LineString impl as list; no CRS: 1 | - | |
+| `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + geographiclib; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | as list of Polygon |
+| `length` | - | | 3 | PROJ + geographiclib; no CRS: 1 | - | | - | | 3 | as list of LineString | - | |
 | `distance` | 3 | point to point only; PROJ + geographiclib; no CRS: 1 | - | | - | | - | | - | | - | |
 | `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | | 1 | skips each ring's closing coordinate |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
@@ -177,13 +177,15 @@ the comment says when one without a CRS takes a different tier.
 | `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `to_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `from_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
+| `to_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `from_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
 
 ## Roadmap
 
 ### Core IO
 
 - [x] WKB encoding and decoding
-- [ ] WKT encoding and decoding
+- [x] WKT encoding and decoding
 - [ ] GeoParquet read/write
 
 Later goals:

@@ -1,6 +1,6 @@
 //! [geo-traits](geo_traits) views over our Arrow storage.
 //!
-//! These exist because the `wkb` writer only takes geometries through geo-traits.
+//! These exist because the `wkb` and `wkt` writers only take geometries through geo-traits.
 //! Every view borrows one chunk of the storage and copies nothing:
 //! a geometry is a range into the list level below it,
 //! down to a range of coordinates.
@@ -10,10 +10,11 @@ use geo_traits::{
     MultiPolygonTrait, PointTrait, PolygonTrait, UnimplementedGeometryCollection,
     UnimplementedLine, UnimplementedRect, UnimplementedTriangle,
 };
-use polars_arrow::array::ListArray;
+use polars::prelude::*;
+use polars_arrow::array::{Array, ListArray};
 
-use super::storage::CoordsView;
-use super::GeoDimension;
+use super::storage::{downcast, CoordsView};
+use super::{GeoDimension, Kind};
 
 impl From<GeoDimension> for Dimensions {
     fn from(dim: GeoDimension) -> Self {
@@ -63,6 +64,10 @@ impl CoordTrait for Coord<'_> {
 pub struct Point<'a> {
     pub coords: &'a CoordsView<'a>,
     pub i: usize,
+    /// Whether NaN `x` and `y` make this the empty point, as GeoArrow spells it.
+    /// Only for a point of its own:
+    /// the `wkt` writer cannot write an empty point inside a multipoint.
+    pub nan_is_empty: bool,
 }
 
 /// The coordinates `start..end`.
@@ -116,7 +121,10 @@ impl<'a> PointTrait for Point<'a> {
         Self: 'b;
 
     fn coord(&self) -> Option<Coord<'a>> {
-        Some(Coord {
+        let empty = self.nan_is_empty
+            && self.coords.nth(self.i, 0).is_nan()
+            && self.coords.nth(self.i, 1).is_nan();
+        (!empty).then_some(Coord {
             coords: self.coords,
             i: self.i,
         })
@@ -185,6 +193,7 @@ impl<'a> MultiPointTrait for MultiPoint<'a> {
         Point {
             coords: self.coords,
             i: self.start + i,
+            nan_is_empty: false,
         }
     }
 }
@@ -279,3 +288,177 @@ impl_geometry!(
     MultiLineString,
     MultiPolygon
 );
+
+/// Any one of the views.
+#[derive(Clone, Copy)]
+pub enum Geometry<'a> {
+    Point(Point<'a>),
+    LineString(LineString<'a>),
+    Polygon(Polygon<'a>),
+    MultiPoint(MultiPoint<'a>),
+    MultiLineString(MultiLineString<'a>),
+    MultiPolygon(MultiPolygon<'a>),
+}
+
+impl<'a> GeometryTrait for Geometry<'a> {
+    type T = f64;
+    type PointType<'b>
+        = Point<'a>
+    where
+        Self: 'b;
+    type LineStringType<'b>
+        = LineString<'a>
+    where
+        Self: 'b;
+    type PolygonType<'b>
+        = Polygon<'a>
+    where
+        Self: 'b;
+    type MultiPointType<'b>
+        = MultiPoint<'a>
+    where
+        Self: 'b;
+    type MultiLineStringType<'b>
+        = MultiLineString<'a>
+    where
+        Self: 'b;
+    type MultiPolygonType<'b>
+        = MultiPolygon<'a>
+    where
+        Self: 'b;
+    type GeometryCollectionType<'b>
+        = UnimplementedGeometryCollection<f64>
+    where
+        Self: 'b;
+    type RectType<'b>
+        = UnimplementedRect<f64>
+    where
+        Self: 'b;
+    type TriangleType<'b>
+        = UnimplementedTriangle<f64>
+    where
+        Self: 'b;
+    type LineType<'b>
+        = UnimplementedLine<f64>
+    where
+        Self: 'b;
+
+    fn dim(&self) -> Dimensions {
+        match self {
+            Geometry::Point(g) => g.dim(),
+            Geometry::LineString(g) => g.dim(),
+            Geometry::Polygon(g) => g.dim(),
+            Geometry::MultiPoint(g) => g.dim(),
+            Geometry::MultiLineString(g) => g.dim(),
+            Geometry::MultiPolygon(g) => g.dim(),
+        }
+    }
+
+    fn as_type(
+        &self,
+    ) -> geo_traits::GeometryType<
+        '_,
+        Point<'a>,
+        LineString<'a>,
+        Polygon<'a>,
+        MultiPoint<'a>,
+        MultiLineString<'a>,
+        MultiPolygon<'a>,
+        UnimplementedGeometryCollection<f64>,
+        UnimplementedRect<f64>,
+        UnimplementedTriangle<f64>,
+        UnimplementedLine<f64>,
+    > {
+        match self {
+            Geometry::Point(g) => geo_traits::GeometryType::Point(g),
+            Geometry::LineString(g) => geo_traits::GeometryType::LineString(g),
+            Geometry::Polygon(g) => geo_traits::GeometryType::Polygon(g),
+            Geometry::MultiPoint(g) => geo_traits::GeometryType::MultiPoint(g),
+            Geometry::MultiLineString(g) => geo_traits::GeometryType::MultiLineString(g),
+            Geometry::MultiPolygon(g) => geo_traits::GeometryType::MultiPolygon(g),
+        }
+    }
+}
+
+/// Calls `f` with `row(i)` for every row `i` of `chunk`, or `None` where it is null.
+fn rows<'a>(
+    chunk: &dyn Array,
+    f: &mut impl FnMut(Option<Geometry<'a>>) -> PolarsResult<()>,
+    row: impl Fn(usize) -> Geometry<'a>,
+) -> PolarsResult<()> {
+    (0..chunk.len()).try_for_each(|i| f((!chunk.is_null(i)).then(|| row(i))))
+}
+
+/// Calls `f` with every row of `chunk`, a chunk of a `kind` column's storage:
+/// the geometry, or `None` for a null.
+pub fn for_each_geometry(
+    chunk: &dyn Array,
+    kind: Kind,
+    mut f: impl FnMut(Option<Geometry<'_>>) -> PolarsResult<()>,
+) -> PolarsResult<()> {
+    match kind {
+        Kind::Point => {
+            let coords = CoordsView::new(chunk)?;
+            rows(chunk, &mut f, |i| {
+                Geometry::Point(Point {
+                    coords: &coords,
+                    i,
+                    nan_is_empty: true,
+                })
+            })
+        }
+        Kind::LineString | Kind::MultiPoint => {
+            let list = downcast::<ListArray<i64>>(chunk, "a list of coordinates")?;
+            let coords = CoordsView::new(list.values().as_ref())?;
+            rows(chunk, &mut f, |i| {
+                let (start, end) = range(list, i);
+                let coords = &coords;
+                match kind {
+                    Kind::LineString => Geometry::LineString(LineString { coords, start, end }),
+                    _ => Geometry::MultiPoint(MultiPoint { coords, start, end }),
+                }
+            })
+        }
+        Kind::Polygon | Kind::MultiLineString => {
+            let list = downcast::<ListArray<i64>>(chunk, "a list of rings or linestrings")?;
+            let lines =
+                downcast::<ListArray<i64>>(list.values().as_ref(), "a list of coordinates")?;
+            let coords = CoordsView::new(lines.values().as_ref())?;
+            rows(chunk, &mut f, |i| {
+                let (start, end) = range(list, i);
+                let coords = &coords;
+                match kind {
+                    Kind::Polygon => Geometry::Polygon(Polygon {
+                        rings: lines,
+                        coords,
+                        start,
+                        end,
+                    }),
+                    _ => Geometry::MultiLineString(MultiLineString {
+                        lines,
+                        coords,
+                        start,
+                        end,
+                    }),
+                }
+            })
+        }
+        Kind::MultiPolygon => {
+            let list = downcast::<ListArray<i64>>(chunk, "a list of polygons")?;
+            let polygons = downcast::<ListArray<i64>>(list.values().as_ref(), "a list of rings")?;
+            let rings =
+                downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of coordinates")?;
+            let coords = CoordsView::new(rings.values().as_ref())?;
+            rows(chunk, &mut f, |i| {
+                let (start, end) = range(list, i);
+                Geometry::MultiPolygon(MultiPolygon {
+                    polygons,
+                    rings,
+                    coords: &coords,
+                    start,
+                    end,
+                })
+            })
+        }
+    }
+}

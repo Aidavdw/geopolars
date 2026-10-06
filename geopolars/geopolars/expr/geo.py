@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.geo import affine, construct, coordinates, wkb
+from geopolars.geo import affine, construct, coordinates, wkb, wkt
 
 # bound directly: `geopolars.geo.area` is the function, not the module.
 from geopolars.geo.area import area as _area
@@ -86,3 +86,11 @@ class Geometry:
         self, geometry: type[GeoArrowType], *, crs: str | None = None
     ) -> pl.Expr:
         return wkb.from_wkb(self._expr, geometry, crs=crs)
+
+    def to_wkt(self) -> pl.Expr:
+        return wkt.to_wkt(self._expr)
+
+    def from_wkt(
+        self, geometry: type[GeoArrowType], *, crs: str | None = None
+    ) -> pl.Expr:
+        return wkt.from_wkt(self._expr, geometry, crs=crs)

@@ -12,6 +12,7 @@ from geopolars.datatypes import GeoPoint
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
+    from geopolars.datatypes import GeoArrowType
 
 
 def _coord(value: IntoExprColumn, name: str) -> pl.Expr:
@@ -48,6 +49,25 @@ def _given(
 def _metadata(crs: str | None) -> dict[str, str | None]:
     """Mirrors `MetadataKwargs` in `src/geoarrow/crs.rs`."""
     return {"crs": crs}
+
+
+def _decode_kwargs(
+    geometry: type[GeoArrowType], crs: str | None
+) -> dict[str, str | None]:
+    """Mirrors `DecodeKwargs` in `src/geoarrow/decode.rs`:
+    the concrete geometry `from_wkb` / `from_wkt` decode into.
+    """
+    dimension = getattr(geometry, "_dimension", ())
+    if not dimension:
+        msg = (
+            f"expected a concrete geometry type such as `PolygonXY`, got: {geometry!r}"
+        )
+        raise TypeError(msg)
+    return {
+        "kind": geometry._display,
+        "dimension": "".join(dimension),
+        **_metadata(crs),
+    }
 
 
 def _from_columns(

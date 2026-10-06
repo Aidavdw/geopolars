@@ -50,6 +50,7 @@ from geopolars.datatypes.polygon import (
 )
 from geopolars.datatypes.registry import GEOMETRIES
 from geopolars.datatypes.wkb import Wkb
+from geopolars.datatypes.wkt import Wkt
 
 __all__ = [
     "GEOMETRIES",
@@ -85,4 +86,5 @@ __all__ = [
     "PolygonXYZ",
     "PolygonXYZM",
     "Wkb",
+    "Wkt",
 ]

@@ -6,13 +6,14 @@
 
 pub mod coord;
 pub mod crs;
+pub mod decode;
 mod dimension;
+pub mod encoded;
 mod geo;
 pub mod geodetic;
 pub mod geotraits;
 mod kind;
 pub mod storage;
-pub mod wkb;
 
 pub use dimension::GeoDimension;
 pub use geo::Geo;
@@ -25,6 +26,7 @@ use polars::prelude::*;
 use polars_core::datatypes::extension::{register_extension_type, ExtensionTypeInstance};
 
 use crs::ExtensionMetadata;
+use encoded::{EncodedFactory, Encoding};
 use geo::GeoFactory;
 
 /// Populate this library's extension-type registry.
@@ -38,7 +40,9 @@ pub fn register() -> PolarsResult<()> {
     for kind in Kind::ALL {
         register_extension_type(kind.name(), Some(Arc::new(GeoFactory(kind))))?;
     }
-    register_extension_type(wkb::Wkb::NAME, Some(Arc::new(wkb::WkbFactory)))?;
+    for encoding in Encoding::ALL {
+        register_extension_type(encoding.name(), Some(Arc::new(EncodedFactory(encoding))))?;
+    }
     Ok(())
 }
 

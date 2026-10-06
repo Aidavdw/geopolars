@@ -24,81 +24,15 @@ from geopolars.datatypes import (
     Wkb,
 )
 from tests.unit.conftest import XY, Dimension
+from tests.unit.io._geometries import (
+    GEOMETRIES,
+    column,
+    kind_dtype,
+    shapely_wkb,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-Coordinate = tuple[float, float]
-
-#: One geometry per kind, as nested `(x, y)` coordinates.
-#: The polygon has a hole, so interior rings are covered.
-SQUARE = [[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 0.0)]]
-POLYGON = [*SQUARE, [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 1.0)]]
-GEOMETRIES: dict[str, Any] = {
-    "point": (1.0, 2.0),
-    "linestring": [(1.0, 2.0), (3.0, 4.0), (5.0, 6.0)],
-    "polygon": POLYGON,
-    "multipoint": [(1.0, 2.0), (3.0, 4.0)],
-    "multilinestring": [[(1.0, 2.0), (3.0, 4.0)], [(5.0, 6.0), (7.0, 8.0)]],
-    "multipolygon": [
-        POLYGON,
-        [[(10.0, 10.0), (12.0, 10.0), (12.0, 12.0), (10.0, 10.0)]],
-    ],
-}
-
-
-def _dtype(kind: str, dimension: Dimension) -> type[GeoArrowType]:
-    return getattr(dimension, f"{kind}_dtype")  # type: ignore[no-any-return]
-
-
-def _extend(xy: Coordinate, dimension: Dimension) -> tuple[float, ...]:
-    """The coordinate with every axis `dimension` has, `z`/`m` derived from x/y."""
-    extra = {"z": xy[0] * 10, "m": xy[1] * 100}
-    return xy + tuple(extra[name] for name in dimension.coords[2:])
-
-
-def _storage(nested: Any, dimension: Dimension) -> Any:
-    """The geometry as Python values for its storage dtype."""
-    if isinstance(nested, tuple):
-        return dict(zip(dimension.coords, _extend(nested, dimension)))
-    return [_storage(part, dimension) for part in nested]
-
-
-def _wkt(kind: str, dimension: Dimension) -> str:
-    def coord(xy: Coordinate) -> str:
-        return " ".join(str(v) for v in _extend(xy, dimension))
-
-    def seq(texts: Any) -> str:
-        return "(" + ", ".join(texts) + ")"
-
-    def polygon(rings: Any) -> str:
-        return seq(seq(map(coord, ring)) for ring in rings)
-
-    geometry = GEOMETRIES[kind]
-    text = {
-        "point": lambda: seq([coord(geometry)]),
-        "linestring": lambda: seq(map(coord, geometry)),
-        "polygon": lambda: polygon(geometry),
-        "multipoint": lambda: seq(seq([coord(p)]) for p in geometry),
-        "multilinestring": lambda: polygon(geometry),
-        "multipolygon": lambda: seq(map(polygon, geometry)),
-    }[kind]()
-    tag = "".join(dimension.coords[2:]).upper()
-    return " ".join(part for part in (kind.upper(), tag, text) if part)
-
-
-def _column(kind: str, dimension: Dimension, crs: str | None = None) -> pl.Series:
-    """One geometry of `kind`, then a null."""
-    dtype = _dtype(kind, dimension)(crs=crs)
-    values = [_storage(GEOMETRIES[kind], dimension), None]
-    return pl.Series("g", values, dtype=dtype.ext_storage()).ext.to(dtype)
-
-
-def _shapely_wkb(kind: str, dimension: Dimension, *, byte_order: int = 1) -> bytes:
-    geometry = shapely.from_wkt(_wkt(kind, dimension))
-    return shapely.to_wkb(  # type: ignore[no-any-return]
-        geometry, flavor="iso", output_dimension=4, byte_order=byte_order
-    )
 
 
 def _binary(values: list[bytes | None]) -> pl.Series:
@@ -107,10 +41,10 @@ def _binary(values: list[bytes | None]) -> pl.Series:
 
 @pytest.mark.parametrize("kind", list(GEOMETRIES))
 def test_writes_what_shapely_writes(kind: str, dimension: Dimension) -> None:
-    out = pl.select(geo.to_wkb(_column(kind, dimension))).to_series()
+    out = pl.select(geo.to_wkb(column(kind, dimension))).to_series()
 
     assert out.dtype == Wkb()
-    assert out.ext.storage().to_list() == [_shapely_wkb(kind, dimension), None]
+    assert out.ext.storage().to_list() == [shapely_wkb(kind, dimension), None]
 
 
 @pytest.mark.parametrize("byte_order", [0, 1], ids=["big-endian", "little-endian"])
@@ -118,21 +52,21 @@ def test_writes_what_shapely_writes(kind: str, dimension: Dimension) -> None:
 def test_reads_what_shapely_writes(
     kind: str, dimension: Dimension, byte_order: int
 ) -> None:
-    wkb = _binary([_shapely_wkb(kind, dimension, byte_order=byte_order), None])
-    out = pl.select(geo.from_wkb(wkb, _dtype(kind, dimension))).to_series()
+    wkb = _binary([shapely_wkb(kind, dimension, byte_order=byte_order), None])
+    out = pl.select(geo.from_wkb(wkb, kind_dtype(kind, dimension))).to_series()
 
-    assert_series_equal(out, _column(kind, dimension))
+    assert_series_equal(out, column(kind, dimension))
 
 
 @pytest.mark.parametrize("kind", list(GEOMETRIES))
 def test_round_trip_keeps_the_crs(kind: str, dimension: Dimension) -> None:
-    column = _column(kind, dimension, crs="EPSG:4326")
-    wkb = pl.select(geo.to_wkb(column)).to_series()
+    geometries = column(kind, dimension, crs="EPSG:4326")
+    wkb = pl.select(geo.to_wkb(geometries)).to_series()
     assert wkb.dtype == Wkb(crs="EPSG:4326")
 
-    back = pl.select(geo.from_wkb(wkb, _dtype(kind, dimension))).to_series()
-    assert back.dtype == column.dtype
-    assert_series_equal(back, column)
+    back = pl.select(geo.from_wkb(wkb, kind_dtype(kind, dimension))).to_series()
+    assert back.dtype == geometries.dtype
+    assert_series_equal(back, geometries)
 
 
 def test_round_trip_of_built_geometries(
@@ -147,9 +81,11 @@ def test_round_trip_of_built_geometries(
 
 
 def test_namespace() -> None:
-    column = _column("linestring", XY)
-    back = column.to_frame().select(pl.col("g").geo.to_wkb().geo.from_wkb(LineStringXY))
-    assert_series_equal(back.to_series(), column)
+    geometries = column("linestring", XY)
+    back = geometries.to_frame().select(
+        pl.col("g").geo.to_wkb().geo.from_wkb(LineStringXY)
+    )
+    assert_series_equal(back.to_series(), geometries)
 
 
 def test_a_slice_is_encoded_from_its_own_offsets(
@@ -289,7 +225,7 @@ def test_to_wkb_wants_a_geometry() -> None:
 
 
 def test_operations_do_not_take_wkb() -> None:
-    wkb = pl.select(geo.to_wkb(_column("polygon", XY)))
+    wkb = pl.select(geo.to_wkb(column("polygon", XY)))
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         wkb.select(geo.area("g"))
 

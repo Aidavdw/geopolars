@@ -17,3 +17,4 @@ pub mod crs;
 pub mod distance;
 pub mod length;
 pub mod wkb;
+pub mod wkt;

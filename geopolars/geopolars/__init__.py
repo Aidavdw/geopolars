@@ -38,6 +38,7 @@ from geopolars.datatypes import (
     PolygonXYZ,
     PolygonXYZM,
     Wkb,
+    Wkt,
 )
 
 # Importing this registers the namespaces on pl.Expr as a side effect.
@@ -77,6 +78,7 @@ __all__ = [
     "PolygonXYZ",
     "PolygonXYZM",
     "Wkb",
+    "Wkt",
     "as_plugin",
     "col",
     "datatypes",
