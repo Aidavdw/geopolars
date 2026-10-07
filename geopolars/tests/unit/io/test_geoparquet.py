@@ -1,0 +1,236 @@
+"""Reading GeoParquet.
+
+Tests against files from https://github.com/opengeospatial/geoparquet/tree/v1.1.0+p1,
+and files with manually-input geo-metadata (plain storage)
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import polars as pl
+import pytest
+import shapely
+from polars.testing import assert_frame_equal
+
+import geopolars as gpl
+from geopolars import geo
+from geopolars.datatypes import (
+    GeoArrowType,
+    LineStringXY,
+    MultiLineStringXY,
+    MultiPointXY,
+    MultiPolygonXY,
+    PointXY,
+    PolygonXY,
+    PolygonXYZ,
+    Wkb,
+)
+
+DATA = Path(__file__).parents[2] / "data" / "geoparquet"
+
+#: The geometries `data-<name>-*` holds.
+SPEC_GEOMETRIES: dict[str, type[GeoArrowType]] = {
+    "point": PointXY,
+    "linestring": LineStringXY,
+    "polygon": PolygonXY,
+    "multipoint": MultiPointXY,
+    "multilinestring": MultiLineStringXY,
+    "multipolygon": MultiPolygonXY,
+}
+
+
+@pytest.mark.parametrize(("name", "geometry"), SPEC_GEOMETRIES.items())
+def test_the_spec_test_data_reads_as_its_wkt(
+    name: str, geometry: type[GeoArrowType]
+) -> None:
+    """Native and WKB files without a `crs`, each against the same geometries as WKT."""
+    expected = pl.read_csv(DATA / f"data-{name}-wkt.csv").with_columns(
+        geo.from_wkt("geometry", geometry, crs="OGC:CRS84")
+    )
+
+    native = gpl.read_parquet(DATA / f"data-{name}-encoding_native.parquet")
+    assert native.schema["geometry"] == geometry(crs="OGC:CRS84")
+    assert_frame_equal(native, expected)
+
+    wkb = gpl.read_parquet(DATA / f"data-{name}-encoding_wkb.parquet")
+    assert wkb.schema["geometry"] == Wkb(crs="OGC:CRS84")
+    assert_frame_equal(wkb.with_columns(geo.from_wkb("geometry", geometry)), expected)
+
+
+def test_the_spec_example_reads() -> None:
+    """WKB of polygons and multipolygons, a PROJJSON CRS and a `bbox` covering."""
+    df = gpl.read_parquet(DATA / "example.parquet")
+
+    wkb = df.schema["geometry"]
+    assert isinstance(wkb, Wkb)
+    assert wkb._declares_crs()
+    # The covering is a plain column: nothing reads it yet.
+    assert isinstance(df.schema["bbox"], pl.Struct)
+
+    polygons = df.select(geo.from_wkb("geometry", MultiPolygonXY))
+    # Polygons are promoted, and the CRS comes along.
+    assert polygons.schema["geometry"].ext_metadata() == wkb.ext_metadata()
+    assert polygons["geometry"].null_count() == 0
+
+
+POINTS = pl.DataFrame(
+    {"id": [1, 2], "geometry": [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]}
+)
+
+
+def _geo(**column: Any) -> dict[str, Any]:
+    """`geo` metadata for a `geometry` column of points, plus `column`."""
+    return {
+        "version": "1.1.0",
+        "primary_column": "geometry",
+        "columns": {
+            "geometry": {"encoding": "point", "geometry_types": ["Point"], **column}
+        },
+    }
+
+
+def _write(
+    path: Path, geo_metadata: dict[str, Any] | None, df: pl.DataFrame = POINTS
+) -> Path:
+    metadata = None if geo_metadata is None else {"geo": json.dumps(geo_metadata)}
+    df.write_parquet(path, metadata=metadata)
+    return path
+
+
+def test_a_missing_crs_is_crs84(tmp_path: Path) -> None:
+    path = _write(tmp_path / "points.parquet", _geo())
+    back = gpl.read_parquet(path)
+
+    assert back.schema["geometry"] == PointXY(crs="OGC:CRS84")
+    assert_frame_equal(back.with_columns(pl.col("geometry").ext.storage()), POINTS)
+
+
+def test_a_null_crs_is_no_crs(tmp_path: Path) -> None:
+    path = _write(tmp_path / "points.parquet", _geo(crs=None))
+    assert gpl.read_parquet(path).schema["geometry"] == PointXY()
+
+
+def test_a_projjson_crs_is_the_crs(tmp_path: Path) -> None:
+    projjson = {"type": "GeographicCRS", "name": "WGS 84"}
+    path = _write(tmp_path / "points.parquet", _geo(crs=projjson))
+    assert gpl.read_parquet(path).schema["geometry"] == PointXY(
+        crs=json.dumps(projjson)
+    )
+
+
+def test_the_dimension_comes_from_the_storage(tmp_path: Path) -> None:
+    ring = [{"x": 0.0, "y": 0.0, "z": 1.0}, {"x": 1.0, "y": 0.0, "z": 1.0}]
+    df = pl.DataFrame({"geometry": [[ring], None]})
+    geo_metadata = _geo(crs=None)
+    geo_metadata["columns"]["geometry"] |= {
+        "encoding": "polygon",
+        "geometry_types": [],
+    }
+    path = _write(tmp_path / "polygons.parquet", geo_metadata, df)
+    back = gpl.read_parquet(path)
+
+    assert back.schema["geometry"] == PolygonXYZ()
+    assert back["geometry"].is_null().to_list() == [False, True]
+
+
+def test_wkb_stays_wkb_with_the_crs(tmp_path: Path) -> None:
+    df = pl.DataFrame(
+        {"geometry": shapely.to_wkb(shapely.points([[1.0, 2.0], [3.0, 4.0]]))},
+        schema={"geometry": pl.Binary},
+    )
+    geo_metadata = _geo()
+    geo_metadata["columns"]["geometry"]["encoding"] = "WKB"
+    path = _write(tmp_path / "wkb.parquet", geo_metadata, df)
+    back = gpl.read_parquet(path)
+
+    assert back.schema["geometry"] == Wkb(crs="OGC:CRS84")
+    points = back.select(geo.from_wkb("geometry", PointXY))
+    assert points.schema["geometry"] == PointXY(crs="OGC:CRS84")
+    assert_frame_equal(
+        points.select(pl.col("geometry").ext.storage()), POINTS.select("geometry")
+    )
+
+
+def test_a_file_polars_wrote_keeps_its_dtype(tmp_path: Path) -> None:
+    """Such a file already has the extension type, so nothing needs converting."""
+    df = POINTS.with_columns(pl.col("geometry").ext.to(PointXY(crs="OGC:CRS84")))
+    path = _write(tmp_path / "points.parquet", _geo(), df)
+    assert_frame_equal(gpl.read_parquet(path), df)
+
+
+def test_the_scan_stays_lazy(tmp_path: Path) -> None:
+    path = _write(tmp_path / "points.parquet", _geo())
+    lf = gpl.scan_parquet(path)
+
+    assert lf.select("id").collect()["id"].to_list() == [1, 2]
+    filtered = lf.filter(pl.col("id") == 2).collect()
+    assert filtered.schema["geometry"] == PointXY(crs="OGC:CRS84")
+    assert filtered.height == 1
+
+
+def test_read_is_a_collected_scan(tmp_path: Path) -> None:
+    path = _write(tmp_path / "points.parquet", _geo())
+    assert_frame_equal(gpl.read_parquet(path), gpl.scan_parquet(path).collect())
+
+
+def test_files_that_agree_read_together(tmp_path: Path) -> None:
+    """Only the dtypes have to agree: a `bbox` is per file."""
+    _write(tmp_path / "a.parquet", _geo(bbox=[1, 2, 1, 2]))
+    _write(tmp_path / "b.parquet", _geo(bbox=[3, 4, 3, 4]))
+
+    for source in [
+        tmp_path / "*.parquet",
+        [tmp_path / "a.parquet", tmp_path / "b.parquet"],
+    ]:
+        back = gpl.read_parquet(source)
+        assert back.schema["geometry"] == PointXY(crs="OGC:CRS84")
+        assert back.height == 4
+
+
+def test_files_that_disagree_are_refused(tmp_path: Path) -> None:
+    _write(tmp_path / "a.parquet", _geo(crs=None))
+    _write(tmp_path / "b.parquet", _geo())
+    source = tmp_path / "*.parquet"
+
+    with pytest.raises(pl.exceptions.SchemaError, match="check_every_file"):
+        gpl.scan_parquet(source)
+    trusted = gpl.read_parquet(source, check_every_file=False)
+    assert trusted.schema["geometry"] == PointXY()
+
+
+def test_files_without_metadata_among_geoparquet_are_refused(tmp_path: Path) -> None:
+    _write(tmp_path / "a.parquet", _geo())
+    _write(tmp_path / "b.parquet", None)
+
+    with pytest.raises(pl.exceptions.SchemaError, match="no GeoParquet metadata"):
+        gpl.scan_parquet(tmp_path / "*.parquet")
+
+
+def test_plain_parquet_is_read_as_is(tmp_path: Path) -> None:
+    path = _write(tmp_path / "plain.parquet", None)
+    assert_frame_equal(gpl.read_parquet(path), pl.read_parquet(path))
+
+
+def test_a_geometry_column_the_file_lacks_is_refused(tmp_path: Path) -> None:
+    path = _write(tmp_path / "points.parquet", _geo(), POINTS.select("id"))
+    with pytest.raises(pl.exceptions.ColumnNotFoundError, match="geometry"):
+        gpl.scan_parquet(path)
+
+
+@pytest.mark.parametrize(
+    ("geo_metadata", "match"),
+    [
+        (_geo(epoch=2021.47), "epoch"),
+        (_geo() | {"version": "2.0.0"}, "2.0.0"),
+        (_geo(encoding="geometry"), "encoding"),
+    ],
+)
+def test_metadata_it_cannot_honour_is_refused(
+    tmp_path: Path, geo_metadata: dict[str, Any], match: str
+) -> None:
+    path = _write(tmp_path / "points.parquet", geo_metadata)
+    with pytest.raises(pl.exceptions.ComputeError, match=match):
+        gpl.scan_parquet(path)

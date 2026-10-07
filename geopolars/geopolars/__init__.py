@@ -43,6 +43,7 @@ from geopolars.datatypes import (
 
 # Importing this registers the namespaces on pl.Expr as a side effect.
 from geopolars.expr import Geometry, PluginExpr, as_plugin, col
+from geopolars.io import read_parquet, scan_parquet
 
 __all__ = [
     "GeoLineString",
@@ -83,4 +84,6 @@ __all__ = [
     "col",
     "datatypes",
     "geo",
+    "read_parquet",
+    "scan_parquet",
 ]

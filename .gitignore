@@ -40,6 +40,8 @@ target/
 # Data
 *.csv
 *.parquet
+!geopolars/tests/data/**/*.csv
+!geopolars/tests/data/**/*.parquet
 *.feather
 *.tbl
 
