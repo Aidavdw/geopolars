@@ -45,8 +45,6 @@ proj-sys = "0.27"
 # rsgeo does not re-export it, but we need it for CRS ellipsoid distance measuring.
 # Keep on the version and features rsgeo pulls in.
 geographiclib-rs = { version = "0.2.7", default-features = false }
-geoparquet = "0.9.0"
-# Must match the version geoparquet pins.
 geoarrow-schema = "0.9.0"
 # WKB encoding and decoding, through geo-traits.
 # Keep on the version geoarrow-array pins.
@@ -56,3 +54,5 @@ wkb = "0.9.2"
 wkt = { version = "0.14.0", default-features = false }
 # for maximum interoperability, we should not reshuffle keys when (re-)constructing metadata.
 serde_json = { version = "1", features = ["preserve_order"] }
+# Keeps a GeoParquet file's geometry columns in schema order, for the same reason.
+indexmap = { version = "2", features = ["serde"] }
