@@ -1,8 +1,9 @@
 //! Home of [ExtensionMetadata].
 use std::sync::Arc;
 
-use geoarrow_schema::{Crs, CrsType};
+use geoarrow_schema::{Crs, CrsType, Edges};
 use polars::prelude::*;
+use rsgeo::proj::Proj;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -87,6 +88,49 @@ impl ExtensionMetadata {
     pub fn with_crs(mut self, crs: &str) -> Self {
         self.0.insert("crs".to_owned(), crs_value(crs));
         self.0.shift_remove("crs_type");
+        self
+    }
+
+    /// The CRS as a PROJJSON object.
+    /// This is used for GeoParquet.
+    /// `None` if the metadata declares no CRS.
+    /// A PROJJSON CRS comes back as-is; any other form is converted by PROJ.
+    pub fn projjson(&self) -> PolarsResult<Option<Map<String, Value>>> {
+        match self.0.get("crs") {
+            None | Some(Value::Null) => return Ok(None),
+            Some(Value::Object(projjson)) => return Ok(Some(projjson.clone())),
+            Some(_) => {}
+        }
+        let crs = self.crs()?;
+        let projjson = Proj::new(&crs)
+            .map_err(|e| polars_err!(ComputeError: "PROJ cannot read the CRS {crs}: {e}"))?
+            .to_projjson(None, None, None)
+            .map_err(
+                |e| polars_err!(ComputeError: "PROJ cannot write the CRS {crs} as PROJJSON: {e}"),
+            )?;
+        match serde_json::from_str(&projjson) {
+            Ok(Value::Object(projjson)) => Ok(Some(projjson)),
+            _ => polars_bail!(
+                ComputeError: "PROJ wrote invalid PROJJSON for the CRS {crs}: {projjson}"
+            ),
+        }
+    }
+
+    /// How the edges between coordinates run. `None` means planar.
+    pub fn edges(&self) -> PolarsResult<Option<Edges>> {
+        match self.0.get("edges") {
+            None | Some(Value::Null) => Ok(None),
+            Some(edges) => Edges::deserialize(edges).map(Some).map_err(
+                |e| polars_err!(ComputeError: "invalid edges {edges} in GeoArrow metadata: {e}"),
+            ),
+        }
+    }
+
+    /// Consuming setter for edges.
+    pub fn with_edges(mut self, edges: Edges) -> Self {
+        // A unit variant always serialises.
+        let edges = serde_json::to_value(edges).unwrap();
+        self.0.insert("edges".to_owned(), edges);
         self
     }
 }
@@ -258,6 +302,39 @@ mod tests {
     fn refuses_to_relabel_a_declared_crs() {
         let err = apply(Some(r#"{"crs":"EPSG:4326"}"#), Some("EPSG:28992")).unwrap_err();
         assert!(err.to_string().contains("to_crs"), "{err}");
+    }
+
+    #[test]
+    fn projjson_keeps_an_object_and_converts_the_rest() {
+        let object = ExtensionMetadata::parse(Some(r#"{"crs":{"type":"GeographicCRS"}}"#));
+        let object = Value::Object(object.unwrap().projjson().unwrap().unwrap());
+        assert_eq!(object, serde_json::json!({"type": "GeographicCRS"}));
+
+        let code = ExtensionMetadata::parse(Some(r#"{"crs":"EPSG:4326"}"#));
+        let projjson = code.unwrap().projjson().unwrap().unwrap();
+        assert_eq!(
+            projjson["id"],
+            serde_json::json!({"authority": "EPSG", "code": 4326})
+        );
+
+        for metadata in [None, Some(r#"{"crs":null}"#)] {
+            let metadata = ExtensionMetadata::parse(metadata).unwrap();
+            assert_eq!(metadata.projjson().unwrap(), None);
+        }
+        let srid = ExtensionMetadata::parse(Some(r#"{"crs":"4326","crs_type":"srid"}"#));
+        assert!(srid.unwrap().projjson().is_err());
+        let nonsense = ExtensionMetadata::parse(Some(r#"{"crs":"not a crs"}"#));
+        assert!(nonsense.unwrap().projjson().is_err());
+    }
+
+    #[test]
+    fn reads_and_sets_edges() {
+        let metadata = ExtensionMetadata::default().with_edges(Edges::Spherical);
+        assert_eq!(metadata.serialize().unwrap(), r#"{"edges":"spherical"}"#);
+        assert_eq!(metadata.edges().unwrap(), Some(Edges::Spherical));
+        assert_eq!(ExtensionMetadata::default().edges().unwrap(), None);
+        let unknown = ExtensionMetadata::parse(Some(r#"{"edges":"geodesic-ish"}"#));
+        assert!(unknown.unwrap().edges().is_err());
     }
 
     #[test]

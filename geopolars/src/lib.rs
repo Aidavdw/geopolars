@@ -4,6 +4,9 @@ use pyo3_polars::PolarsAllocator;
 
 mod expr;
 mod geoarrow;
+// Used by the GeoParquet reader and writer, which come next.
+#[allow(dead_code)]
+mod geoparquet;
 
 #[global_allocator]
 static ALLOC: PolarsAllocator = PolarsAllocator::new();
