@@ -1,0 +1,176 @@
+// What happens in GeoPolars when an expression is used: once when it is added
+// to a query, and once when Polars plans that query.
+// Explained step by step in DEVELOPERS.md, under "Typical flow".
+//
+// Render with: dot -Tsvg docs/expression-flow.dot -o expression-flow.svg
+//
+// Only our own code is drawn. Whatever Polars does in between is an edge.
+// Blue runs in our Python package, orange in our compiled library.
+// A red edge crosses the FFI.
+
+digraph expression_flow {
+    graph [fontname = "Helvetica", fontsize = 12, rankdir = TB, nodesep = 0.4, ranksep = 0.45,
+           newrank = true, ordering = out];
+    node [fontname = "Helvetica", fontsize = 11, shape = box, style = "rounded,filled",
+          fillcolor = "#dbe9f6", color = "#4a7fb0"];
+    edge [fontname = "Helvetica", fontsize = 9, color = "#555555", fontcolor = "#555555"];
+
+    subgraph cluster_legend {
+        label = "Legend"; style = "rounded"; color = "#bbbbbb";
+        legend_python [label = "our Python\n(geopolars/)"];
+        legend_rust [label = "our library\n(src/)", fillcolor = "#fde3c8", color = "#c07a30"];
+        legend_end [label = "start / end", shape = ellipse, style = "filled", fillcolor = "#eeeeee",
+                    color = "#999999"];
+        legend_python -> legend_rust [label = "FFI", color = "#c0392b", fontcolor = "#c0392b",
+                                      penwidth = 2];
+        legend_rust -> legend_end [label = "dashed: once Polars\nplans the query", style = dashed];
+    }
+
+    // ---------------------------------------------------------------- adding
+    subgraph cluster_adding {
+        label = "Adding the expression"; style = "rounded"; color = "#999999";
+
+        start_namespace [label = "gpl.col(\"parcel\").geo.area()", shape = ellipse,
+                         style = "filled", fillcolor = "#eeeeee", color = "#999999"];
+        start_functional [label = "geo.area(\"parcel\")", shape = ellipse,
+                          style = "filled", fillcolor = "#eeeeee", color = "#999999"];
+        A1 [label = "A1. Forward from the namespace\nGeometry.area"];
+        A2 [label = "A2. Enter the functional API\ngeo.area"];
+        A3 [label = "A3. Need the geometry or metadata\nto choose what to lower to?",
+            shape = diamond, style = "filled"];
+        A4 [label = "A4. Pick the tier", shape = diamond, style = "filled"];
+
+        // plan-time callback
+        A5 [label = "A5. Normalise the input\n_to_expr"];
+        A6 [label = "A6. Defer to plan time\non_geometry → pipe_with_dtype"];
+
+        subgraph cluster_adding_tier2 {
+            label = "Tier 2: plugin expression"; style = "rounded,dashed"; color = "#999999";
+            A7 [label = "A7. Encode the arguments\nkwargs, e.g. _decode_kwargs"];
+            A8 [label = "A8. Name the kernel\nregister_plugin_function"];
+        }
+
+        subgraph cluster_adding_tier3 {
+            label = "Tier 3: forward to external"; style = "rounded,dashed"; color = "#999999";
+            A9 [label = "A9. Encode the external input\nkwargs, e.g. {\"to\": crs}"];
+            A10 [label = "A10. Name the forwarding kernel\nregister_plugin_function"];
+        }
+
+        start_namespace -> A1;
+        start_functional -> A2;
+        A1 -> A2;
+        A2 -> A3;
+        A3 -> A5 [label = "yes"];
+        A3 -> A4 [label = "no"];
+        A4 -> A7 [label = "2"];
+        A4 -> A9 [label = "3"];
+        A5 -> A6;
+        A7 -> A8;
+        A9 -> A10;
+
+        {rank = same; start_namespace; start_functional;}
+        {rank = same; A7; A9;}
+        {rank = same; A8; A10;}
+    }
+
+    // -------------------------------------------------------------- planning
+    subgraph cluster_planning {
+        label = "Planning the query"; style = "rounded"; color = "#999999";
+
+        P1 [label = "P1. Rebuild the dtype in Python\next_from_params"];
+        P2 [label = "P2. Accept only geometries\n_geometry_of"];
+        P3 [label = "P3. Read the metadata in Rust\ndeclares_crs",
+            fillcolor = "#fde3c8", color = "#c07a30"];
+        P4 [label = "P4. Choose the implementation\n(based on dtype+metadata)\nbuild(expr, geometry)", shape = diamond,
+            style = "filled"];
+
+        subgraph cluster_planning_tier1 {
+            label = "Tier 1: native"; style = "rounded,dashed"; color = "#999999";
+            P5 [label = "P5. Build on the storage\n.ext.storage() + native expressions"];
+            P6 [label = "P6. Label the result\n.ext.to(…_with_metadata_of(geometry))"];
+            end1 [label = "plan of only native nodes", shape = ellipse, style = "filled",
+                  fillcolor = "#eeeeee", color = "#999999"];
+        }
+
+        subgraph cluster_planning_tier2 {
+            label = "Tier 2: plugin expression"; style = "rounded,dashed"; color = "#999999";
+            P7 [label = "P7. Return the kernel call\nregister_plugin_function"];
+            P8 [label = "P8. Import the input fields\n_polars_plugin_field_<name>",
+                fillcolor = "#fde3c8", color = "#c07a30"];
+            P9 [label = "P9. Describe the geometry\ndescribe → GeoColumn",
+                fillcolor = "#fde3c8", color = "#c07a30"];
+            P10 [label = "P10. Derive the output field\ne.g. same_geometry",
+                 fillcolor = "#fde3c8", color = "#c07a30"];
+            P11 [label = "P11. Rebuild the output in Python\next_from_params"];
+            end2 [label = "plan with a kernel node", shape = ellipse, style = "filled",
+                  fillcolor = "#eeeeee", color = "#999999"];
+        }
+
+        subgraph cluster_planning_tier3 {
+            label = "Tier 3: forward to external"; style = "rounded,dashed"; color = "#999999";
+            P12 [label = "P12. Return the forwarding kernel call\nregister_plugin_function"];
+            P13 [label = "P13. Import the input fields\n_polars_plugin_field_<name>",
+                 fillcolor = "#fde3c8", color = "#c07a30"];
+            P14 [label = "P14. Describe the geometry\ndescribe → GeoColumn",
+                 fillcolor = "#fde3c8", color = "#c07a30"];
+            P15 [label = "P15. Derive the output from the CRS\ne.g. areas, reprojected",
+                 fillcolor = "#fde3c8", color = "#c07a30"];
+            P16 [label = "P16. Rebuild the output in Python\next_from_params"];
+            end3 [label = "plan with a forwarding kernel node", shape = ellipse, style = "filled",
+                  fillcolor = "#eeeeee", color = "#999999"];
+        }
+
+        // shared
+        P1 -> P2;
+        P2 -> P3 [label = "FFI: Python → library\n(pyo3)", color = "#c0392b",
+                  fontcolor = "#c0392b", penwidth = 2];
+        P3 -> P4 [label = "FFI: library → Python", color = "#c0392b", fontcolor = "#c0392b",
+                  penwidth = 2];
+        P2 -> P4 [label = "metadata\nnot needed", style = dotted];
+        P4 -> P5 [label = "1"];
+        P4 -> P7 [label = "2"];
+        P4 -> P12 [label = "3"];
+
+        // tier 1
+        P5 -> P6;
+        P6 -> end1 [label = "FFI: Python → Polars\n(name, storage, metadata)", color = "#c0392b",
+                    fontcolor = "#c0392b", penwidth = 2];
+
+        // tier 2
+        P7 -> P8 [label = "FFI: Python → Polars\n→ library (C ABI)", color = "#c0392b",
+                  fontcolor = "#c0392b", penwidth = 2];
+        P8 -> P9;
+        P9 -> P10;
+        P10 -> P11 [label = "FFI: library → Polars\n→ Python", color = "#c0392b",
+                    fontcolor = "#c0392b", penwidth = 2];
+        P10 -> end2 [label = "FFI: library → Polars\n(not a geometry)", color = "#c0392b",
+                     fontcolor = "#c0392b", penwidth = 2];
+        P11 -> end2 [label = "FFI: Python → Polars", color = "#c0392b", fontcolor = "#c0392b",
+                     penwidth = 2];
+
+        // tier 3
+        P12 -> P13 [label = "FFI: Python → Polars\n→ library (C ABI)", color = "#c0392b",
+                    fontcolor = "#c0392b", penwidth = 2];
+        P13 -> P14;
+        P14 -> P15;
+        P15 -> P16 [label = "FFI: library → Polars\n→ Python", color = "#c0392b",
+                    fontcolor = "#c0392b", penwidth = 2];
+        P15 -> end3 [label = "FFI: library → Polars\n(not a geometry)", color = "#c0392b",
+                     fontcolor = "#c0392b", penwidth = 2];
+        P16 -> end3 [label = "FFI: Python → Polars", color = "#c0392b", fontcolor = "#c0392b",
+                     penwidth = 2];
+
+        {rank = same; P5; P7; P12;}
+        {rank = same; P8; P13;}
+        {rank = same; end1; end2; end3;}
+    }
+
+    // ----------------------------------------------- from adding to planning
+    // Each tier's expression enters the plan where its branch picks up again.
+    A6 -> P1 [label = "FFI: Polars → Python\n(the input's dtype)", style = dashed,
+              color = "#c0392b", fontcolor = "#c0392b", penwidth = 2];
+    A8 -> P8 [label = "FFI: Polars → library\n(C ABI)", style = dashed, color = "#c0392b",
+              fontcolor = "#c0392b", penwidth = 2];
+    A10 -> P13 [label = "FFI: Polars → library\n(C ABI)", style = dashed, color = "#c0392b",
+               fontcolor = "#c0392b", penwidth = 2];
+}
