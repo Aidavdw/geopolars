@@ -293,7 +293,8 @@ fn is_crs84(projjson: &Map<String, Value>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    //! Not reachable from Python until the reader and writer exist.
+    //! The writing side: not reachable from Python until the writer exists.
+    //! Reading is tested in `tests/unit/io/test_geoparquet.py`.
 
     use serde_json::json;
 
@@ -318,16 +319,6 @@ mod tests {
 
     fn write_error(dtype: &DataType) -> String {
         GeoParquetColumn::from_dtype(dtype).unwrap_err().to_string()
-    }
-
-    /// A file's metadata with `column` as its only column, `g`.
-    fn file(column: &str) -> String {
-        format!(r#"{{"version":"1.1.0","primary_column":"g","columns":{{"g":{column}}}}}"#)
-    }
-
-    fn read(column: &str) -> GeoParquetColumn {
-        let mut metadata = GeoParquetMetadata::parse(&file(column)).unwrap();
-        metadata.columns.shift_remove("g").unwrap()
     }
 
     fn storage(dtype: &DataType) -> &DataType {
@@ -430,108 +421,6 @@ mod tests {
 
         let schema = Schema::from_iter([Field::new("id".into(), DataType::Int64)]);
         assert!(GeoParquetMetadata::from_schema(&schema).unwrap().is_none());
-    }
-
-    #[test]
-    fn a_missing_crs_is_crs84() {
-        let column = read(r#"{"encoding":"point","geometry_types":["Point"]}"#);
-        let crs84 = geo(
-            Kind::Point,
-            GeoDimension::XY,
-            Some(r#"{"crs":"OGC:CRS84"}"#),
-        );
-        assert_eq!(column.dtype(storage(&crs84)).unwrap(), crs84);
-    }
-
-    #[test]
-    fn reads_a_null_or_projjson_crs() {
-        let column = read(r#"{"encoding":"point","geometry_types":[],"crs":null}"#);
-        let none = geo(Kind::Point, GeoDimension::XY, None);
-        assert_eq!(column.dtype(storage(&none)).unwrap(), none);
-
-        let column =
-            read(r#"{"encoding":"point","geometry_types":[],"crs":{"type":"GeographicCRS"}}"#);
-        let projjson = geo(
-            Kind::Point,
-            GeoDimension::XY,
-            Some(r#"{"crs":{"type":"GeographicCRS"}}"#),
-        );
-        assert_eq!(column.dtype(storage(&projjson)).unwrap(), projjson);
-    }
-
-    #[test]
-    fn the_dimension_comes_from_the_storage() {
-        let column = read(r#"{"encoding":"polygon","geometry_types":[],"crs":null}"#);
-        let xyz = geo(Kind::Polygon, GeoDimension::XYZ, None);
-        assert_eq!(column.dtype(storage(&xyz)).unwrap(), xyz);
-    }
-
-    #[test]
-    fn ignores_what_it_does_not_use() {
-        let column = r#"{
-            "encoding": "WKB", "geometry_types": ["Polygon"], "orientation": "counterclockwise",
-            "bbox": [0, 0, 1, 1], "vendor": {"a": 1},
-            "covering": {"bbox": {"xmin": ["bbox", "xmin"], "ymin": ["bbox", "ymin"],
-                                  "xmax": ["bbox", "xmax"], "ymax": ["bbox", "ymax"]}}
-        }"#;
-        let geo = format!(
-            r#"{{"version":"1.1.0","primary_column":"g","columns":{{"g":{column}}},"creator":"x"}}"#
-        );
-        let metadata = GeoParquetMetadata::parse(&geo).unwrap();
-        assert_eq!(metadata.columns["g"].encoding, ColumnEncoding::Wkb);
-    }
-
-    #[test]
-    fn refuses_metadata_it_cannot_honour() {
-        let point = r#"{"encoding":"point","geometry_types":[]}"#;
-        for (geo, reason) in [
-            (
-                file(r#"{"encoding":"point","geometry_types":[],"epoch":2021.47}"#),
-                "epoch",
-            ),
-            (
-                file(r#"{"encoding":"geometry","geometry_types":[]}"#),
-                "encoding",
-            ),
-            (file(point).replace("1.1.0", "2.0.0"), "2.0.0"),
-            (
-                file(point).replace(r#""primary_column":"g""#, r#""primary_column":"h""#),
-                "`h`",
-            ),
-        ] {
-            let err = GeoParquetMetadata::parse(&geo).unwrap_err().to_string();
-            assert!(err.contains(reason), "{err}");
-        }
-    }
-
-    #[test]
-    fn refuses_storage_that_does_not_match_the_encoding() {
-        let point = read(r#"{"encoding":"point","geometry_types":[]}"#);
-        assert!(point.dtype(&GeoDimension::XY.storage(1)).is_err());
-        let wkb = read(r#"{"encoding":"WKB","geometry_types":[]}"#);
-        assert!(wkb.dtype(&DataType::String).is_err());
-    }
-
-    #[test]
-    fn finds_the_storage_in_the_schema() {
-        let geo_json = file(r#"{"encoding":"point","geometry_types":[]}"#);
-        let metadata = GeoParquetMetadata::parse(&geo_json).unwrap();
-        let crs84 = geo(
-            Kind::Point,
-            GeoDimension::XY,
-            Some(r#"{"crs":"OGC:CRS84"}"#),
-        );
-        // Plain storage, and storage already under an extension type.
-        for dtype in [
-            storage(&crs84).clone(),
-            geo(Kind::Point, GeoDimension::XY, None),
-        ] {
-            let schema = Schema::from_iter([Field::new("g".into(), dtype)]);
-            let fields = metadata.dtypes(&schema).unwrap();
-            assert_eq!(fields, [Field::new("g".into(), crs84.clone())]);
-        }
-        let err = metadata.dtypes(&Schema::default()).unwrap_err();
-        assert!(matches!(err, PolarsError::ColumnNotFound(_)), "{err}");
     }
 
     #[test]

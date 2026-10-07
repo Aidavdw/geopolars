@@ -226,6 +226,7 @@ def test_a_geometry_column_the_file_lacks_is_refused(tmp_path: Path) -> None:
         (_geo(epoch=2021.47), "epoch"),
         (_geo() | {"version": "2.0.0"}, "2.0.0"),
         (_geo(encoding="geometry"), "encoding"),
+        (_geo() | {"primary_column": "elsewhere"}, "elsewhere"),
     ],
 )
 def test_metadata_it_cannot_honour_is_refused(
@@ -233,4 +234,45 @@ def test_metadata_it_cannot_honour_is_refused(
 ) -> None:
     path = _write(tmp_path / "points.parquet", geo_metadata)
     with pytest.raises(pl.exceptions.ComputeError, match=match):
+        gpl.scan_parquet(path)
+
+
+def test_fields_it_does_not_use_are_ignored(tmp_path: Path) -> None:
+    """Readers must not reject what a newer minor version or a vendor adds."""
+    geo_metadata = _geo(
+        orientation="counterclockwise",
+        bbox=[1, 2, 3, 4],
+        vendor={"a": 1},
+        covering={
+            "bbox": {
+                "xmin": ["bbox", "xmin"],
+                "ymin": ["bbox", "ymin"],
+                "xmax": ["bbox", "xmax"],
+                "ymax": ["bbox", "ymax"],
+            }
+        },
+    ) | {"creator": {"library": "elsewhere"}}
+    path = _write(tmp_path / "points.parquet", geo_metadata)
+    assert gpl.read_parquet(path).schema["geometry"] == PointXY(crs="OGC:CRS84")
+
+
+def test_spherical_edges_are_kept(tmp_path: Path) -> None:
+    path = _write(tmp_path / "points.parquet", _geo(edges="spherical"))
+    dtype = gpl.read_parquet(path).schema["geometry"]
+    assert dtype.ext_metadata() == '{"crs":"OGC:CRS84","edges":"spherical"}'
+
+
+@pytest.mark.parametrize(
+    ("encoding", "df"),
+    [
+        # Points, but stored as a linestring.
+        ("point", pl.DataFrame({"geometry": [[{"x": 1.0, "y": 2.0}]]})),
+        ("WKB", pl.DataFrame({"geometry": ["POINT (1 2)"]})),
+    ],
+)
+def test_storage_that_does_not_match_the_encoding_is_refused(
+    tmp_path: Path, encoding: str, df: pl.DataFrame
+) -> None:
+    path = _write(tmp_path / "points.parquet", _geo(encoding=encoding), df)
+    with pytest.raises(pl.exceptions.SchemaError, match="stored as"):
         gpl.scan_parquet(path)
