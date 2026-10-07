@@ -48,6 +48,16 @@ fn geoparquet_dtypes(py: Python<'_>, geo: &str, schema: PyDataFrame) -> PyResult
         .map_err(|e| polars_exception(py, e))
 }
 
+/// See `geopolars.io.parquet._with_geo_metadata`.
+/// `None` if the schema has no geometry columns.
+#[pyfunction]
+#[pyo3(signature = (schema))]
+fn geoparquet_metadata(py: Python<'_>, schema: PyDataFrame) -> PyResult<Option<String>> {
+    geoparquet::GeoParquetMetadata::from_schema(schema.0.schema())
+        .map(|metadata| metadata.map(|metadata| metadata.to_json()))
+        .map_err(|e| polars_exception(py, e))
+}
+
 /// `err` as the matching exception of the host `polars` package,
 /// so that it can be caught as, say, `pl.exceptions.ComputeError`.
 fn polars_exception(py: Python<'_>, err: PolarsError) -> PyErr {
@@ -72,6 +82,7 @@ fn geopolars(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(extension_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(declares_crs, m)?)?;
     m.add_function(wrap_pyfunction!(geoparquet_dtypes, m)?)?;
+    m.add_function(wrap_pyfunction!(geoparquet_metadata, m)?)?;
     geoarrow::register().map_err(|e| {
         pyo3::exceptions::PyRuntimeError::new_err(format!(
             "failed to register geoarrow extension types: {e}"

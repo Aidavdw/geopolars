@@ -1,14 +1,15 @@
-"""Reading GeoParquet files.
+"""Reading and writing GeoParquet files.
 
 A GeoParquet file is a Parquet file with a `geo` key in its metadata.
 It says which columns hold geometries, how, and in which CRS.
-Reading the file is done with polars.
-This module only gives the geometry their dtypes.
+Reading and writing the file is done with polars.
+This module only gives the geometry their dtypes on reading,
+and writes the `geo` key on writing.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import IO, TYPE_CHECKING, Any, Literal
 
 import polars as pl
 
@@ -21,7 +22,11 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
-    from polars._typing import StorageOptionsDict
+    from polars._typing import (
+        ParquetMetadata,
+        ParquetMetadataContext,
+        StorageOptionsDict,
+    )
     from polars.io.cloud import CredentialProviderFunction
 
 
@@ -125,3 +130,73 @@ def _geometry_dtypes(geo: str, schema: pl.Schema) -> dict[str, pl.DataType]:
     """
     frame = _rust.geoparquet_dtypes(geo, pl.DataFrame(schema=schema))
     return dict(frame.schema)
+
+
+def write_parquet(
+    df: pl.DataFrame,
+    file: str | Path | IO[bytes],
+    *,
+    metadata: ParquetMetadata | None = None,
+    **kwargs: Any,
+) -> None:
+    """Write GeoParquet, like `DataFrame.write_parquet`.
+
+    Every geometry column is described in the file's `geo` metadata,
+    next to any `metadata` of your own.
+    The geometries are written in their own encoding: native, or WKB for a `Wkb` column.
+    The WKB we write is modern, so some older readers may not accept it.
+    A frame without geometry columns is written as plain Parquet.
+
+    GeoParquet 1.1 does not support M values and no WKT.
+    Columns with such data are refused.
+    CRS that cannot be written with PROJJSON are also refused.
+
+    You can pass parquet metadata directly as an argument.
+    Other keyword arguments are passed on to `DataFrame.write_parquet`.
+    """
+    df.write_parquet(file, metadata=_with_geo_metadata(df.schema, metadata), **kwargs)
+
+
+def sink_parquet(
+    lf: pl.LazyFrame,
+    path: str | Path | IO[bytes],
+    *,
+    metadata: ParquetMetadata | None = None,
+    **kwargs: Any,
+) -> pl.LazyFrame | None:
+    """Stream GeoParquet to `path`, like `LazyFrame.sink_parquet`.
+
+    See `write_parquet`.
+    The metadata follows from the schema alone,
+    so a column GeoParquet cannot hold is refused before anything is written.
+
+    Other keyword arguments (such as `lazy`) are passed on to `LazyFrame.sink_parquet`.
+    """
+    return lf.sink_parquet(
+        path, metadata=_with_geo_metadata(lf.collect_schema(), metadata), **kwargs
+    )
+
+
+def _with_geo_metadata(
+    schema: pl.Schema, metadata: ParquetMetadata | None
+) -> ParquetMetadata | None:
+    geo = _rust.geoparquet_metadata(pl.DataFrame(schema=schema))
+    if geo is None:
+        return metadata
+    if metadata is None:
+        return {"geo": geo}
+    if callable(metadata):
+        user_fn = metadata
+
+        def with_geo(ctx: ParquetMetadataContext) -> dict[str, str]:
+            return _add_geo(user_fn(ctx), geo)
+
+        return with_geo
+    return _add_geo(metadata, geo)
+
+
+def _add_geo(metadata: dict[str, str], geo: str) -> dict[str, str]:
+    if "geo" in metadata:
+        msg = "the `geo` metadata key is written by geopolars, and cannot be set"
+        raise ValueError(msg)
+    return {**metadata, "geo": geo}

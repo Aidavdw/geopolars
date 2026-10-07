@@ -187,7 +187,7 @@ the comment says when one without a CRS takes a different tier.
 - [x] WKB encoding and decoding
 - [x] WKT encoding and decoding
 - [x] GeoParquet read
-- [ ] GeoParquet write
+- [x] GeoParquet write
 
 Later goals:
 

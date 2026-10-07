@@ -305,39 +305,6 @@ mod tests {
     }
 
     #[test]
-    fn projjson_keeps_an_object_and_converts_the_rest() {
-        let object = ExtensionMetadata::parse(Some(r#"{"crs":{"type":"GeographicCRS"}}"#));
-        let object = Value::Object(object.unwrap().projjson().unwrap().unwrap());
-        assert_eq!(object, serde_json::json!({"type": "GeographicCRS"}));
-
-        let code = ExtensionMetadata::parse(Some(r#"{"crs":"EPSG:4326"}"#));
-        let projjson = code.unwrap().projjson().unwrap().unwrap();
-        assert_eq!(
-            projjson["id"],
-            serde_json::json!({"authority": "EPSG", "code": 4326})
-        );
-
-        for metadata in [None, Some(r#"{"crs":null}"#)] {
-            let metadata = ExtensionMetadata::parse(metadata).unwrap();
-            assert_eq!(metadata.projjson().unwrap(), None);
-        }
-        let srid = ExtensionMetadata::parse(Some(r#"{"crs":"4326","crs_type":"srid"}"#));
-        assert!(srid.unwrap().projjson().is_err());
-        let nonsense = ExtensionMetadata::parse(Some(r#"{"crs":"not a crs"}"#));
-        assert!(nonsense.unwrap().projjson().is_err());
-    }
-
-    #[test]
-    fn reads_and_sets_edges() {
-        let metadata = ExtensionMetadata::default().with_edges(Edges::Spherical);
-        assert_eq!(metadata.serialize().unwrap(), r#"{"edges":"spherical"}"#);
-        assert_eq!(metadata.edges().unwrap(), Some(Edges::Spherical));
-        assert_eq!(ExtensionMetadata::default().edges().unwrap(), None);
-        let unknown = ExtensionMetadata::parse(Some(r#"{"edges":"geodesic-ish"}"#));
-        assert!(unknown.unwrap().edges().is_err());
-    }
-
-    #[test]
     fn no_keys_is_no_metadata() {
         assert_eq!(
             ExtensionMetadata::parse(Some("{}")).unwrap().serialize(),

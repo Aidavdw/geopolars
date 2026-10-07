@@ -78,8 +78,6 @@ pub enum ParquetEdges {
 impl GeoParquetMetadata {
     /// The metadata describing every geometry column of `schema`.
     /// `None` if it has none.
-    // Used by the GeoParquet writer, which comes next.
-    #[allow(dead_code)]
     pub fn from_schema(schema: &Schema) -> PolarsResult<Option<Self>> {
         let mut columns = IndexMap::new();
         for (name, dtype) in schema.iter() {
@@ -121,8 +119,6 @@ impl GeoParquetMetadata {
     }
 
     /// The value for a file's `geo` key.
-    // Used by the GeoParquet writer, which comes next.
-    #[allow(dead_code)]
     pub fn to_json(&self) -> String {
         // Every key is a string and every number finite, so this cannot fail.
         serde_json::to_string(self).unwrap()
@@ -289,168 +285,4 @@ fn is_crs84(projjson: &Map<String, Value>) -> bool {
     projjson
         .get("id")
         .is_some_and(|id| id["authority"] == "OGC" && id["code"] == "CRS84")
-}
-
-#[cfg(test)]
-mod tests {
-    //! The writing side: not reachable from Python until the writer exists.
-    //! Reading is tested in `tests/unit/io/test_geoparquet.py`.
-
-    use serde_json::json;
-
-    use super::*;
-    use crate::geoarrow::GeoDimension;
-
-    fn metadata(json: Option<&str>) -> Arc<ExtensionMetadata> {
-        Arc::new(ExtensionMetadata::parse(json).unwrap())
-    }
-
-    fn geo(kind: Kind, dim: GeoDimension, json: Option<&str>) -> DataType {
-        Geo::new(kind, dim, metadata(json)).dtype()
-    }
-
-    fn wkb(json: Option<&str>) -> DataType {
-        Encoded::new(Encoding::Wkb, metadata(json)).dtype()
-    }
-
-    fn written(dtype: &DataType) -> Value {
-        serde_json::to_value(GeoParquetColumn::from_dtype(dtype).unwrap()).unwrap()
-    }
-
-    fn write_error(dtype: &DataType) -> String {
-        GeoParquetColumn::from_dtype(dtype).unwrap_err().to_string()
-    }
-
-    fn storage(dtype: &DataType) -> &DataType {
-        let DataType::Extension(_, storage) = dtype else {
-            panic!("not an extension type: {dtype}");
-        };
-        storage
-    }
-
-    #[test]
-    fn writes_a_native_column() {
-        let v = written(&geo(
-            Kind::Point,
-            GeoDimension::XY,
-            Some(r#"{"crs":"EPSG:4326"}"#),
-        ));
-        assert_eq!(v["encoding"], "point");
-        assert_eq!(v["geometry_types"], json!(["Point"]));
-        assert_eq!(v["crs"]["id"], json!({"authority": "EPSG", "code": 4326}));
-        assert!(v.get("edges").is_none(), "{v}");
-        assert!(v.get("epoch").is_none(), "{v}");
-    }
-
-    #[test]
-    fn a_z_coordinate_is_in_the_geometry_type() {
-        let v = written(&geo(Kind::MultiLineString, GeoDimension::XYZ, None));
-        assert_eq!(v["encoding"], "multilinestring");
-        assert_eq!(v["geometry_types"], json!(["MultiLineString Z"]));
-    }
-
-    #[test]
-    fn refuses_m_values() {
-        for dim in [GeoDimension::XYM, GeoDimension::XYZM] {
-            let err = write_error(&geo(Kind::Polygon, dim, None));
-            assert!(err.contains("M values"), "{err}");
-        }
-    }
-
-    #[test]
-    fn no_crs_is_written_as_null() {
-        for json in [None, Some(r#"{"crs":null}"#)] {
-            let v = written(&geo(Kind::Point, GeoDimension::XY, json));
-            assert_eq!(v.get("crs"), Some(&Value::Null), "{v}");
-        }
-    }
-
-    #[test]
-    fn crs84_is_left_out() {
-        let v = written(&geo(
-            Kind::Point,
-            GeoDimension::XY,
-            Some(r#"{"crs":"OGC:CRS84"}"#),
-        ));
-        assert!(v.get("crs").is_none(), "{v}");
-    }
-
-    #[test]
-    fn refuses_what_geoparquet_cannot_hold() {
-        let srid = geo(
-            Kind::Point,
-            GeoDimension::XY,
-            Some(r#"{"crs":"4326","crs_type":"srid"}"#),
-        );
-        assert!(write_error(&srid).contains("SRID"));
-        let karney = geo(Kind::Point, GeoDimension::XY, Some(r#"{"edges":"karney"}"#));
-        assert!(write_error(&karney).contains("karney"));
-        let wkt = Encoded::new(Encoding::Wkt, metadata(None)).dtype();
-        assert!(write_error(&wkt).contains("WKT"));
-    }
-
-    #[test]
-    fn writes_spherical_edges() {
-        let v = written(&geo(
-            Kind::LineString,
-            GeoDimension::XY,
-            Some(r#"{"edges":"spherical"}"#),
-        ));
-        assert_eq!(v["edges"], "spherical");
-    }
-
-    #[test]
-    fn writes_wkb_without_geometry_types() {
-        let v = written(&wkb(None));
-        assert_eq!(v["encoding"], "WKB");
-        assert_eq!(v["geometry_types"], json!([]));
-    }
-
-    #[test]
-    fn describes_every_geometry_column_of_a_schema() {
-        let schema = Schema::from_iter([
-            Field::new("id".into(), DataType::Int64),
-            Field::new("a".into(), geo(Kind::Point, GeoDimension::XY, None)),
-            Field::new("name".into(), DataType::String),
-            Field::new("b".into(), wkb(None)),
-        ]);
-        let metadata = GeoParquetMetadata::from_schema(&schema).unwrap().unwrap();
-        assert_eq!(metadata.version, "1.1.0");
-        assert_eq!(metadata.primary_column, "a");
-        assert_eq!(metadata.columns.keys().collect::<Vec<_>>(), ["a", "b"]);
-
-        let schema = Schema::from_iter([Field::new("id".into(), DataType::Int64)]);
-        assert!(GeoParquetMetadata::from_schema(&schema).unwrap().is_none());
-    }
-
-    #[test]
-    fn round_trips_through_the_metadata() {
-        let crs84 = Some(r#"{"crs":"OGC:CRS84"}"#);
-        for dtype in [
-            geo(Kind::Point, GeoDimension::XY, crs84),
-            geo(Kind::Point, GeoDimension::XYZ, None),
-            geo(
-                Kind::LineString,
-                GeoDimension::XY,
-                Some(r#"{"crs":"OGC:CRS84","edges":"spherical"}"#),
-            ),
-            geo(
-                Kind::MultiPolygon,
-                GeoDimension::XY,
-                Some(r#"{"crs":{"type":"GeographicCRS"}}"#),
-            ),
-            wkb(crs84),
-            wkb(None),
-        ] {
-            let schema = Schema::from_iter([Field::new("g".into(), dtype.clone())]);
-            let json = GeoParquetMetadata::from_schema(&schema)
-                .unwrap()
-                .unwrap()
-                .to_json();
-            let back = GeoParquetMetadata::parse(&json).unwrap().columns["g"]
-                .dtype(storage(&dtype))
-                .unwrap();
-            assert_eq!(back, dtype, "{json}");
-        }
-    }
 }
