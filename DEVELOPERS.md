@@ -193,13 +193,17 @@ Later goals:
 - [ ] GeoJson read
 - [ ] PostGIS read
 - [ ] GDAL vector files
+- [ ] Interop with arrow
 
 ### Per-geometry properties and ops
 
 - [x] Area
 - [x] Length
-- [ ] getters for coordinates
-- [ ] validity tests
+- [ ] getters for coordinates (z/m)
+- [ ] CRS: opaque SRIDs refused for reprojection?
+- [ ] is_empty for all geo
+- [ ] validity checking functions
+- [ ] Handling closing of loop consistently for polygon
 - [ ] mean coordinate
 - [ ] centroid
 - [ ] convex hull

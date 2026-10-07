@@ -1,6 +1,14 @@
 # GeoPolars
 
-If you are interested in developing GeoPolars further, read [DEVELOPERS.md](DEVELOPERS.md).
+In this branch, we are rewriting large chunks of GeoPolars to work much more closely with the rest of Polars.
+This is all very much still work-in-progress, and as such this branch is HIGHLY unstable.
+We'll need a little bit more time to make things nice, but we're making a lot of progress very quickly,
+so stay tuned!
+
+## Developer Documentation
+
+If you are interested in the design paradigm and architecture used for this plugin,
+or are curious about developing GeoPolars further, read [DEVELOPERS.md](DEVELOPERS.md).
 
 ## Two APIs
 
