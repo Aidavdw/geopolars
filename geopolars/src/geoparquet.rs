@@ -78,6 +78,8 @@ pub enum ParquetEdges {
 impl GeoParquetMetadata {
     /// The metadata describing every geometry column of `schema`.
     /// `None` if it has none.
+    // Used by the GeoParquet writer, which comes next.
+    #[allow(dead_code)]
     pub fn from_schema(schema: &Schema) -> PolarsResult<Option<Self>> {
         let mut columns = IndexMap::new();
         for (name, dtype) in schema.iter() {
@@ -119,9 +121,31 @@ impl GeoParquetMetadata {
     }
 
     /// The value for a file's `geo` key.
+    // Used by the GeoParquet writer, which comes next.
+    #[allow(dead_code)]
     pub fn to_json(&self) -> String {
         // Every key is a string and every number finite, so this cannot fail.
         serde_json::to_string(self).unwrap()
+    }
+
+    /// The dtype of every geometry column, given the `schema` Polars reads the file with.
+    pub fn dtypes(&self, schema: &Schema) -> PolarsResult<Vec<Field>> {
+        self.columns
+            .iter()
+            .map(|(name, column)| {
+                let Some(dtype) = schema.get(name) else {
+                    polars_bail!(
+                        ColumnNotFound: "the GeoParquet geometry column `{name}` is not in the file"
+                    );
+                };
+                // A file Polars wrote already carries the extension type.
+                let storage = match dtype {
+                    DataType::Extension(_, storage) => storage,
+                    storage => storage,
+                };
+                Ok(Field::new(name.into(), column.dtype(storage)?))
+            })
+            .collect()
     }
 }
 
@@ -486,6 +510,28 @@ mod tests {
         assert!(point.dtype(&GeoDimension::XY.storage(1)).is_err());
         let wkb = read(r#"{"encoding":"WKB","geometry_types":[]}"#);
         assert!(wkb.dtype(&DataType::String).is_err());
+    }
+
+    #[test]
+    fn finds_the_storage_in_the_schema() {
+        let geo_json = file(r#"{"encoding":"point","geometry_types":[]}"#);
+        let metadata = GeoParquetMetadata::parse(&geo_json).unwrap();
+        let crs84 = geo(
+            Kind::Point,
+            GeoDimension::XY,
+            Some(r#"{"crs":"OGC:CRS84"}"#),
+        );
+        // Plain storage, and storage already under an extension type.
+        for dtype in [
+            storage(&crs84).clone(),
+            geo(Kind::Point, GeoDimension::XY, None),
+        ] {
+            let schema = Schema::from_iter([Field::new("g".into(), dtype)]);
+            let fields = metadata.dtypes(&schema).unwrap();
+            assert_eq!(fields, [Field::new("g".into(), crs84.clone())]);
+        }
+        let err = metadata.dtypes(&Schema::default()).unwrap_err();
+        assert!(matches!(err, PolarsError::ColumnNotFound(_)), "{err}");
     }
 
     #[test]

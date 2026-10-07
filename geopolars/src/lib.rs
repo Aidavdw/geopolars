@@ -1,11 +1,10 @@
+use polars::prelude::{DataFrame, IntoColumn, PolarsError, Series};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3_polars::PolarsAllocator;
+use pyo3_polars::{PolarsAllocator, PyDataFrame};
 
 mod expr;
 mod geoarrow;
-// Used by the GeoParquet reader and writer, which come next.
-#[allow(dead_code)]
 mod geoparquet;
 
 #[global_allocator]
@@ -30,6 +29,40 @@ fn declares_crs(metadata: Option<&str>) -> PyResult<bool> {
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
+/// See `geopolars.io.parquet._geometry_dtypes`.
+///
+/// Dtypes cross as an empty frame:
+/// pyo3-polars cannot convert an extension dtype on its own, but a series carries it.
+#[pyfunction]
+#[pyo3(signature = (geo, schema))]
+fn geoparquet_dtypes(py: Python<'_>, geo: &str, schema: PyDataFrame) -> PyResult<PyDataFrame> {
+    let fields = geoparquet::GeoParquetMetadata::parse(geo)
+        .and_then(|metadata| metadata.dtypes(schema.0.schema()))
+        .map_err(|e| polars_exception(py, e))?;
+    let columns = fields
+        .iter()
+        .map(|field| Series::new_empty(field.name().clone(), field.dtype()).into_column())
+        .collect();
+    DataFrame::new(0, columns)
+        .map(PyDataFrame)
+        .map_err(|e| polars_exception(py, e))
+}
+
+/// `err` as the matching exception of the host `polars` package,
+/// so that it can be caught as, say, `pl.exceptions.ComputeError`.
+fn polars_exception(py: Python<'_>, err: PolarsError) -> PyErr {
+    let name = match &err {
+        PolarsError::ColumnNotFound(_) => "ColumnNotFoundError",
+        PolarsError::ComputeError(_) => "ComputeError",
+        PolarsError::SchemaMismatch(_) => "SchemaError",
+        _ => "PolarsError",
+    };
+    py.import("polars.exceptions")
+        .and_then(|exceptions| exceptions.getattr(name))
+        .and_then(|exception| exception.call1((err.to_string(),)))
+        .map_or_else(|e| e, PyErr::from_value)
+}
+
 /// The plugin's Python module.
 /// Here so that extension types are explicitly registered with Polars with `PyInit_geopolars`.
 #[pymodule]
@@ -38,6 +71,7 @@ fn geopolars(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // that hook is already by calling the plugin functions.
     m.add_function(wrap_pyfunction!(extension_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(declares_crs, m)?)?;
+    m.add_function(wrap_pyfunction!(geoparquet_dtypes, m)?)?;
     geoarrow::register().map_err(|e| {
         pyo3::exceptions::PyRuntimeError::new_err(format!(
             "failed to register geoarrow extension types: {e}"
