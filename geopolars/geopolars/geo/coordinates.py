@@ -27,13 +27,22 @@ def _getter(axis: str) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
     """Reads one axis off a geometry's storage, keeping its nesting."""
 
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
+        if axis not in geometry._dimension:
+            msg = (
+                f"{type(geometry).__name__} has no `{axis}` coordinate; "
+                f"`{axis}` needs a geometry whose dimension includes it"
+            )
+            raise TypeError(msg)
         return _axis(column.ext.storage(), geometry._nesting, axis)
 
     return build
 
 
 def x(geometry: IntoExprColumn) -> pl.Expr:
-    """The `x` coordinates of a geometry, nested as the geometry is.
+    """The `x` coordinates of a geometry.
+
+    The nesting of the output of this function depends on how nested the geometry is.
+    A point will return a single value, while a linestring will return a list of values.
 
     | in                  | out                     |
     |---------------------|-------------------------|
@@ -57,7 +66,7 @@ def x(geometry: IntoExprColumn) -> pl.Expr:
 
 
 def y(geometry: IntoExprColumn) -> pl.Expr:
-    """The `y` coordinates of a geometry, nested as the geometry is.
+    """The `y` coordinates of a geometry.
 
     Works exactly like `x`, for the `y` axis.
 
@@ -66,3 +75,31 @@ def y(geometry: IntoExprColumn) -> pl.Expr:
     ```
     """
     return on_geometry(geometry, _getter("y"))
+
+
+def z(geometry: IntoExprColumn) -> pl.Expr:
+    """The `z` coordinates of a geometry.
+
+    Works exactly like `x`, for the `z` axis.
+    Only a geometry that has a `z` (`…XYZ` or `…XYZM`) has one to read:
+    any other is refused.
+
+    ```python
+    df.select(geo.z("location"))
+    ```
+    """
+    return on_geometry(geometry, _getter("z"))
+
+
+def m(geometry: IntoExprColumn) -> pl.Expr:
+    """The `m` (measure) values of a geometry.
+
+    Works exactly like `x`, for the `m` axis.
+    Only a geometry that has an `m` (`…XYM` or `…XYZM`) has one to read:
+    any other is refused while the plan is built.
+
+    ```python
+    df.select(geo.m("location"))
+    ```
+    """
+    return on_geometry(geometry, _getter("m"))

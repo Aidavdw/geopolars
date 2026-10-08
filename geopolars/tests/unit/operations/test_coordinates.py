@@ -11,13 +11,27 @@ from polars.testing import assert_series_equal
 import geopolars as gpl
 from geopolars import geo
 from geopolars.datatypes import LineStringXY, PolygonXY
-from tests.unit.conftest import XY, Dimension
+from tests.unit.conftest import XY, XYZM, Dimension
 
 Getter = Callable[[str], pl.Expr]
 
-AXES = pytest.mark.parametrize(
+XY_AXES = pytest.mark.parametrize(
     ("axis", "getter"), [("x", geo.x), ("y", geo.y)], ids=["x", "y"]
 )
+AXES = pytest.mark.parametrize(
+    ("axis", "getter"),
+    [("x", geo.x), ("y", geo.y), ("z", geo.z), ("m", geo.m)],
+    ids=["x", "y", "z", "m"],
+)
+OPTIONAL_AXES = pytest.mark.parametrize(
+    ("axis", "getter"), [("z", geo.z), ("m", geo.m)], ids=["z", "m"]
+)
+
+
+def _require(axis: str, dimension: Dimension) -> None:
+    """Skip a dimension that does not carry `axis`: there is nothing to read."""
+    if axis not in dimension.coords:
+        pytest.skip(f"{dimension.point_dtype.__name__} has no {axis}")
 
 
 def _per(vertices: pl.DataFrame, axis: str, *groups: str) -> list:
@@ -33,6 +47,7 @@ def _per(vertices: pl.DataFrame, axis: str, *groups: str) -> list:
 def test_reads_a_points_axis(
     axis: str, getter: Getter, coords: pl.DataFrame, dimension: Dimension
 ) -> None:
+    _require(axis, dimension)
     df = coords.select(dimension.point())
     out = df.select(getter("point")).to_series()
 
@@ -44,6 +59,7 @@ def test_reads_a_points_axis(
 def test_a_linestring_gives_a_list(
     axis: str, getter: Getter, line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
+    _require(axis, dimension)
     out = dimension.lines(line_coords).select(getter("line")).to_series()
 
     assert out.dtype == pl.List(pl.Float64)
@@ -54,6 +70,7 @@ def test_a_linestring_gives_a_list(
 def test_a_multipoint_gives_a_list(
     axis: str, getter: Getter, line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
+    _require(axis, dimension)
     df = dimension.multipoints(line_coords)
     out = df.select(getter("multipoint")).to_series()
 
@@ -66,6 +83,7 @@ def test_a_polygon_gives_a_list_per_ring(
     axis: str, getter: Getter, ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     """Closing coordinates included: these are the coordinates as stored."""
+    _require(axis, dimension)
     out = dimension.polygons(ring_coords).select(getter("polygon")).to_series()
 
     assert out.dtype == pl.List(pl.List(pl.Float64))
@@ -76,6 +94,7 @@ def test_a_polygon_gives_a_list_per_ring(
 def test_a_multilinestring_gives_a_list_per_linestring(
     axis: str, getter: Getter, ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
+    _require(axis, dimension)
     df = dimension.multilinestrings(ring_coords)
     out = df.select(getter("multilinestring")).to_series()
 
@@ -87,6 +106,7 @@ def test_a_multilinestring_gives_a_list_per_linestring(
 def test_a_multipolygon_gives_a_list_per_polygon_per_ring(
     axis: str, getter: Getter, multipolygon_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
+    _require(axis, dimension)
     df = dimension.multipolygons(multipolygon_coords)
     out = df.select(getter("multipolygon")).to_series()
 
@@ -96,7 +116,7 @@ def test_a_multipolygon_gives_a_list_per_polygon_per_ring(
     )
 
 
-@AXES
+@XY_AXES
 def test_a_missing_point_has_no_coordinate(axis: str, getter: Getter) -> None:
     df = pl.DataFrame({"x": [1.0, 2.0], "y": [3.0, 4.0]}).select(
         pl.when(pl.col("x") > 1.0).then(XY.point())
@@ -106,7 +126,7 @@ def test_a_missing_point_has_no_coordinate(axis: str, getter: Getter) -> None:
     assert df.select(getter("point")).to_series().to_list() == expected
 
 
-@AXES
+@XY_AXES
 def test_missing_and_empty_geometries_stay_so(axis: str, getter: Getter) -> None:
     xy = pl.Struct({"x": pl.Float64, "y": pl.Float64})
     lines = pl.Series("line", [None, [], [{"x": 1.0, "y": 2.0}]], pl.List(xy))
@@ -119,7 +139,7 @@ def test_missing_and_empty_geometries_stay_so(axis: str, getter: Getter) -> None
     assert out["polygon"].to_list() == [None, [], [[]]]
 
 
-@AXES
+@XY_AXES
 @pytest.mark.parametrize("geometry", ["point", "line"])
 def test_drops_the_crs(axis: str, getter: Getter, geometry: str) -> None:
     df = pl.DataFrame({"x": [1.0], "y": [2.0]}).select(
@@ -142,11 +162,49 @@ def test_refuses_a_non_geometry_while_resolving_the_schema(
         lf.collect_schema()
 
 
-@AXES
+@XY_AXES
 def test_the_namespace_matches_the_function(
     axis: str, getter: Getter, line_coords: pl.DataFrame
 ) -> None:
     df = XY.lines(line_coords)
+    method = getattr(gpl.col("line").geo, axis)
+
+    assert_series_equal(
+        df.select(method()).to_series(),
+        df.select(getter("line")).to_series(),
+    )
+
+
+@OPTIONAL_AXES
+@pytest.mark.parametrize("geometry", ["point", "line", "polygon"])
+def test_refuses_a_geometry_without_the_axis_while_resolving_the_schema(
+    axis: str,
+    getter: Getter,
+    geometry: str,
+    coords: pl.DataFrame,
+    line_coords: pl.DataFrame,
+    ring_coords: pl.DataFrame,
+    dimension: Dimension,
+) -> None:
+    if axis in dimension.coords:
+        pytest.skip(f"{dimension.point_dtype.__name__} has a {axis}")
+    df = {
+        "point": lambda: coords.select(dimension.point()),
+        "line": lambda: dimension.lines(line_coords),
+        "polygon": lambda: dimension.polygons(ring_coords),
+    }[geometry]()
+
+    lf = df.lazy().select(getter(geometry))
+
+    with pytest.raises(TypeError, match=f"has no `{axis}` coordinate"):
+        lf.collect_schema()
+
+
+@OPTIONAL_AXES
+def test_the_namespace_matches_the_function_for_optional_axes(
+    axis: str, getter: Getter, line_coords: pl.DataFrame
+) -> None:
+    df = XYZM.lines(line_coords)
     method = getattr(gpl.col("line").geo, axis)
 
     assert_series_equal(

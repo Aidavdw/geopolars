@@ -23,7 +23,7 @@ from geopolars.geo.construct import (
     polygon_from_rings,
     validate,
 )
-from geopolars.geo.coordinates import x, y
+from geopolars.geo.coordinates import m, x, y, z
 from geopolars.geo.crs import to_crs
 from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.length import length
@@ -38,6 +38,7 @@ __all__ = [
     "from_wkb",
     "from_wkt",
     "length",
+    "m",
     "linestring",
     "linestring_from_columns",
     "linestring_from_vertices",
@@ -62,4 +63,5 @@ __all__ = [
     "validate",
     "x",
     "y",
+    "z",
 ]

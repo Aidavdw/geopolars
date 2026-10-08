@@ -175,6 +175,8 @@ the comment says when one without a CRS takes a different tier.
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
 | `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
+| `z` | 1 | as `x`; only with a `z` | 1 | | 1 | | 1 | | 1 | | 1 | |
+| `m` | 1 | as `x`; only with an `m` | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `to_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `from_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
 | `to_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | | 2 | | 2 | |

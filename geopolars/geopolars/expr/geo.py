@@ -79,6 +79,12 @@ class Geometry:
     def y(self) -> pl.Expr:
         return coordinates.y(self._expr)
 
+    def z(self) -> pl.Expr:
+        return coordinates.z(self._expr)
+
+    def m(self) -> pl.Expr:
+        return coordinates.m(self._expr)
+
     def to_wkb(self) -> pl.Expr:
         return wkb.to_wkb(self._expr)
 
