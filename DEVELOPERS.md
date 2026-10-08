@@ -172,23 +172,28 @@ the comment says when one without a CRS takes a different tier.
 
 | Operation | Point | | LineString | | Polygon | | MultiPoint | | MultiLineString | | MultiPolygon | |
 | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + geographiclib; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | as list of Polygon |
-| `length` | - | | 3 | PROJ + geographiclib; no CRS: 1 | - | | - | | 3 | as list of LineString | - | |
-| `distance` | 3 | between 2 points, PROJ + geographiclib; no CRS: 1 | - | | - | | - | | - | | - | |
-| `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | | 1 | skips each ring's closing coordinate |
+| `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + ggl; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | as list of Polygon |
+| `length` | - | | 3 | PROJ + ggl; no CRS: 1 | - | | - | | 3 | as list of LineString | - | |
+| `distance` | 3 | PROJ + ggl; no CRS: 1 | - | | - | | - | | - | | - | |
+| `mean_coordinate` | 1 | returns the point | 1 | | 1 | skips ring's closing coord | 1 | | 1 | | 1 | skips ring's closing coord |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `bounds` | 1 | repeats its coordinate | 1 | | 1 | | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part |
 | `set_crs` | 1 | relabels only | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
 | `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `z` | 1 | like `x`; only with a `z` | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `m` | 1 | like `x`; only with an `m` | 1 | | 1 | | 1 | | 1 | | 1 | |
-| `is_empty` | 1 | NaN `x` and `y` | 1 | no vertices, or only empty ones | 1 | only empty rings | 1 | no points, or only empty ones | 1 | only empty parts | 1 | only empty polygons |
-| `wrap_longitude` | 1 | needs a geographic CRS | 1 | | 1 | | 1 | | 1 | | 1 | |
+| `is_empty` | 1 | NaN `x` and `y` | 1 | no verts or only empty | 1 | only empty rings | 1 | no verts, or only empty | 1 | only empty parts | 1 | only empty polygons |
+| `wrap_longitude` | 1 | needs geographic CRS | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `to_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `from_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
 | `to_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `from_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
+
+In this table:
+
+- `ggl` means 'geographiclib'
 
 ## Typical flow
 

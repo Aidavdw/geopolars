@@ -11,6 +11,9 @@ from geopolars.geo import affine, construct, coordinates, wkb, wkt
 # bound directly: `geopolars.geo.area` is the function, not the module.
 from geopolars.geo.area import area as _area
 
+# bound directly: `geopolars.geo.bounds` is the function, not the module.
+from geopolars.geo.bounds import bounds as _bounds
+
 # bound directly: `geopolars.geo.box_to_polygon` is the function, not the module.
 from geopolars.geo.box_to_polygon import box_to_polygon as _box_to_polygon
 
@@ -88,6 +91,9 @@ class Geometry:
 
     def is_empty(self) -> pl.Expr:
         return _is_empty(self._expr)
+
+    def bounds(self, *, margin_x: float = 0.0, margin_y: float = 0.0) -> pl.Expr:
+        return _bounds(self._expr, margin_x=margin_x, margin_y=margin_y)
 
     def box_to_polygon(self) -> pl.Expr:
         return _box_to_polygon(self._expr)

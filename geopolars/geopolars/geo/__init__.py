@@ -4,6 +4,7 @@ Everything in the 'geo' namespace forwards to here.
 
 from geopolars.geo.affine import translate
 from geopolars.geo.area import area
+from geopolars.geo.bounds import bounds
 from geopolars.geo.box_to_polygon import box_to_polygon
 from geopolars.geo.construct import (
     box,
@@ -37,6 +38,7 @@ from geopolars.geo.wrap_longitude import wrap_longitude
 
 __all__ = [
     "area",
+    "bounds",
     "box",
     "box_to_polygon",
     "distance",

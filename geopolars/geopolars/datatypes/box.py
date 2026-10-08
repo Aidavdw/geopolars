@@ -76,6 +76,14 @@ class GeoBox(pl.datatypes.BaseExtension):
         return cls._by_dimension[dimension]
 
     @classmethod
+    def _with_metadata_of(cls, other: pl.datatypes.BaseExtension) -> GeoBox:
+        """This (concrete) box type, carrying `other`'s metadata.
+        See `GeoArrowType._with_metadata_of`.
+        """
+        metadata = other.ext_metadata()
+        return cls.ext_from_params(cls._extension_name, cls._box_storage, metadata)
+
+    @classmethod
     def ext_from_params(
         cls, name: str, storage: PolarsDataType, metadata: str | None
     ) -> Any:
