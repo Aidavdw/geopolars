@@ -175,25 +175,25 @@ fn affine(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
     Ok(out.into_extension(geo.typ.clone()))
 }
 
-/// `output_type_func` for an operation about the points of a second column:
-/// it hands back the geometry it got.
-fn same_geometry_about_points(input_fields: &[Field]) -> PolarsResult<Field> {
-    let [geometry, origin] = input_fields else {
-        polars_bail!(ComputeError: "expected a geometry and an origin, got {} inputs", input_fields.len());
+/// `output_type_func` for an operation by the points of a second column,
+/// one per geometry: it hands back the geometry it got.
+fn same_geometry_by_points(input_fields: &[Field]) -> PolarsResult<Field> {
+    let [geometry, points] = input_fields else {
+        polars_bail!(ComputeError: "expected a geometry and its points, got {} inputs", input_fields.len());
     };
     let metadata = describe(geometry.dtype())?.metadata;
-    let origin = describe(origin.dtype())?;
+    let points = describe(points.dtype())?;
     polars_ensure!(
-        origin.kind == Kind::Point,
-        SchemaMismatch: "the origin has to be a `{}` column, got: {}",
-        Kind::Point.name(), origin.typ
+        points.kind == Kind::Point,
+        SchemaMismatch: "expected a `{}` column of points to transform by, got: {}",
+        Kind::Point.name(), points.typ
     );
-    // An origin without a CRS is a plain position, like one given as numbers.
-    if metadata.declares_crs() && origin.metadata.declares_crs() {
-        let (crs, origin_crs) = (metadata.crs()?, origin.metadata.crs()?);
+    // Points without a CRS are plain positions, like ones given as numbers.
+    if metadata.declares_crs() && points.metadata.declares_crs() {
+        let (crs, points_crs) = (metadata.crs()?, points.metadata.crs()?);
         polars_ensure!(
-            crs == origin_crs,
-            SchemaMismatch: "the geometry is in {crs}, but its origin is in {origin_crs}; \
+            crs == points_crs,
+            SchemaMismatch: "the geometry is in {crs}, but its points are in {points_crs}; \
             use `to_crs` to bring one onto the other first"
         );
     }
@@ -205,60 +205,86 @@ fn same_geometry_about_points(input_fields: &[Field]) -> PolarsResult<Field> {
 ///
 /// That is `L.p + offset + (o − L.o)`, with `L` the matrix without its offsets:
 /// the constant kernel, with a shift that is the same for every position of a geometry.
-#[polars_expr(output_type_func=same_geometry_about_points)]
+#[polars_expr(output_type_func=same_geometry_by_points)]
 fn affine_about(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
-    let geo = describe(inputs[0].dtype())?;
-    let storage = inputs[0].ext()?.storage();
-    let origin = inputs[1].ext()?.storage();
-    let origin = match (storage.len(), origin.len()) {
-        (n, m) if n == m => origin.rechunk(),
-        (n, 1) => origin.new_from_index(0, n),
-        (n, m) => polars_bail!(ShapeMismatch: "cannot transform {n} geometries about {m} origins"),
-    };
-
-    let fields = origin.struct_()?;
-    let position = |name: &str| -> PolarsResult<Option<Float64Chunked>> {
-        Ok(match fields.field_by_name(name) {
-            Ok(field) => Some(field.f64()?.rechunk().into_owned()),
-            // An origin without a `z` is at `z` = 0, like one given as two numbers.
-            Err(_) => None,
-        })
-    };
-    let (ox, oy, oz) = (position("x")?, position("y")?, position("z")?);
-    let (ox, oy) = (ox.unwrap(), oy.unwrap());
-    let origin_at = [Some(&ox), Some(&oy), oz.as_ref()];
-    // A geometry is missing wherever its origin, or any part of it, is.
-    let mut missing = fields.rechunk_validity();
-    for at in origin_at.into_iter().flatten() {
-        missing = combine_validities_and(missing.as_ref(), at.downcast_as_array().validity());
-    }
-
-    fn values(at: &Float64Chunked) -> &[f64] {
-        at.downcast_as_array().values().as_slice()
-    }
-    let (ox, oy, oz) = (values(&ox), values(&oy), oz.as_ref().map(values));
-    let bounds = (geo.kind.nesting() > 0)
-        .then(|| coordinate_bounds(storage, geo.kind.nesting()))
-        .transpose()?;
-    let axes = if geo.dim.has_z() { 3 } else { 2 };
-    let shift = |axis: usize| -> Option<Vec<f64>> {
+    shifted_per_row(inputs, &kwargs, &|axis, origin| {
         // A row that keeps its coordinate moves it by its offset alone, about any origin.
         if kwargs.keeps(axis) {
             return None;
         }
+        let [ox, oy, oz] = origin;
         let offset = kwargs.row(axis)[3];
-        let moved = kwargs.apply(axis, ox, oy, oz, None)?;
+        let moved = kwargs.apply(axis, ox?, oy?, oz, None)?;
         // `o − L·o`, for each geometry.
-        let per_geometry: Vec<f64> = match [Some(ox), Some(oy), oz][axis] {
+        Some(match origin[axis] {
             Some(at) => at
                 .iter()
                 .zip(moved)
                 .map(|(at, moved)| at - (moved - offset))
                 .collect(),
+            // An origin without a `z` is at `z` = 0, like one given as two numbers.
             None => moved.iter().map(|moved| -(moved - offset)).collect(),
-        };
+        })
+    })
+}
+
+/// The kernel behind affine ops that move every geometry by a vector of its own
+/// (see `geo/affine.py`): `M.p + v`, with `v` a point per row.
+#[polars_expr(output_type_func=same_geometry_by_points)]
+fn affine_then_shift(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
+    // A vector without a `z` leaves it where the matrix puts it.
+    shifted_per_row(inputs, &kwargs, &|axis, by| by[axis].map(<[f64]>::to_vec))
+}
+
+/// The `x`, `y` and `z` of a column of points, each `None` if the points do not have it.
+type Coordinates<'a> = [Option<&'a [f64]>; 3];
+
+/// Transform the geometries of `inputs[0]` by `matrix`,
+/// and shift each one along `axis` by `per_geometry(axis, [x, y, z])`
+/// of its own point in `inputs[1]` (a `None` for a coordinate that point does not have),
+/// or not at all where that is `None`.
+fn shifted_per_row(
+    inputs: &[Series],
+    matrix: &AffineMatrix,
+    per_geometry: &dyn Fn(usize, Coordinates<'_>) -> Option<Vec<f64>>,
+) -> PolarsResult<Series> {
+    let geo = describe(inputs[0].dtype())?;
+    let storage = inputs[0].ext()?.storage();
+    let points = inputs[1].ext()?.storage();
+    let points = match (storage.len(), points.len()) {
+        (n, m) if n == m => points.rechunk(),
+        (n, 1) => points.new_from_index(0, n),
+        (n, m) => polars_bail!(ShapeMismatch: "cannot transform {n} geometries by {m} points"),
+    };
+
+    let fields = points.struct_()?;
+    let position = |name: &str| -> PolarsResult<Option<Float64Chunked>> {
+        Ok(match fields.field_by_name(name) {
+            Ok(field) => Some(field.f64()?.rechunk().into_owned()),
+            Err(_) => None,
+        })
+    };
+    let at = [position("x")?, position("y")?, position("z")?];
+    // A geometry is missing wherever its point, or any part of it, is.
+    let mut missing = fields.rechunk_validity();
+    for at in at.iter().flatten() {
+        missing = combine_validities_and(missing.as_ref(), at.downcast_as_array().validity());
+    }
+    let at = [0, 1, 2].map(|axis| {
+        at[axis]
+            .as_ref()
+            .map(|at| at.downcast_as_array().values().as_slice())
+    });
+
+    let bounds = (geo.kind.nesting() > 0)
+        .then(|| coordinate_bounds(storage, geo.kind.nesting()))
+        .transpose()?;
+    let axes = if geo.dim.has_z() { 3 } else { 2 };
+    let shift = |axis: usize| -> Option<Vec<f64>> {
+        let per_geometry = per_geometry(axis, at)?;
         Some(match &bounds {
             None => per_geometry,
+            // Each geometry's own value, at every one of its coordinates.
             Some(bounds) => {
                 let mut shift = Vec::with_capacity(*bounds.last().unwrap_or(&0) as usize);
                 for (part, value) in bounds.windows(2).zip(per_geometry) {
@@ -271,7 +297,7 @@ fn affine_about(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series>
     let shifts = [0, 1, 2].map(|axis| if axis < axes { shift(axis) } else { None });
 
     let out = map_coords(storage, geo.kind.nesting(), &|coords| {
-        transform(coords, geo.dim, &kwargs, &shifts)
+        transform(coords, geo.dim, matrix, &shifts)
     })?;
     Ok(with_missing(out, missing).into_extension(geo.typ.clone()))
 }

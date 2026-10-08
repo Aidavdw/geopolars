@@ -12,10 +12,26 @@ from polars.plugins import register_plugin_function
 from geopolars._utils import LIB
 from geopolars.datatypes import PointType
 from geopolars.geo._dispatch import on_geometry, on_geometry_pair
+from geopolars.geo.construct import point
 
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
+
+    Offset: TypeAlias = (
+        tuple[float | IntoExprColumn, float | IntoExprColumn]
+        | tuple[float | IntoExprColumn, float | IntoExprColumn, float | IntoExprColumn]
+    )
+
+# fmt: off
+_IDENTITY = [
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 1.0, 0.0,
+]
+# fmt: on
 
 
 def _affine(column: pl.Expr, matrix: Sequence[float]) -> pl.Expr:
@@ -40,14 +56,19 @@ def _affine(column: pl.Expr, matrix: Sequence[float]) -> pl.Expr:
     )
 
 
+def _cannot_translate_by_z(geometry: GeoArrowType) -> TypeError:
+    return TypeError(
+        f"cannot translate by a z offset: {geometry!r} has no z coordinate"
+    )
+
+
 def _translate(
     dx: float, dy: float, dz: float
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         # Without this, translating an XY column by dz would quietly do nothing.
         if dz != 0.0 and "z" not in geometry._dimension:
-            msg = f"cannot translate by dz: {geometry!r} has no z coordinate"
-            raise TypeError(msg)
+            raise _cannot_translate_by_z(geometry)
         # fmt: off
         return _affine(column, (
             1, 0, 0, dx,
@@ -59,19 +80,72 @@ def _translate(
     return build
 
 
-def translate(
-    geometry: IntoExprColumn, dx: float, dy: float, dz: float = 0.0
+def _translate_by(
+    column: pl.Expr, geometry: GeoArrowType, by: pl.Expr, offsets: GeoArrowType
 ) -> pl.Expr:
-    """Shift every coordinate of a geometry by a constant offset.
+    _points("offset", offsets)
+    # Whether a `z` in a column is 0 everywhere is only known once it is computed.
+    if "z" in offsets._dimension and "z" not in geometry._dimension:
+        raise _cannot_translate_by_z(geometry)
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[column, by],
+        function_name="affine_then_shift",
+        is_elementwise=True,
+        kwargs={"coefficients": _IDENTITY},
+    )
 
-    Works on any geometry, of any dimension. A non-zero `dz` is rejected for a
-    geometry with no `z` rather than silently ignored. An `m` value is a measure,
+
+def translate(geometry: IntoExprColumn, offset: Offset | IntoExprColumn) -> pl.Expr:
+    """Shift every coordinate of a geometry by an offset.
+
+    Works on any geometry, of any dimension. An `m` value is a measure,
     not a position, so it is always carried through untouched.
+
+    `offset` is either
+    - `(dx, dy)` or `(dx, dy, dz)`, each one number for the whole column
+      or a column (or expression) of numbers, one for every geometry, or
+    - a `geoarrow.point` column (or a single point) with an offset for every geometry,
+      its `x`, `y` and `z` being `dx`, `dy` and `dz`.
+
+    ```python
+    df.select(geo.translate("shape", (1.0, -2.0)))
+    df.select(geo.translate("shape", ("dx", "dy", 0.5)))
+    df.select(geo.translate("shape", "offset"))
+    ```
+
+    A geometry with a missing offset comes out missing.
+    A `dz` is rejected for a geometry with no `z` rather than silently ignored:
+    a number when it is not 0, and a column or a point with a `z` always,
+    as whether that is 0 everywhere is not known in advance.
+    A point column that declares a CRS has to declare the geometry's.
 
     This does not check if the new position might have wrapped around the antimeridian (± 180°).
     If your data might have, it would be best to call `wrap_longitude` on it as well.
     """
-    return on_geometry(geometry, _translate(dx, dy, dz))
+    if isinstance(offset, str | pl.Expr | pl.Series):
+        return on_geometry_pair(geometry, offset, _translate_by)
+    if len(offset) not in (2, 3) or not all(
+        math.isfinite(d) for d in offset if isinstance(d, int | float)
+    ):
+        msg = (
+            "`offset` has to be a point column, or two or three finite numbers "
+            f"or columns, got: {offset!r}"
+        )
+        raise ValueError(msg)
+
+    dx, dy, *rest = offset
+    dz = rest[0] if rest else 0.0
+    numbers = int | float
+    if isinstance(dx, numbers) and isinstance(dy, numbers) and isinstance(dz, numbers):
+        return on_geometry(geometry, _translate(float(dx), float(dy), float(dz)))
+
+    def column(d: float | IntoExprColumn) -> IntoExprColumn:
+        return pl.lit(float(d)) if isinstance(d, int | float) else d
+
+    has_dz = not isinstance(dz, int | float) or dz != 0.0
+    by = point(column(dx), column(dy), z=column(dz) if has_dz else None)
+    return on_geometry_pair(geometry, by, _translate_by)
 
 
 Origin = tuple[float, float] | tuple[float, float, float]
@@ -156,9 +230,10 @@ def _affine_about(column: pl.Expr, origin: pl.Expr, matrix: Sequence[float]) -> 
     )
 
 
-def _origin_points(origin: GeoArrowType) -> None:
-    if not isinstance(origin, PointType):
-        msg = f"`origin` has to be a `geoarrow.point` column, got: {origin!r}"
+def _points(name: str, dtype: GeoArrowType) -> None:
+    """Refuse a column given as `name` that does not hold points."""
+    if not isinstance(dtype, PointType):
+        msg = f"`{name}` has to be a `geoarrow.point` column, got: {dtype!r}"
         raise TypeError(msg)
 
 
@@ -219,7 +294,7 @@ def _rotate_about(
         column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
     ) -> pl.Expr:
         _can_rotate(axis, geometry)
-        _origin_points(points)
+        _points("origin", points)
         return _affine_about(column, origin, _about(rotation, _ZERO))
 
     return build
@@ -272,7 +347,7 @@ def _skew_about(
     def build(
         column: pl.Expr, _: GeoArrowType, origin: pl.Expr, points: GeoArrowType
     ) -> pl.Expr:
-        _origin_points(points)
+        _points("origin", points)
         return _affine_about(column, origin, _about(shear, _ZERO))
 
     return build
@@ -370,7 +445,7 @@ def _scale_about(
         column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
     ) -> pl.Expr:
         _can_scale(zfact, geometry)
-        _origin_points(points)
+        _points("origin", points)
         return _affine_about(column, origin, _about(stretch, _ZERO))
 
     return build
@@ -445,7 +520,7 @@ def _affine_transform_about(
         column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
     ) -> pl.Expr:
         _can_transform(matrix, geometry)
-        _origin_points(points)
+        _points("origin", points)
         return _affine_about(column, origin, matrix)
 
     return build

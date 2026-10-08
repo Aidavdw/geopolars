@@ -248,7 +248,9 @@ def test_metadata_without_a_crs_is_still_planar() -> None:
     assert _lengths(df) == [5.0]
 
 
-def test_a_crs_not_on_longitude_latitude_is_refused_while_resolving_the_schema() -> None:
+def test_a_crs_not_on_longitude_latitude_is_refused_while_resolving_the_schema() -> (
+    None
+):
     """Earth-centred XYZ has no ellipsoid surface to measure a length on."""
     lf = _lines([[(0.0, 0.0), (3.0, 4.0)]], crs="EPSG:4978").lazy()
 
@@ -305,5 +307,5 @@ def test_every_form_of_column_gives_the_same_answer(crs: str | None) -> None:
     assert_series_equal(pl.select(geo.length(df["line"])).to_series(), expected)
     if crs is None:
         # Moving a line along does not change its length on the plane.
-        moved = df.select(geo.length(geo.translate("line", 10.0, -3.0))).to_series()
+        moved = df.select(geo.length(geo.translate("line", (10.0, -3.0)))).to_series()
         assert_series_equal(moved, expected)

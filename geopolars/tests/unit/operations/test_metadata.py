@@ -20,7 +20,10 @@ RD = "EPSG:28992"
 
 KEEPS_METADATA: dict[str, Callable[[str], pl.Expr]] = {
     "mean_coordinate": geo.mean_coordinate,
-    "translate": lambda name: geo.translate(name, 1.0, -1.0),
+    "translate": lambda name: geo.translate(name, (1.0, -1.0)),
+    "translate by a column": lambda name: geo.translate(
+        name, (pl.int_range(pl.len()).cast(pl.Float64), -1.0)
+    ),
     "rotate": lambda name: geo.rotate(name, 30),
     "rotate about a column": lambda name: geo.rotate(
         name, 30, origin=geo.mean_coordinate(name)

@@ -38,8 +38,8 @@ class ExprGeoNameSpace:
     def validate(self) -> pl.Expr:
         return construct.validate(self._expr)
 
-    def translate(self, dx: float, dy: float, dz: float = 0.0) -> pl.Expr:
-        return affine.translate(self._expr, dx=dx, dy=dy, dz=dz)
+    def translate(self, offset: affine.Offset | IntoExprColumn) -> pl.Expr:
+        return affine.translate(self._expr, offset)
 
     def affine_transform(
         self,

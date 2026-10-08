@@ -35,7 +35,7 @@ def as_plugin(expr: pl.Expr) -> PluginExpr:
     `pl.Expr` and loses the annotation:
 
     ```python
-    as_plugin(pl.col("a").struct.field("b")).geo.translate(1.0, 2.0)
+    as_plugin(pl.col("a").struct.field("b")).geo.translate((1.0, 2.0))
     ```
     """
     return cast(PluginExpr, expr)

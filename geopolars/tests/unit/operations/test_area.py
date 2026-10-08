@@ -199,7 +199,7 @@ def test_every_form_of_column_gives_the_same_answer(
 
     assert_series_equal(df.select(area(pl.col("polygon"))).to_series(), expected)
     assert_series_equal(pl.select(area(df["polygon"])).to_series(), expected)
-    translated = geo.translate("polygon", 10.0, -3.0)
+    translated = geo.translate("polygon", (10.0, -3.0))
     assert_series_equal(df.select(area(translated)).to_series(), expected)
 
 

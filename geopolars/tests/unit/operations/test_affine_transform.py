@@ -102,7 +102,7 @@ def test_a_matrix_that_uses_z_needs_a_z_at_plan_time(
 @pytest.mark.parametrize(
     ("named", "matrix"),
     [
-        (lambda c: geo.translate(c, 1, 2, 3), [1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 2, 3]),
+        (lambda c: geo.translate(c, (1, 2, 3)), [1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 2, 3]),
         (lambda c: geo.rotate(c, 90), [0, -1, 1, 0, 0, 0]),
         (lambda c: geo.rotate(c, 90, axis="x"), [1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0]),
         (lambda c: geo.skew(c, xs=45), [1, 1, 0, 1, 0, 0]),

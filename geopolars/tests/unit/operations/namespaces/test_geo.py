@@ -25,7 +25,7 @@ from tests.unit.conftest import (
 
 def test_translate_shifts_x_and_y(coords: pl.DataFrame, dimension: Dimension) -> None:
     df = coords.select(dimension.point())
-    out = df.select(geo.translate("point", dx=1.5, dy=-2.0).alias("point"))
+    out = df.select(geo.translate("point", (1.5, -2.0)).alias("point"))
 
     assert_frame_equal(
         coordinates(out),
@@ -38,7 +38,7 @@ def test_translate_keeps_the_dimension(
 ) -> None:
     """Moving a point does not change what kind of point it is."""
     df = coords.select(dimension.point())
-    out = df.select(geo.translate("point", dx=1.0, dy=1.0).alias("point"))
+    out = df.select(geo.translate("point", (1.0, 1.0)).alias("point"))
 
     assert out.schema["point"] == dimension.point_dtype()
 
@@ -47,14 +47,14 @@ def test_translate_by_zero_is_the_identity(
     coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = coords.select(dimension.point())
-    out = df.select(geo.translate("point", dx=0.0, dy=0.0).alias("point"))
+    out = df.select(geo.translate("point", (0.0, 0.0)).alias("point"))
 
     assert_frame_equal(out, df)
 
 
 def test_translate_shifts_z(coords: pl.DataFrame) -> None:
     df = coords.select(XYZ.point())
-    out = df.select(geo.translate("point", dx=0.0, dy=0.0, dz=5.0).alias("point"))
+    out = df.select(geo.translate("point", (0.0, 0.0, 5.0)).alias("point"))
 
     assert_frame_equal(
         coordinates(out), coordinates(df).with_columns(pl.col("z") + 5.0)
@@ -65,7 +65,7 @@ def test_translate_leaves_m_untouched(coords: pl.DataFrame) -> None:
     """`m` is a measure, not a position: moving the geometry must not change
     the timestamp or distance-along-route the vertex carries."""
     df = coords.select(XYZM.point())
-    out = df.select(geo.translate("point", dx=10.0, dy=10.0, dz=10.0).alias("point"))
+    out = df.select(geo.translate("point", (10.0, 10.0, 10.0)).alias("point"))
 
     assert_frame_equal(coordinates(out).select("m"), coordinates(df).select("m"))
 
@@ -83,29 +83,29 @@ def test_translate_rejects_dz_on_a_point_with_no_z(
 ) -> None:
     df = coords.select(dimension.point())
 
-    with pytest.raises(TypeError, match="cannot translate by dz"):
-        df.select(geo.translate("point", dx=0.0, dy=0.0, dz=1.0))
+    with pytest.raises(TypeError, match="cannot translate by a z offset"):
+        df.select(geo.translate("point", (0.0, 0.0, 1.0)))
 
 
 def test_translate_rejects_dz_at_plan_time(coords: pl.DataFrame) -> None:
     lf = coords.select(XY.point()).lazy()
 
-    with pytest.raises(TypeError, match="cannot translate by dz"):
-        lf.select(geo.translate("point", dx=0.0, dy=0.0, dz=1.0)).collect_schema()
+    with pytest.raises(TypeError, match="cannot translate by a z offset"):
+        lf.select(geo.translate("point", (0.0, 0.0, 1.0))).collect_schema()
 
 
 def test_translate_rejects_a_plain_float_column() -> None:
     df = pl.DataFrame({"point": [1.0, 2.0]})
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
-        df.select(geo.translate("point", dx=1.0, dy=1.0))
+        df.select(geo.translate("point", (1.0, 1.0)))
 
 
 def test_translate_rejects_a_bare_coordinate_struct() -> None:
     df = pl.DataFrame({"point": [{"x": 1.0, "y": 2.0}]})
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
-        df.select(geo.translate("point", dx=1.0, dy=1.0))
+        df.select(geo.translate("point", (1.0, 1.0)))
 
 
 def test_translate_keeps_a_missing_point_missing() -> None:
@@ -115,7 +115,7 @@ def test_translate_keeps_a_missing_point_missing() -> None:
     df = pl.DataFrame({"x": [None, 1.0], "y": [2.0, 2.0]}).select(
         geo.point("x", "y").alias("point")
     )
-    out = df.select(geo.translate("point", dx=1.0, dy=1.0).alias("point"))
+    out = df.select(geo.translate("point", (1.0, 1.0)).alias("point"))
 
     assert out["point"].is_null().to_list() == [True, False]
 
@@ -126,7 +126,7 @@ def test_translate_shifts_every_vertex(
     """A linestring moves as a whole: the same offset applies to each of its
     vertices, and which vertices belong to which line does not change."""
     df = dimension.lines(line_coords)
-    out = df.select(geo.translate("line", dx=1.5, dy=-2.0).alias("line"))
+    out = df.select(geo.translate("line", (1.5, -2.0)).alias("line"))
 
     assert out.schema["line"] == dimension.linestring_dtype()
     assert_frame_equal(
@@ -143,7 +143,7 @@ def test_translate_leaves_a_linestrings_measures_untouched(
     line_coords: pl.DataFrame,
 ) -> None:
     df = XYZM.lines(line_coords)
-    out = df.select(geo.translate("line", dx=10.0, dy=10.0, dz=10.0).alias("line"))
+    out = df.select(geo.translate("line", (10.0, 10.0, 10.0)).alias("line"))
 
     assert_frame_equal(
         line_coordinates(out).select("m"), line_coordinates(df).select("m")
@@ -155,8 +155,8 @@ def test_translate_rejects_dz_on_a_linestring_with_no_z(
 ) -> None:
     df = XY.lines(line_coords)
 
-    with pytest.raises(TypeError, match="cannot translate by dz"):
-        df.select(geo.translate("line", dx=0.0, dy=0.0, dz=1.0))
+    with pytest.raises(TypeError, match="cannot translate by a z offset"):
+        df.select(geo.translate("line", (0.0, 0.0, 1.0)))
 
 
 def test_translate_keeps_empty_and_missing_linestrings(dimension: Dimension) -> None:
@@ -167,7 +167,7 @@ def test_translate_keeps_empty_and_missing_linestrings(dimension: Dimension) -> 
             "vertices": pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
         },
     ).select(geo.line_string("vertices").alias("line"))
-    out = df.select(geo.translate("line", dx=1.0, dy=1.0).alias("line"))
+    out = df.select(geo.translate("line", (1.0, 1.0)).alias("line"))
 
     assert_frame_equal(out, df)
 
@@ -176,7 +176,7 @@ def test_translate_shifts_every_point_of_a_multipoint(
     line_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.multipoints(line_coords)
-    out = df.select(geo.translate("multipoint", dx=1.5, dy=-2.0).alias("multipoint"))
+    out = df.select(geo.translate("multipoint", (1.5, -2.0)).alias("multipoint"))
 
     assert out.schema["multipoint"] == dimension.multipoint_dtype()
     assert_frame_equal(
@@ -193,9 +193,7 @@ def test_translate_leaves_a_multipoints_measures_untouched(
     line_coords: pl.DataFrame,
 ) -> None:
     df = XYZM.multipoints(line_coords)
-    out = df.select(
-        geo.translate("multipoint", dx=10.0, dy=10.0, dz=10.0).alias("multipoint")
-    )
+    out = df.select(geo.translate("multipoint", (10.0, 10.0, 10.0)).alias("multipoint"))
 
     assert_frame_equal(
         multipoint_coordinates(out).select("m"),
@@ -208,8 +206,8 @@ def test_translate_rejects_dz_on_a_multipoint_with_no_z(
 ) -> None:
     df = XY.multipoints(line_coords)
 
-    with pytest.raises(TypeError, match="cannot translate by dz"):
-        df.select(geo.translate("multipoint", dx=0.0, dy=0.0, dz=1.0))
+    with pytest.raises(TypeError, match="cannot translate by a z offset"):
+        df.select(geo.translate("multipoint", (0.0, 0.0, 1.0)))
 
 
 def test_translate_shifts_every_vertex_of_every_linestring(
@@ -217,7 +215,7 @@ def test_translate_shifts_every_vertex_of_every_linestring(
 ) -> None:
     df = dimension.multilinestrings(ring_coords)
     out = df.select(
-        geo.translate("multilinestring", dx=1.5, dy=-2.0).alias("multilinestring")
+        geo.translate("multilinestring", (1.5, -2.0)).alias("multilinestring")
     )
     parts = pl.col("multilinestring").ext.storage()
 
@@ -240,8 +238,8 @@ def test_translate_rejects_dz_on_a_multilinestring_with_no_z(
 ) -> None:
     df = XY.multilinestrings(ring_coords)
 
-    with pytest.raises(TypeError, match="cannot translate by dz"):
-        df.select(geo.translate("multilinestring", dx=0.0, dy=0.0, dz=1.0))
+    with pytest.raises(TypeError, match="cannot translate by a z offset"):
+        df.select(geo.translate("multilinestring", (0.0, 0.0, 1.0)))
 
 
 def test_translate_keeps_empty_and_missing_multilinestrings(
@@ -256,7 +254,7 @@ def test_translate_keeps_empty_and_missing_multilinestrings(
         },
     ).select(geo.multi_line_string("lines").alias("multilinestring"))
     out = df.select(
-        geo.translate("multilinestring", dx=1.0, dy=1.0).alias("multilinestring")
+        geo.translate("multilinestring", (1.0, 1.0)).alias("multilinestring")
     )
 
     assert_frame_equal(out, df)
@@ -267,7 +265,7 @@ def test_translate_shifts_every_vertex_of_every_ring(
 ) -> None:
     """A polygon moves as a whole."""
     df = dimension.polygons(ring_coords)
-    out = df.select(geo.translate("polygon", dx=1.5, dy=-2.0).alias("polygon"))
+    out = df.select(geo.translate("polygon", (1.5, -2.0)).alias("polygon"))
     rings = pl.col("polygon").ext.storage()
 
     assert out.schema["polygon"] == dimension.polygon_dtype()
@@ -291,7 +289,7 @@ def test_translate_keeps_empty_and_missing_polygons(dimension: Dimension) -> Non
             )
         },
     ).select(geo.polygon("rings").alias("polygon"))
-    out = df.select(geo.translate("polygon", dx=1.0, dy=1.0).alias("polygon"))
+    out = df.select(geo.translate("polygon", (1.0, 1.0)).alias("polygon"))
 
     assert_frame_equal(out, df)
 
@@ -301,9 +299,7 @@ def test_translate_shifts_every_vertex_of_every_polygon(
 ) -> None:
     """A multipolygon moves as a whole, and keeps its polygons and rings."""
     df = dimension.multipolygons(multipolygon_coords)
-    out = df.select(
-        geo.translate("multipolygon", dx=1.5, dy=-2.0).alias("multipolygon")
-    )
+    out = df.select(geo.translate("multipolygon", (1.5, -2.0)).alias("multipolygon"))
     polygons = pl.col("multipolygon").ext.storage()
     rings = polygons.explode(empty_as_null=False)
 
@@ -323,8 +319,8 @@ def test_translate_rejects_dz_on_a_multipolygon_with_no_z(
 ) -> None:
     df = XY.multipolygons(multipolygon_coords)
 
-    with pytest.raises(TypeError, match="cannot translate by dz"):
-        df.select(geo.translate("multipolygon", dx=0.0, dy=0.0, dz=1.0))
+    with pytest.raises(TypeError, match="cannot translate by a z offset"):
+        df.select(geo.translate("multipolygon", (0.0, 0.0, 1.0)))
 
 
 def test_translate_keeps_empty_and_missing_multipolygons(
@@ -338,7 +334,7 @@ def test_translate_keeps_empty_and_missing_multipolygons(
             )
         },
     ).select(geo.multi_polygon("polygons").alias("multipolygon"))
-    out = df.select(geo.translate("multipolygon", dx=1.0, dy=1.0).alias("multipolygon"))
+    out = df.select(geo.translate("multipolygon", (1.0, 1.0)).alias("multipolygon"))
 
     assert_frame_equal(out, df)
 
@@ -347,8 +343,8 @@ def test_namespace_matches_the_functional_api(coords: pl.DataFrame) -> None:
     df = coords.select(XYZ.point())
 
     assert_frame_equal(
-        df.select(gpl.col("point").geo.translate(1.0, 2.0, 3.0).alias("point")),
-        df.select(geo.translate("point", dx=1.0, dy=2.0, dz=3.0).alias("point")),
+        df.select(gpl.col("point").geo.translate((1.0, 2.0, 3.0)).alias("point")),
+        df.select(geo.translate("point", (1.0, 2.0, 3.0)).alias("point")),
     )
 
 
@@ -459,7 +455,7 @@ def test_to_crs_namespace_matches_the_functional_api(
 def test_translate_rejects_a_non_geometry_while_resolving_the_schema() -> None:
     """The output type is derived from the input's dtype,
     so a bad column is a schema error."""
-    lf = pl.LazyFrame({"lon": [1.0]}).select(geo.translate("lon", dx=1.0, dy=1.0))
+    lf = pl.LazyFrame({"lon": [1.0]}).select(geo.translate("lon", (1.0, 1.0)))
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         lf.collect_schema()

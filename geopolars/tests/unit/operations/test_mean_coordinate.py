@@ -457,11 +457,13 @@ def test_a_point_keeps_its_crs() -> None:
 def test_takes_an_expression_as_well_as_a_column(line_coords: pl.DataFrame) -> None:
     """The geometry is read off the resolved dtype, so it need not be a column."""
     df = XY.lines(line_coords)
-    translated = gpl.col("line").geo.translate(1.0, 1.0)
+    translated = gpl.col("line").geo.translate((1.0, 1.0))
 
     assert_frame_equal(
         df.select(geo.mean_coordinate(translated)),
-        df.select(geo.mean_coordinate("line")).select(geo.translate("line", 1.0, 1.0)),
+        df.select(geo.mean_coordinate("line")).select(
+            geo.translate("line", (1.0, 1.0))
+        ),
     )
 
 

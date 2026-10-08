@@ -261,7 +261,9 @@ def test_a_crs_on_only_one_point_is_refused_while_resolving_the_schema() -> None
         lf.collect_schema()
 
 
-def test_a_crs_not_on_longitude_latitude_is_refused_while_resolving_the_schema() -> None:
+def test_a_crs_not_on_longitude_latitude_is_refused_while_resolving_the_schema() -> (
+    None
+):
     """Earth-centred XYZ has no ellipsoid surface to measure a distance on."""
     lf = _pairs([NEW_YORK], [LONDON], crs="EPSG:4978").lazy()
 

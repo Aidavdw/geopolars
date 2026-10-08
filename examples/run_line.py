@@ -93,10 +93,10 @@ print("Translating moves every vertex and leaves the routes as they were.")
 moved = lines.select(
     "route",
     *[
-        gpl.col(name).geo.translate(dx=1.0, dy=-1.0, dz=10.0).alias(name)
+        gpl.col(name).geo.translate((1.0, -1.0, 10.0)).alias(name)
         # dz only applies where there is a z to shift.
         if name in ("xyz", "xyzm")
-        else gpl.col(name).geo.translate(dx=1.0, dy=-1.0).alias(name)
+        else gpl.col(name).geo.translate((1.0, -1.0)).alias(name)
         for name in ("xy", "xyz", "xym", "xyzm")
     ],
 )

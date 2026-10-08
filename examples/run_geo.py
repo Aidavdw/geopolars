@@ -67,10 +67,10 @@ print("Round trip through the plugin: the dtype has to survive, in every dimensi
 moved = points.select(
     "city",
     *[
-        gpl.col(name).geo.translate(dx=1.0, dy=-1.0, dz=10.0).alias(name)
+        gpl.col(name).geo.translate((1.0, -1.0, 10.0)).alias(name)
         # dz only applies where there is a z to shift.
         if name in ("xyz", "xyzm")
-        else gpl.col(name).geo.translate(dx=1.0, dy=-1.0).alias(name)
+        else gpl.col(name).geo.translate((1.0, -1.0)).alias(name)
         for name in ("xy", "xyz", "xym", "xyzm")
     ],
 )
@@ -86,7 +86,7 @@ print(
 print("A dz that could not do anything is an error, not a silent no-op.")
 for name in ("xy", "xym"):
     try:
-        points.select(gpl.col(name).geo.translate(dx=0.0, dy=0.0, dz=1.0))
+        points.select(gpl.col(name).geo.translate((0.0, 0.0, 1.0)))
     except Exception as e:
         detail = next(l for l in str(e).splitlines() if "no z coordinate" in l)
         print(f"  {name:>5} -> {type(e).__name__}: {detail.strip()}")
@@ -110,7 +110,7 @@ print(
         before collecting the data"
 )
 try:
-    df.lazy().select(gpl.col("lon").geo.translate(dx=1.0, dy=1.0)).collect_schema()
+    df.lazy().select(gpl.col("lon").geo.translate((1.0, 1.0))).collect_schema()
 except Exception as e:
     detail = next(l for l in str(e).splitlines() if "geoarrow.point" in l)
     print(f"non-point input -> {type(e).__name__}: {detail.strip()}")
