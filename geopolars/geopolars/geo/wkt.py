@@ -31,14 +31,14 @@ def to_wkt(geometry: IntoExprColumn) -> pl.Expr:
 
 def from_wkt(
     wkt: IntoExprColumn,
-    geometry: type[GeoArrowType],
+    dtype: type[GeoArrowType],
     *,
     crs: str | None = None,
 ) -> pl.Expr:
-    """Decode a `Wkt` or plain string column into `geometry`.
+    """Decode a `Wkt` or plain string column into `dtype`.
 
     WKT can mix geometries row by row, but a Polars column has one dtype,
-    so `geometry` names the concrete type to decode into, e.g. `PolygonXY`.
+    so `dtype` names the concrete type to decode into, e.g. `PolygonXY`.
     A single geometry is promoted into its multi geometry
     (e.g. a polygon into `MultiPolygonXY`).
     Anything else that does not fit, including a different dimension, is an error.
@@ -57,5 +57,5 @@ def from_wkt(
         args=[wkt],
         function_name="from_wkt",
         is_elementwise=True,
-        kwargs=_decode_kwargs(geometry, crs),
+        kwargs=_decode_kwargs(dtype, crs),
     )

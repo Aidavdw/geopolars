@@ -116,15 +116,11 @@ class ExprGeoNameSpace:
     def to_wkb(self) -> pl.Expr:
         return wkb.to_wkb(self._expr)
 
-    def from_wkb(
-        self, geometry: type[GeoArrowType], *, crs: str | None = None
-    ) -> pl.Expr:
-        return wkb.from_wkb(self._expr, geometry, crs=crs)
+    def from_wkb(self, dtype: type[GeoArrowType], *, crs: str | None = None) -> pl.Expr:
+        return wkb.from_wkb(self._expr, dtype, crs=crs)
 
     def to_wkt(self) -> pl.Expr:
         return wkt.to_wkt(self._expr)
 
-    def from_wkt(
-        self, geometry: type[GeoArrowType], *, crs: str | None = None
-    ) -> pl.Expr:
-        return wkt.from_wkt(self._expr, geometry, crs=crs)
+    def from_wkt(self, dtype: type[GeoArrowType], *, crs: str | None = None) -> pl.Expr:
+        return wkt.from_wkt(self._expr, dtype, crs=crs)

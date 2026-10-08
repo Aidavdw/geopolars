@@ -51,20 +51,16 @@ def _metadata(crs: str | None) -> dict[str, str | None]:
     return {"crs": crs}
 
 
-def _decode_kwargs(
-    geometry: type[GeoArrowType], crs: str | None
-) -> dict[str, str | None]:
+def _decode_kwargs(dtype: type[GeoArrowType], crs: str | None) -> dict[str, str | None]:
     """Mirrors `DecodeKwargs` in `src/geoarrow/decode.rs`:
     the concrete geometry `from_wkb` / `from_wkt` decode into.
     """
-    dimension = getattr(geometry, "_dimension", ())
+    dimension = getattr(dtype, "_dimension", ())
     if not dimension:
-        msg = (
-            f"expected a concrete geometry type such as `PolygonXY`, got: {geometry!r}"
-        )
+        msg = f"expected a concrete geometry type such as `PolygonXY`, got: {dtype!r}"
         raise TypeError(msg)
     return {
-        "kind": geometry._display,
+        "kind": dtype._display,
         "dimension": "".join(dimension),
         **_metadata(crs),
     }
