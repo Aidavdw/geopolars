@@ -29,6 +29,43 @@ pub fn map_coords(
     map_nested(trimmed.as_ref().unwrap_or(storage), nesting, f)
 }
 
+/// For every coordinate `map_coords` hands its kernel, the row of `storage` it is part of.
+///
+/// For a kernel that needs something per geometry (such as the point to rotate it about)
+/// at every one of its coordinates.
+pub fn row_of_each_coordinate(storage: &Series, nesting: u8) -> PolarsResult<Vec<IdxSize>> {
+    // The same coordinates as `map_coords` hands over: trimmed, and in one chunk,
+    // as `apply_to_inner` rechunks every layer.
+    let storage = storage.rechunk();
+    let mut layer = storage
+        .trim_lists_to_normalized_offsets()
+        .unwrap_or(storage)
+        .rechunk();
+    // Row `r` is made of the items `bounds[r]..bounds[r + 1]` of the current layer.
+    let mut bounds: Vec<i64> = (0..=layer.len() as i64).collect();
+    for _ in 0..nesting {
+        let list = layer.list()?.rechunk();
+        let offsets = list.downcast_as_array().offsets();
+        bounds = bounds.iter().map(|&at| offsets[at as usize]).collect();
+        layer = list.get_inner();
+    }
+
+    let first = bounds.first().copied().unwrap_or(0);
+    let mut rows = Vec::with_capacity((bounds.last().copied().unwrap_or(0) - first) as usize);
+    for (row, part) in bounds.windows(2).enumerate() {
+        rows.extend(std::iter::repeat_n(
+            row as IdxSize,
+            (part[1] - part[0]) as usize,
+        ));
+    }
+    polars_ensure!(
+        first == 0 && rows.len() == layer.len(),
+        ComputeError: "the rows span coordinates {first}..{}, out of {}",
+        first as usize + rows.len(), layer.len()
+    );
+    Ok(rows)
+}
+
 fn map_nested(
     storage: &Series,
     nesting: u8,
@@ -88,6 +125,22 @@ pub(crate) mod tests {
             None,
         );
         Series::from_arrow("".into(), arr.boxed()).unwrap()
+    }
+
+    #[test]
+    fn every_coordinate_of_a_slice_knows_its_row() {
+        let lines = lists(coords(9), &[2, 3, 4]);
+        assert_eq!(
+            row_of_each_coordinate(&lines.slice(1, 2), 1).unwrap(),
+            [0, 0, 0, 1, 1, 1, 1]
+        );
+
+        // Three polygons of two rings each, of 2 + 3, 4 + 5 and 6 + 7 coordinates.
+        let polygons = lists(lists(coords(27), &[2, 3, 4, 5, 6, 7]), &[2, 2, 2]);
+        let rows = row_of_each_coordinate(&polygons.slice(1, 1), 2).unwrap();
+        assert_eq!(rows, [0; 9]);
+        let rows = row_of_each_coordinate(&polygons, 2).unwrap();
+        assert_eq!(rows, [[0; 5].as_slice(), &[1; 9], &[2; 13]].concat());
     }
 
     #[test]

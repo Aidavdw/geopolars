@@ -5,12 +5,13 @@
 //! so they share one kernel, and differ only in the matrix they hand it.
 
 use polars::prelude::*;
+use polars_arrow::bitmap::Bitmap;
 use polars_arrow::compute::utils::combine_validities_and;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{map_coords, same_geometry};
-use crate::geoarrow::{describe, GeoDimension};
+use super::coords::{map_coords, row_of_each_coordinate, same_geometry};
+use crate::geoarrow::{describe, GeoDimension, Kind};
 
 /// An affine transformation of the coordinates that are positions (`x`, `y` and `z`),
 /// as the top three rows of its augmented matrix:
@@ -44,14 +45,28 @@ impl AffineMatrix {
         rows[axis]
     }
 
+    /// Whether the row that makes `axis` takes that coordinate as it is,
+    /// before its offset is added.
+    fn keeps(&self, axis: usize) -> bool {
+        let mut unchanged = [0.0; 3];
+        unchanged[axis] = 1.0;
+        self.row(axis)[..3] == unchanged
+    }
+
     /// Output coordinate `axis` (0 is `x`, 1 is `y`, 2 is `z`) for every position,
-    /// or `None` if the matrix leaves that coordinate as it is.
-    fn apply(&self, axis: usize, x: &[f64], y: &[f64], z: Option<&[f64]>) -> Option<Vec<f64>> {
+    /// plus `shift` (one value per position) if there is one,
+    /// or `None` if that leaves the coordinate as it is.
+    fn apply(
+        &self,
+        axis: usize,
+        x: &[f64],
+        y: &[f64],
+        z: Option<&[f64]>,
+        shift: Option<&[f64]>,
+    ) -> Option<Vec<f64>> {
         let row = self.row(axis);
         let offset = row[3];
-        let mut unchanged = [0.0; 4];
-        unchanged[axis] = 1.0;
-        if row == unchanged {
+        if self.keeps(axis) && offset == 0.0 && shift.is_none() {
             return None;
         }
 
@@ -60,6 +75,8 @@ impl AffineMatrix {
             .zip(row)
             .filter(|&(_, coefficient)| coefficient != 0.0)
             .filter_map(|(values, coefficient)| Some((coefficient, values?)))
+            // Last, so a shift equal to a constant offset adds up exactly the same.
+            .chain(shift.map(|shift| (1.0, shift)))
             .collect();
         Some(match terms.as_slice() {
             [] => vec![offset; x.len()],
@@ -75,13 +92,32 @@ impl AffineMatrix {
                 .zip(*w)
                 .map(|((u, v), w)| a * u + b * v + c * w + offset)
                 .collect(),
-            _ => unreachable!("a row has three coefficients before its offset"),
+            [(a, u), (b, v), (c, w), (d, t)] => u
+                .iter()
+                .zip(*v)
+                .zip(*w)
+                .zip(*t)
+                .map(|(((u, v), w), t)| a * u + b * v + c * w + d * t + offset)
+                .collect(),
+            _ => unreachable!("a row has three coefficients and a shift before its offset"),
         })
     }
 }
 
-/// Transform one flat array of coordinates.
-fn transform(coords: &Series, dim: GeoDimension, matrix: &AffineMatrix) -> PolarsResult<Series> {
+/// Transform one flat array of coordinates,
+/// shifting output coordinate `axis` by `shifts[axis]` (one value per position) as well.
+fn transform(
+    coords: &Series,
+    dim: GeoDimension,
+    matrix: &AffineMatrix,
+    shifts: &[Option<Vec<f64>>; 3],
+) -> PolarsResult<Series> {
+    for shift in shifts.iter().flatten() {
+        polars_ensure!(
+            shift.len() == coords.len(),
+            ComputeError: "{} shifts for {} coordinates", shift.len(), coords.len()
+        );
+    }
     let fields = coords.struct_()?;
     let position = |name: &str| -> PolarsResult<Float64Chunked> {
         Ok(fields.field_by_name(name)?.f64()?.rechunk().into_owned())
@@ -102,13 +138,16 @@ fn transform(coords: &Series, dim: GeoDimension, matrix: &AffineMatrix) -> Polar
 
     let z_values = z.map(|z| z.values().as_slice());
     let transformed = |axis: usize, name: &str| -> PolarsResult<Series> {
-        Ok(match matrix.apply(axis, x.values(), y.values(), z_values) {
-            None => fields.field_by_name(name)?,
-            Some(values) => {
-                Float64Chunked::from_vec_validity(name.into(), values, validity.clone())
-                    .into_series()
-            }
-        })
+        let shift = shifts[axis].as_deref();
+        Ok(
+            match matrix.apply(axis, x.values(), y.values(), z_values, shift) {
+                None => fields.field_by_name(name)?,
+                Some(values) => {
+                    Float64Chunked::from_vec_validity(name.into(), values, validity.clone())
+                        .into_series()
+                }
+            },
+        )
     };
     // In the order the spec gives the fields in, so the result has the input's dtype.
     let mut out = vec![transformed(0, "x")?, transformed(1, "y")?];
@@ -130,10 +169,123 @@ fn transform(coords: &Series, dim: GeoDimension, matrix: &AffineMatrix) -> Polar
 fn affine(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
     let out = map_coords(inputs[0].ext()?.storage(), geo.kind.nesting(), &|coords| {
-        transform(coords, geo.dim, &kwargs)
+        transform(coords, geo.dim, &kwargs, &[None, None, None])
     })?;
 
     Ok(out.into_extension(geo.typ.clone()))
+}
+
+/// `output_type_func` for an operation about the points of a second column:
+/// it hands back the geometry it got.
+fn same_geometry_about_points(input_fields: &[Field]) -> PolarsResult<Field> {
+    let [geometry, origin] = input_fields else {
+        polars_bail!(ComputeError: "expected a geometry and an origin, got {} inputs", input_fields.len());
+    };
+    let metadata = describe(geometry.dtype())?.metadata;
+    let origin = describe(origin.dtype())?;
+    polars_ensure!(
+        origin.kind == Kind::Point,
+        SchemaMismatch: "the origin has to be a `{}` column, got: {}",
+        Kind::Point.name(), origin.typ
+    );
+    // An origin without a CRS is a plain position, like one given as numbers.
+    if metadata.declares_crs() && origin.metadata.declares_crs() {
+        let (crs, origin_crs) = (metadata.crs()?, origin.metadata.crs()?);
+        polars_ensure!(
+            crs == origin_crs,
+            SchemaMismatch: "the geometry is in {crs}, but its origin is in {origin_crs}; \
+            use `to_crs` to bring one onto the other first"
+        );
+    }
+    Ok(geometry.clone())
+}
+
+/// The kernel behind affine ops about a point per row (see `geo/affine.py`):
+/// the matrix applied about each geometry's own `origin`, `M.(p − o) + o`.
+///
+/// That is `L.p + offset + (o − L.o)`, with `L` the matrix without its offsets:
+/// the constant kernel, with a shift that is the same for every position of a geometry.
+#[polars_expr(output_type_func=same_geometry_about_points)]
+fn affine_about(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
+    let geo = describe(inputs[0].dtype())?;
+    let storage = inputs[0].ext()?.storage();
+    let origin = inputs[1].ext()?.storage();
+    let origin = match (storage.len(), origin.len()) {
+        (n, m) if n == m => origin.rechunk(),
+        (n, 1) => origin.new_from_index(0, n),
+        (n, m) => polars_bail!(ShapeMismatch: "cannot transform {n} geometries about {m} origins"),
+    };
+
+    let fields = origin.struct_()?;
+    let position = |name: &str| -> PolarsResult<Option<Float64Chunked>> {
+        Ok(match fields.field_by_name(name) {
+            Ok(field) => Some(field.f64()?.rechunk().into_owned()),
+            // An origin without a `z` is at `z` = 0, like one given as two numbers.
+            Err(_) => None,
+        })
+    };
+    let (ox, oy, oz) = (position("x")?, position("y")?, position("z")?);
+    let (ox, oy) = (ox.unwrap(), oy.unwrap());
+    let origin_at = [Some(&ox), Some(&oy), oz.as_ref()];
+    // A geometry is missing wherever its origin, or any part of it, is.
+    let mut missing = fields.rechunk_validity();
+    for at in origin_at.into_iter().flatten() {
+        missing = combine_validities_and(missing.as_ref(), at.downcast_as_array().validity());
+    }
+
+    fn values(at: &Float64Chunked) -> &[f64] {
+        at.downcast_as_array().values().as_slice()
+    }
+    let (ox, oy, oz) = (values(&ox), values(&oy), oz.as_ref().map(values));
+    let rows = (geo.kind.nesting() > 0)
+        .then(|| row_of_each_coordinate(storage, geo.kind.nesting()))
+        .transpose()?;
+    let axes = if geo.dim.has_z() { 3 } else { 2 };
+    let shift = |axis: usize| -> Option<Vec<f64>> {
+        // A row that keeps its coordinate moves it by its offset alone, about any origin.
+        if kwargs.keeps(axis) {
+            return None;
+        }
+        let offset = kwargs.row(axis)[3];
+        let moved = kwargs.apply(axis, ox, oy, oz, None)?;
+        // `o − L·o`, for each geometry.
+        let per_geometry: Vec<f64> = match [Some(ox), Some(oy), oz][axis] {
+            Some(at) => at
+                .iter()
+                .zip(moved)
+                .map(|(at, moved)| at - (moved - offset))
+                .collect(),
+            None => moved.iter().map(|moved| -(moved - offset)).collect(),
+        };
+        Some(match &rows {
+            None => per_geometry,
+            Some(rows) => rows.iter().map(|&row| per_geometry[row as usize]).collect(),
+        })
+    };
+    let shifts = [0, 1, 2].map(|axis| if axis < axes { shift(axis) } else { None });
+
+    let out = map_coords(storage, geo.kind.nesting(), &|coords| {
+        transform(coords, geo.dim, &kwargs, &shifts)
+    })?;
+    Ok(with_missing(out, missing).into_extension(geo.typ.clone()))
+}
+
+/// `geometries`, missing as well wherever `validity` says so.
+fn with_missing(geometries: Series, validity: Option<Bitmap>) -> Series {
+    let Some(validity) = validity else {
+        return geometries;
+    };
+    let geometries = geometries.rechunk();
+    let chunk = &geometries.chunks()[0];
+    let validity = combine_validities_and(chunk.validity(), Some(&validity));
+    // SAFETY: only the validity changes, not the dtype.
+    unsafe {
+        Series::from_chunks_and_dtype_unchecked(
+            geometries.name().clone(),
+            vec![chunk.with_validity(validity)],
+            geometries.dtype(),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -154,9 +306,18 @@ mod tests {
         };
         let (x, y, z) = ([1.0, 0.0], [0.0, 1.0], [2.0, 3.0]);
 
-        assert_eq!(matrix.apply(0, &x, &y, Some(&z)), Some(vec![11.0, 15.0]));
-        assert_eq!(matrix.apply(1, &x, &y, Some(&z)), Some(vec![27.0, 35.0]));
-        assert_eq!(matrix.apply(2, &x, &y, Some(&z)), Some(vec![43.0, 55.0]));
+        assert_eq!(
+            matrix.apply(0, &x, &y, Some(&z), None),
+            Some(vec![11.0, 15.0])
+        );
+        assert_eq!(
+            matrix.apply(1, &x, &y, Some(&z), None),
+            Some(vec![27.0, 35.0])
+        );
+        assert_eq!(
+            matrix.apply(2, &x, &y, Some(&z), None),
+            Some(vec![43.0, 55.0])
+        );
     }
 
     #[test]
@@ -170,8 +331,30 @@ mod tests {
         };
         let (x, y) = ([1.0, 3.0], [2.0, 4.0]);
 
-        assert_eq!(matrix.apply(0, &x, &y, None), Some(vec![-1.0, -3.0]));
-        assert_eq!(matrix.apply(1, &x, &y, None), Some(vec![3.0, 5.0]));
+        assert_eq!(matrix.apply(0, &x, &y, None, None), Some(vec![-1.0, -3.0]));
+        assert_eq!(matrix.apply(1, &x, &y, None, None), Some(vec![3.0, 5.0]));
+    }
+
+    #[test]
+    fn a_shift_moves_each_position_by_its_own_amount() {
+        let matrix = AffineMatrix {
+            coefficients: [
+                0.0, -1.0, 0.0, 0.0, // x' = -y + shift
+                1.0, 0.0, 0.0, 0.0, // y' = x
+                0.0, 0.0, 1.0, 0.0, // z' = z + shift
+            ],
+        };
+        let (x, y, z) = ([1.0, 3.0], [2.0, 4.0], [5.0, 6.0]);
+        let shift = [10.0, 20.0];
+
+        assert_eq!(
+            matrix.apply(0, &x, &y, Some(&z), Some(&shift)),
+            Some(vec![8.0, 16.0])
+        );
+        assert_eq!(
+            matrix.apply(2, &x, &y, Some(&z), Some(&shift)),
+            Some(vec![15.0, 26.0])
+        );
     }
 
     #[test]
@@ -185,8 +368,14 @@ mod tests {
         };
         let (x, y, z) = ([1.0, 2.0], [3.0, 4.0], [5.0, 6.0]);
 
-        assert_eq!(matrix.apply(0, &x, &y, Some(&z)), Some(vec![6.0, 7.0]));
-        assert_eq!(matrix.apply(1, &x, &y, Some(&z)), None);
-        assert_eq!(matrix.apply(2, &x, &y, Some(&z)), Some(vec![7.0, 7.0]));
+        assert_eq!(
+            matrix.apply(0, &x, &y, Some(&z), None),
+            Some(vec![6.0, 7.0])
+        );
+        assert_eq!(matrix.apply(1, &x, &y, Some(&z), None), None);
+        assert_eq!(
+            matrix.apply(2, &x, &y, Some(&z), None),
+            Some(vec![7.0, 7.0])
+        );
     }
 }

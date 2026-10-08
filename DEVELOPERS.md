@@ -177,7 +177,7 @@ the comment says when one without a CRS takes a different tier.
 | `distance` | 3 | PROJ + ggl; no CRS: 1 | - | | - | | - | | - | | - | |
 | `mean_coordinate` | 1 | returns the point | 1 | | 1 | skips ring's closing coord | 1 | | 1 | | 1 | skips ring's closing coord |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `rotate` | 2 | about `x`, `y`: needs a `z` | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `rotate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `skew` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `scale` | 2 | `zfact`: needs a `z` | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `affine_transform` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
@@ -390,7 +390,7 @@ affine transforms:
 - [x] skew
 - [x] transform (with a matrix): `affine_transform`
 - [ ] shift (by a value in a different column)
-- [ ] rotate around coordinate from another column
+- [x] rotate around coordinate from another column
 - [ ] scale around coordinate from another column
 - [ ] skew around a coordinate from another column
 - [ ] rotate around own centroid (can use the above)

@@ -10,7 +10,8 @@ import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.geo._dispatch import on_geometry
+from geopolars.datatypes import PointType
+from geopolars.geo._dispatch import on_geometry, on_geometry_pair
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
@@ -140,15 +141,34 @@ def _tan(degrees: float, name: str) -> float:
     return math.tan(math.radians(degrees))
 
 
-def _rotate(
-    degrees: float,
-    axis: Literal["x", "y", "z"],
-    origin: tuple[float, float, float],
-) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+def _affine_about(
+    column: pl.Expr, origin: pl.Expr, linear: tuple[tuple[float, float, float], ...]
+) -> pl.Expr:
+    """Apply the 3x3 `linear` part about each geometry's own point of `origin`,
+    a `geoarrow.point` column, rather than about one point for the whole column.
+    """
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[column, origin],
+        function_name="affine_about",
+        is_elementwise=True,
+        kwargs={"coefficients": _about(linear, (0.0, 0.0, 0.0))},
+    )
+
+
+def _origin_points(origin: GeoArrowType) -> None:
+    if not isinstance(origin, PointType):
+        msg = f"`origin` has to be a `geoarrow.point` column, got: {origin!r}"
+        raise TypeError(msg)
+
+
+def _rotation(
+    degrees: float, axis: Literal["x", "y", "z"]
+) -> tuple[tuple[float, float, float], ...]:
     cos, sin = _cos_sin(degrees)
     # Counter-clockwise for a positive angle, looking down the axis from its positive end.
     # fmt: off
-    rotation = {
+    return {
         "x": (
             (1,    0,    0),
             (0,    cos, -sin),
@@ -166,17 +186,41 @@ def _rotate(
         ),
     }[axis]
     # fmt: on
-    matrix = _about(rotation, origin)
+
+
+def _can_rotate(axis: Literal["x", "y", "z"], geometry: GeoArrowType) -> None:
+    # Turning about `x` or `y` moves positions into and out of `z`,
+    # which a geometry without one cannot hold.
+    if axis != "z" and "z" not in geometry._dimension:
+        msg = f"cannot rotate about the {axis} axis: {geometry!r} has no z coordinate"
+        raise TypeError(msg)
+
+
+def _rotate(
+    degrees: float,
+    axis: Literal["x", "y", "z"],
+    origin: tuple[float, float, float],
+) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+    matrix = _about(_rotation(degrees, axis), origin)
 
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-        # Turning about `x` or `y` moves positions into and out of `z`,
-        # which a geometry without one cannot hold.
-        if axis != "z" and "z" not in geometry._dimension:
-            msg = (
-                f"cannot rotate about the {axis} axis: {geometry!r} has no z coordinate"
-            )
-            raise TypeError(msg)
+        _can_rotate(axis, geometry)
         return _affine(column, matrix)
+
+    return build
+
+
+def _rotate_about(
+    degrees: float, axis: Literal["x", "y", "z"]
+) -> Callable[[pl.Expr, GeoArrowType, pl.Expr, GeoArrowType], pl.Expr]:
+    rotation = _rotation(degrees, axis)
+
+    def build(
+        column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
+    ) -> pl.Expr:
+        _can_rotate(axis, geometry)
+        _origin_points(points)
+        return _affine_about(column, origin, rotation)
 
     return build
 
@@ -186,7 +230,7 @@ def rotate(
     amount: float,
     unit: Literal["deg", "pi"] = "deg",
     axis: Literal["x", "y", "z"] = "z",
-    origin: Origin = (0.0, 0.0, 0.0),
+    origin: Origin | IntoExprColumn = (0.0, 0.0, 0.0),
 ) -> pl.Expr:
     """Turn every position of a geometry about an axis through `origin`.
 
@@ -200,9 +244,14 @@ def rotate(
     Turning about `x` or `y` needs a geometry with a `z`, and is refused for one without.
     `m`, being a measure, is always carried through untouched.
 
-    `origin` is the point the axis runs through, `(x, y)` or `(x, y, z)`,
-    by default `(0, 0, 0)`. A `z` left out is 0.
-    It is the same point for every geometry in the column, not the middle of each one.
+    `origin` is the point the axis runs through, by default `(0, 0, 0)`. It is either
+    - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
+    - a `geoarrow.point` column (or a single point) with a point for every geometry,
+      such as `geo.mean_coordinate("shape")` to turn each geometry about its own middle.
+      A geometry whose origin is missing comes out missing.
+      An origin column that declares a CRS has to declare the geometry's.
+
+    A `z` left out is 0.
     Coordinates are turned as they are, in the units of their CRS:
     in longitude/latitude, this does not turn anything on the globe,
     and can leave positions outside of the valid range.
@@ -211,6 +260,9 @@ def rotate(
         msg = f'`axis` has to be "x", "y" or "z", got: {axis!r}'
         raise ValueError(msg)
     degrees = _degrees(amount, unit, "amount")
+    # A column of points, rather than one point given as numbers.
+    if isinstance(origin, str | pl.Expr | pl.Series):
+        return on_geometry_pair(geometry, origin, _rotate_about(degrees, axis))
     return on_geometry(geometry, _rotate(degrees, axis, _origin(origin)))
 
 

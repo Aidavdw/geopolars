@@ -49,7 +49,11 @@ class ExprGeoNameSpace:
         amount: float,
         unit: Literal["deg", "pi"] = "deg",
         axis: Literal["x", "y", "z"] = "z",
-        origin: tuple[float, float] | tuple[float, float, float] = (0.0, 0.0, 0.0),
+        origin: tuple[float, float] | tuple[float, float, float] | IntoExprColumn = (
+            0.0,
+            0.0,
+            0.0,
+        ),
     ) -> pl.Expr:
         return affine.rotate(self._expr, amount, unit=unit, axis=axis, origin=origin)
 
