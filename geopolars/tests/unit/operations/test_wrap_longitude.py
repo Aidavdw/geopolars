@@ -84,11 +84,11 @@ def test_the_flag_decides_per_geometry() -> None:
 
 
 def test_a_box_polygon_across_the_antimeridian_is_crossing() -> None:
-    """`box_to_polygon` pushes it to 190, which is exactly what the flag protects."""
+    """`to_polygon` pushes it to 190, which is exactly what the flag protects."""
     polygons = (
         pl.LazyFrame({"a": [170.0], "b": [-10.0], "c": [-170.0], "d": [10.0]})
         .select(geo.box("a", "b", "c", "d", crs=WGS84).alias("box"))
-        .select(geo.box_to_polygon("box"))
+        .select(geo.to_polygon("box"))
     )
     assert _x(polygons, skip_crossing=True) == [[[170.0, 190.0, 190.0, 170.0, 170.0]]]
     assert _x(polygons) == [[[170.0, -170.0, -170.0, 170.0, 170.0]]]

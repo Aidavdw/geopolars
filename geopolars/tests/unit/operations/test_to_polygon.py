@@ -24,14 +24,14 @@ from geopolars.datatypes import (
 
 
 def _polygons(*bounds: tuple[float | None, ...], crs: str | None = None) -> pl.Series:
-    """One `box_to_polygon` per row of `(xmin, ymin, xmax, ymax)` bounds."""
+    """One `to_polygon` per row of `(xmin, ymin, xmax, ymax)` bounds."""
     df = pl.DataFrame(
         list(bounds), schema=["xmin", "ymin", "xmax", "ymax"], orient="row"
     )
     return (
         df.lazy()
         .select(geo.box("xmin", "ymin", "xmax", "ymax", crs=crs).alias("box"))
-        .select(geo.box_to_polygon("box"))
+        .select(geo.to_polygon("box"))
         .collect()
         .to_series()
     )
@@ -211,7 +211,7 @@ _XYZM = {
 def test_the_polygon_has_the_boxs_dimension_and_crs(
     dtype: type[GeoBox], expected: type[GeoPolygon]
 ) -> None:
-    lf = _boxes_of(dtype, **_XYZM).select(geo.box_to_polygon("box"))
+    lf = _boxes_of(dtype, **_XYZM).select(geo.to_polygon("box"))
 
     assert lf.collect_schema()["box"] == expected(crs="EPSG:4326")
     assert lf.collect().schema["box"] == expected(crs="EPSG:4326")
@@ -222,7 +222,7 @@ def test_z_and_m_follow_x() -> None:
     so both ends of every range survive."""
     (polygon,) = (
         _boxes_of(BoxXYZM, **_XYZM)
-        .select(geo.box_to_polygon("box").ext.storage())
+        .select(geo.to_polygon("box").ext.storage())
         .collect()
         .to_series()
         .to_list()
@@ -246,7 +246,7 @@ def test_an_empty_z_or_m_range_gives_an_empty_polygon(
 ) -> None:
     """Only x has the antimeridian exception: any other reversed range holds nothing."""
     bounds = {**_XYZM, f"{axis}min": [low], f"{axis}max": [high]}
-    out = _boxes_of(BoxXYZM, **bounds).select(geo.box_to_polygon("box")).collect()
+    out = _boxes_of(BoxXYZM, **bounds).select(geo.to_polygon("box")).collect()
 
     assert out.select(pl.col("box").ext.storage()).item().to_list() == []
 
@@ -256,7 +256,7 @@ def test_a_z_box_continues_past_the_antimeridian() -> None:
     bounds = {**_XYZM, "xmin": [170.0], "xmax": [-170.0]}
     (polygon,) = (
         _boxes_of(BoxXYZ, **bounds)
-        .select(geo.box_to_polygon("box").ext.storage())
+        .select(geo.to_polygon("box").ext.storage())
         .collect()
         .to_series()
         .to_list()
@@ -277,7 +277,7 @@ def test_a_geometry_is_refused_at_plan_time() -> None:
     )
 
     with pytest.raises(TypeError, match="expected a `geoarrow.box` column"):
-        lf.select(geo.box_to_polygon("point")).collect_schema()
+        lf.select(geo.to_polygon("point")).collect_schema()
 
 
 def test_namespace_matches_the_functional_api() -> None:
@@ -286,4 +286,4 @@ def test_namespace_matches_the_functional_api() -> None:
         geo.box("a", "b", "c", "d").alias("box")
     )
 
-    assert boxes.select(gpl.col("box").geo.box_to_polygon()).equals(df)
+    assert boxes.select(gpl.col("box").geo.to_polygon()).equals(df)

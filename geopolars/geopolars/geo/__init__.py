@@ -5,7 +5,6 @@ Everything in the 'geo' namespace forwards to here.
 from geopolars.geo.affine import translate
 from geopolars.geo.area import area
 from geopolars.geo.bounds import bounds
-from geopolars.geo.box_to_polygon import box_to_polygon
 from geopolars.geo.construct import (
     box,
     linestring,
@@ -33,6 +32,7 @@ from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.is_empty import is_empty
 from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
+from geopolars.geo.to_polygon import to_polygon
 from geopolars.geo.wkb import from_wkb, to_wkb
 from geopolars.geo.wkt import from_wkt, to_wkt
 from geopolars.geo.wrap_longitude import wrap_longitude
@@ -41,7 +41,6 @@ __all__ = [
     "area",
     "bounds",
     "box",
-    "box_to_polygon",
     "count_coordinates",
     "distance",
     "distance_squared",
@@ -69,6 +68,7 @@ __all__ = [
     "polygon_from_rings",
     "set_crs",
     "to_crs",
+    "to_polygon",
     "to_wkb",
     "to_wkt",
     "translate",

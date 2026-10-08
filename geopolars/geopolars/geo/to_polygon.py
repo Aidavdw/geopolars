@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoBox
 
 
-def _box_to_polygon(column: pl.Expr, box: GeoBox) -> pl.Expr:
+def _to_polygon(column: pl.Expr, box: GeoBox) -> pl.Expr:
     bounds = column.ext.storage()
     dimension = box._dimension
     low = {axis: bounds.struct.field(f"{axis}min") for axis in dimension}
@@ -66,7 +66,7 @@ def _box_to_polygon(column: pl.Expr, box: GeoBox) -> pl.Expr:
     return polygon.ext.to(polygon_type._with_metadata_of(box))
 
 
-def box_to_polygon(box: IntoExprColumn) -> pl.Expr:
+def to_polygon(box: IntoExprColumn) -> pl.Expr:
     """The rectangle a box describes, as a polygon with the box's dimension and CRS:
     `BoxXY` gives a `PolygonXY`, `BoxXYZ` a `PolygonXYZ`, and so on.
 
@@ -96,7 +96,7 @@ def box_to_polygon(box: IntoExprColumn) -> pl.Expr:
     An empty range is `inf` to `-inf`, or any other reversed range outside of x.
 
     ```python
-    df.select(geo.box_to_polygon("extent"))
+    df.select(geo.to_polygon("extent"))
     ```
     """
-    return on_box(box, _box_to_polygon)
+    return on_box(box, _to_polygon)

@@ -89,10 +89,10 @@ class ExprGeoNameSpace:
 
         return bounds(self._expr, margin_x=margin_x, margin_y=margin_y)
 
-    def box_to_polygon(self) -> pl.Expr:
-        from geopolars.geo.box_to_polygon import box_to_polygon
+    def to_polygon(self) -> pl.Expr:
+        from geopolars.geo.to_polygon import to_polygon
 
-        return box_to_polygon(self._expr)
+        return to_polygon(self._expr)
 
     def wrap_longitude(
         self, *, start: float | None = None, skip_crossing: bool = False
