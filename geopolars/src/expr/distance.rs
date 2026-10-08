@@ -201,7 +201,8 @@ fn shared_crs(fields: &[Field]) -> PolarsResult<String> {
 
 /// `output_type_func` for [`distance_squared_geodesic`]: an `f64`, named after the first point.
 fn squared_distance(input_fields: &[Field]) -> PolarsResult<Field> {
-    shared_crs(input_fields)?;
+    // So a CRS PROJ cannot measure in fails while the plan is built.
+    GeodesicMetric::of(&shared_crs(input_fields)?)?;
     Ok(Field::new(
         input_fields[0].name().clone(),
         DataType::Float64,

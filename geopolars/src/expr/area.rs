@@ -36,7 +36,8 @@ fn crs_of(field: &Field) -> PolarsResult<String> {
 /// `output_type_func` for [`area_geodesic`]: an `f64`, in the unit of the CRS squared,
 /// or a list of them for a multipolygon.
 fn areas(input_fields: &[Field]) -> PolarsResult<Field> {
-    crs_of(&input_fields[0])?;
+    // Check if the CRS can be used by PROJ. If not, raise error at plan time rather than at runtime.
+    GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
     let dtype = match describe(input_fields[0].dtype())?.kind {
         Kind::MultiPolygon => DataType::List(Box::new(DataType::Float64)),
         _ => DataType::Float64,

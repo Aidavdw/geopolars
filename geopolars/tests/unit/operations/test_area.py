@@ -350,6 +350,13 @@ def test_a_crs_not_on_longitude_latitude_is_refused(area: Area) -> None:
         _areas(area, df)
 
 
+def test_a_crs_not_on_longitude_latitude_is_refused_at_plan_time(area: Area) -> None:
+    lf = _rings([_DEGREE_SQUARE], crs="EPSG:4978").lazy().select(area("polygon"))
+
+    with pytest.raises(ComputeError, match="not defined on longitude/latitude"):
+        lf.collect_schema()
+
+
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
 def test_the_result_is_named_after_the_geometry(area: Area, crs: str | None) -> None:
     df = _rings([_DEGREE_SQUARE], crs=crs)

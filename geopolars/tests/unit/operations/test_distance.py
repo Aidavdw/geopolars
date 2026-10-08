@@ -261,6 +261,14 @@ def test_a_crs_on_only_one_point_is_refused_while_resolving_the_schema() -> None
         lf.collect_schema()
 
 
+def test_a_crs_not_on_longitude_latitude_is_refused_while_resolving_the_schema() -> None:
+    """Earth-centred XYZ has no ellipsoid surface to measure a distance on."""
+    lf = _pairs([NEW_YORK], [LONDON], crs="EPSG:4978").lazy()
+
+    with pytest.raises(ComputeError, match="not defined on longitude/latitude"):
+        lf.select(geo.distance("a", "b")).collect_schema()
+
+
 def test_only_points_are_measured(line_coords: pl.DataFrame) -> None:
     lf = XY.lines(line_coords).lazy().select(geo.distance("line", "line"))
 

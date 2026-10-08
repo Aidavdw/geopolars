@@ -30,7 +30,8 @@ fn crs_of_curve(field: &Field) -> PolarsResult<String> {
 /// `output_type_func` for [`length_geodesic`]: an `f64` in the unit of the CRS,
 /// or a list of them for a multilinestring.
 fn lengths(input_fields: &[Field]) -> PolarsResult<Field> {
-    crs_of_curve(&input_fields[0])?;
+    // So a CRS PROJ cannot measure in fails while the plan is built.
+    GeodesicMetric::of(&crs_of_curve(&input_fields[0])?)?;
     let dtype = match describe(input_fields[0].dtype())?.kind {
         Kind::MultiLineString => DataType::List(Box::new(DataType::Float64)),
         _ => DataType::Float64,

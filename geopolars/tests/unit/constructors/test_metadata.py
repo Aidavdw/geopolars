@@ -213,6 +213,24 @@ def test_a_declared_crs_can_be_reprojected_from() -> None:
     assert (round(x), round(y)) == (122097, 486745)
 
 
+def test_a_target_crs_proj_does_not_know_is_refused_at_plan_time() -> None:
+    lf = pl.LazyFrame({"x": [4.9041], "y": [52.3676]}).select(
+        geo.to_crs(geo.point("x", "y", crs=WGS84), "EPSG:not-a-code")
+    )
+
+    with pytest.raises(ComputeError, match="cannot reproject from"):
+        lf.collect_schema()
+
+
+def test_a_column_without_a_crs_is_refused_for_reprojection_at_plan_time() -> None:
+    lf = pl.LazyFrame({"x": [4.9041], "y": [52.3676]}).select(
+        geo.to_crs(geo.point("x", "y"), WGS84)
+    )
+
+    with pytest.raises(ComputeError, match="does not declare a CRS"):
+        lf.collect_schema()
+
+
 def test_unknown_metadata_keywords_are_refused() -> None:
     with pytest.raises(TypeError):
         geo.point("x", "y", edges="spherical")  # type: ignore[call-arg]

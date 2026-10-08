@@ -28,8 +28,17 @@ fn reprojected_geometry_type(dtype: &DataType, to: &str) -> PolarsResult<Geo> {
 /// metadata now names the target CRS, so the dtype is a different one.
 fn reprojected(input_fields: &[Field], kwargs: ToCrsKwargs) -> PolarsResult<Field> {
     let field = &input_fields[0];
+    // Built here as well as in the kernel, so a CRS PROJ cannot use fails while the plan is built.
+    transformation(field.dtype(), &kwargs.to)?;
     let geo = reprojected_geometry_type(field.dtype(), &kwargs.to)?;
     Ok(Field::new(field.name().clone(), geo.dtype()))
+}
+
+/// The PROJ transformation from the CRS of `dtype` to `to`.
+fn transformation(dtype: &DataType, to: &str) -> PolarsResult<Proj> {
+    let from = describe(dtype)?.metadata.crs()?;
+    Proj::new_known_crs(&from, to, None)
+        .map_err(|e| polars_err!(ComputeError: "cannot reproject from {from} to {to}: {e}"))
 }
 
 /// Reproject one flat array of coordinates.
@@ -86,10 +95,7 @@ fn reproject(coords: &Series, dim: GeoDimension, proj: &Proj) -> PolarsResult<Se
 #[polars_expr(output_type_func_with_kwargs=reprojected)]
 fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
-    let from = geo.metadata.crs()?;
-    let proj = Proj::new_known_crs(&from, &kwargs.to, None).map_err(
-        |e| polars_err!(ComputeError: "cannot reproject from {from} to {}: {e}", kwargs.to),
-    )?;
+    let proj = transformation(inputs[0].dtype(), &kwargs.to)?;
 
     let out = map_coords(inputs[0].ext()?.storage(), geo.kind.nesting(), &|coords| {
         reproject(coords, geo.dim, &proj)

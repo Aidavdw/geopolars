@@ -6,6 +6,7 @@ import math
 
 import polars as pl
 import pytest
+from polars.exceptions import ComputeError
 from polars.testing import assert_series_equal
 
 import geopolars as gpl
@@ -245,6 +246,14 @@ def test_metadata_without_a_crs_is_still_planar() -> None:
     )
 
     assert _lengths(df) == [5.0]
+
+
+def test_a_crs_not_on_longitude_latitude_is_refused_while_resolving_the_schema() -> None:
+    """Earth-centred XYZ has no ellipsoid surface to measure a length on."""
+    lf = _lines([[(0.0, 0.0), (3.0, 4.0)]], crs="EPSG:4978").lazy()
+
+    with pytest.raises(ComputeError, match="not defined on longitude/latitude"):
+        lf.select(geo.length("line")).collect_schema()
 
 
 @pytest.mark.parametrize("geometry", ["point", "polygon", "multipoint", "multipolygon"])
