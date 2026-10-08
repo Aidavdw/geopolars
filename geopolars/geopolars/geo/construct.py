@@ -8,7 +8,7 @@ import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import GeoPoint
+from geopolars.datatypes import GeoBox, GeoPoint
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
@@ -181,6 +181,52 @@ def point(
     complete = pl.all_horizontal([coord.is_not_null() for coord in coords])
     dtype = GeoPoint.of_dimension(dimension)
     return pl.when(complete).then(pl.struct(coords)).ext.to(dtype(crs=crs))
+
+
+def box(
+    xmin: IntoExprColumn,
+    ymin: IntoExprColumn,
+    xmax: IntoExprColumn,
+    ymax: IntoExprColumn,
+    *,
+    zmin: IntoExprColumn | None = None,
+    zmax: IntoExprColumn | None = None,
+    mmin: IntoExprColumn | None = None,
+    mmax: IntoExprColumn | None = None,
+    crs: str | None = None,
+) -> pl.Expr:
+    """Build a `geoarrow.box` column from its bounds.
+    Whether you pass the `z` and/or `m` bounds decides the dimension, and so the dtype:
+
+    | passed                         | dtype     |
+    |--------------------------------|-----------|
+    | -                              | `BoxXY`   |
+    | `zmin`, `zmax`                 | `BoxXYZ`  |
+    | `mmin`, `mmax`                 | `BoxXYM`  |
+    | `zmin`, `zmax`, `mmin`, `mmax` | `BoxXYZM` |
+
+    The bounds are taken as given: `xmin > xmax` is a box that crosses the antimeridian,
+    and a range from `inf` to `-inf` is empty.
+
+    ```python
+    df.select(geo.box("west", "south", "east", "north", crs="EPSG:4326"))
+    ```
+    """
+    given = _given(xmin, ymin, zmin, mmin)
+    for axis, low, high in (("z", zmin, zmax), ("m", mmin, mmax)):
+        if (low is None) != (high is None):
+            msg = f"pass both {axis}min and {axis}max, or neither"
+            raise ValueError(msg)
+    dimension = tuple(given)
+    maxima = _given(xmax, ymax, zmax, mmax)
+    bounds = [_coord(value, f"{axis}min") for axis, value in given.items()] + [
+        _coord(value, f"{axis}max") for axis, value in maxima.items()
+    ]
+
+    # A missing bound invalidates the entire box.
+    complete = pl.all_horizontal([bound.is_not_null() for bound in bounds])
+    dtype = GeoBox.of_dimension(dimension)
+    return pl.when(complete).then(pl.struct(bounds)).ext.to(dtype(crs=crs))
 
 
 def linestring_from_vertices(

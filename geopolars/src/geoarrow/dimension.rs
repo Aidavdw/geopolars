@@ -90,6 +90,29 @@ impl GeoDimension {
             DataType::List(Box::new(inner))
         })
     }
+
+    /// A `geoarrow.box`'s field names, in the order the spec requires:
+    /// every minimum, then every maximum.
+    pub const fn box_field_names(self) -> &'static [&'static str] {
+        match self {
+            GeoDimension::XY => &["xmin", "ymin", "xmax", "ymax"],
+            GeoDimension::XYZ => &["xmin", "ymin", "zmin", "xmax", "ymax", "zmax"],
+            GeoDimension::XYM => &["xmin", "ymin", "mmin", "xmax", "ymax", "mmax"],
+            GeoDimension::XYZM => &[
+                "xmin", "ymin", "zmin", "mmin", "xmax", "ymax", "zmax", "mmax",
+            ],
+        }
+    }
+
+    /// The struct a `geoarrow.box` of this dimension is stored as.
+    pub fn box_storage(self) -> DataType {
+        DataType::Struct(
+            self.box_field_names()
+                .iter()
+                .map(|name| Field::new((*name).into(), DataType::Float64))
+                .collect(),
+        )
+    }
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@
 //! They ask [`describe`] what a column holds and dispatch on the [`Kind`] and [`Dimension`] it reports,
 //! so adding a geometry does not touch `crate::expr`.
 
+pub mod bbox;
 pub mod coord;
 pub mod crs;
 pub mod decode;
@@ -25,6 +26,7 @@ use std::sync::Arc;
 use polars::prelude::*;
 use polars_core::datatypes::extension::{register_extension_type, ExtensionTypeInstance};
 
+use bbox::BoxFactory;
 use crs::ExtensionMetadata;
 use encoded::{EncodedFactory, Encoding};
 use geo::GeoFactory;
@@ -43,6 +45,7 @@ pub fn register() -> PolarsResult<()> {
     for encoding in Encoding::ALL {
         register_extension_type(encoding.name(), Some(Arc::new(EncodedFactory(encoding))))?;
     }
+    register_extension_type(bbox::NAME, Some(Arc::new(BoxFactory)))?;
     Ok(())
 }
 

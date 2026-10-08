@@ -5,6 +5,7 @@ Everything in the 'geo' namespace forwards to here.
 from geopolars.geo.affine import translate
 from geopolars.geo.area import area
 from geopolars.geo.construct import (
+    box,
     linestring,
     linestring_from_columns,
     linestring_from_vertices,
@@ -34,6 +35,7 @@ from geopolars.geo.wkt import from_wkt, to_wkt
 
 __all__ = [
     "area",
+    "box",
     "distance",
     "distance_squared",
     "from_wkb",

@@ -6,6 +6,7 @@ so one registered name and one dispatching class covers them all.
 """
 
 from geopolars.datatypes.base import GeoArrowType
+from geopolars.datatypes.box import BoxXY, BoxXYM, BoxXYZ, BoxXYZM, GeoBox
 from geopolars.datatypes.linestring import (
     GeoLineString,
     LineStringXY,
@@ -54,7 +55,12 @@ from geopolars.datatypes.wkt import Wkt
 
 __all__ = [
     "GEOMETRIES",
+    "BoxXY",
+    "BoxXYM",
+    "BoxXYZ",
+    "BoxXYZM",
     "GeoArrowType",
+    "GeoBox",
     "GeoLineString",
     "GeoMultiLineString",
     "GeoMultiPoint",

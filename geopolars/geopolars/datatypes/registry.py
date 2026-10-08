@@ -11,6 +11,7 @@ import polars as pl
 # which is what registers these types on the Rust side.
 from geopolars import geopolars as _rust  # noqa: F401
 from geopolars.datatypes.base import GeoArrowType
+from geopolars.datatypes.box import GeoBox
 from geopolars.datatypes.encoded import EncodedGeometry
 from geopolars.datatypes.linestring import GeoLineString
 from geopolars.datatypes.multilinestring import GeoMultiLineString
@@ -33,6 +34,8 @@ GEOMETRIES: tuple[type[GeoArrowType], ...] = (
 
 for _geometry in GEOMETRIES:
     pl.register_extension_type(_geometry._extension_name, _geometry)
+
+pl.register_extension_type(GeoBox._extension_name, GeoBox)
 
 # Mirrors `Encoding::ALL`
 ENCODINGS: tuple[type[EncodedGeometry], ...] = (Wkb, Wkt)

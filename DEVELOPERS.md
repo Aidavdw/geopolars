@@ -51,6 +51,11 @@ Two things work differently on the two sides:
   In Rust, metadata is held parsed as an `ExtensionMetadata`, behind an `Arc`,
   so it compares by content and is written back out as compact JSON.
 
+`geoarrow.box` (`datatypes/box.py`, `src/geoarrow/bbox.rs`), which represents a bounding box,
+is registered on both sides too, but it is not one of these geometries:
+its storage is a flat struct of bounds (`xmin, ymin, ..., xmax, ymax, ...`),
+so, like WKB and WKT, it is not a `Kind`, and it is not accepted by most operations.
+
 Rust expressions never name a concrete geometry.
 They call `geoarrow::describe(dtype)` to get a `GeoColumn` (kind and dimension),
 then either ignore it (`coords::map_coords`) or match exhaustively on `Kind`.

@@ -7,6 +7,11 @@ There should be no links the other direction.
 
 from geopolars import datatypes, geo
 from geopolars.datatypes import (
+    BoxXY,
+    BoxXYM,
+    BoxXYZ,
+    BoxXYZM,
+    GeoBox,
     GeoLineString,
     GeoMultiLineString,
     GeoMultiPoint,
@@ -46,6 +51,11 @@ from geopolars.expr import Geometry, PluginExpr, as_plugin, col
 from geopolars.io import read_parquet, scan_parquet, sink_parquet, write_parquet
 
 __all__ = [
+    "BoxXY",
+    "BoxXYM",
+    "BoxXYZ",
+    "BoxXYZM",
+    "GeoBox",
     "GeoLineString",
     "GeoMultiLineString",
     "GeoMultiPoint",

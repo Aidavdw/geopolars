@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import polars as pl
-from geopolars.datatypes import GeoPoint, PointXY
+from geopolars.datatypes import BoxXY, GeoPoint, PointXY
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
@@ -90,4 +90,16 @@ def test_a_missing_geometry_survives_a_parquet_round_trip(
     back = pl.read_parquet(path)
 
     assert back["line"].is_null().to_list() == [False, False, True]
+    assert_frame_equal(back, df)
+
+
+def test_box_survives_a_parquet_round_trip(tmp_path: Path) -> None:
+    df = pl.DataFrame({"a": [0.0], "b": [1.0], "c": [2.0], "d": [3.0]}).select(
+        geo.box("a", "b", "c", "d", crs="EPSG:4326").alias("box")
+    )
+    path = tmp_path / "boxes.parquet"
+    df.write_parquet(path)
+    back = pl.read_parquet(path)
+
+    assert back.schema["box"] == BoxXY(crs="EPSG:4326")
     assert_frame_equal(back, df)

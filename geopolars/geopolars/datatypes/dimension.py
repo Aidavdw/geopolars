@@ -53,3 +53,17 @@ def dimension_of(storage: PolarsDataType, nesting: int) -> Dimension | None:
     if any(dtype != pl.Float64 for dtype in schema.values()):
         return None
     return tuple(schema.keys())
+
+
+def box_storage(dimension: Dimension) -> pl.Struct:
+    """The struct a `geoarrow.box` of this dimension is stored as."""
+    names = [f"{c}min" for c in dimension] + [f"{c}max" for c in dimension]
+    return pl.Struct(dict.fromkeys(names, pl.Float64))
+
+
+def box_dimension_of(storage: PolarsDataType) -> Dimension | None:
+    """Read the dimension off a box's storage. The inverse of `box_storage`."""
+    for dimension in ALL:
+        if storage == box_storage(dimension):
+            return dimension
+    return None
