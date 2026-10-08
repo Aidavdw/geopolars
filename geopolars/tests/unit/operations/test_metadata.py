@@ -34,6 +34,9 @@ KEEPS_METADATA: dict[str, Callable[[str], pl.Expr]] = {
         name, 2.0, 0.5, origin=geo.mean_coordinate(name)
     ),
     "affine_transform": lambda name: geo.affine_transform(name, [1, 2, 3, 4, 5, 6]),
+    "affine_transform about a column": lambda name: geo.affine_transform(
+        name, [1, 2, 3, 4, 5, 6], geo.mean_coordinate(name)
+    ),
 }
 
 

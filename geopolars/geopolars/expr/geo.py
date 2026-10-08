@@ -41,8 +41,16 @@ class ExprGeoNameSpace:
     def translate(self, dx: float, dy: float, dz: float = 0.0) -> pl.Expr:
         return affine.translate(self._expr, dx=dx, dy=dy, dz=dz)
 
-    def affine_transform(self, matrix: Sequence[float]) -> pl.Expr:
-        return affine.affine_transform(self._expr, matrix)
+    def affine_transform(
+        self,
+        matrix: Sequence[float],
+        origin: tuple[float, float] | tuple[float, float, float] | IntoExprColumn = (
+            0.0,
+            0.0,
+            0.0,
+        ),
+    ) -> pl.Expr:
+        return affine.affine_transform(self._expr, matrix, origin=origin)
 
     def rotate(
         self,

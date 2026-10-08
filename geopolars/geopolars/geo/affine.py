@@ -75,6 +75,7 @@ def translate(
 
 
 Origin = tuple[float, float] | tuple[float, float, float]
+_ZERO = (0.0, 0.0, 0.0)
 
 
 def _degrees(amount: float, unit: Literal["deg", "pi"], name: str) -> float:
@@ -141,18 +142,17 @@ def _tan(degrees: float, name: str) -> float:
     return math.tan(math.radians(degrees))
 
 
-def _affine_about(
-    column: pl.Expr, origin: pl.Expr, linear: tuple[tuple[float, float, float], ...]
-) -> pl.Expr:
-    """Apply the 3x3 `linear` part about each geometry's own point of `origin`,
-    a `geoarrow.point` column, rather than about one point for the whole column.
+def _affine_about(column: pl.Expr, origin: pl.Expr, matrix: Sequence[float]) -> pl.Expr:
+    """`_affine`, but about each geometry's own point of `origin`,
+    a `geoarrow.point` column, rather than about (0, 0, 0):
+    M.(p - origin) + origin.
     """
     return register_plugin_function(
         plugin_path=LIB,
         args=[column, origin],
         function_name="affine_about",
         is_elementwise=True,
-        kwargs={"coefficients": _about(linear, (0.0, 0.0, 0.0))},
+        kwargs={"coefficients": [float(c) for c in matrix]},
     )
 
 
@@ -220,7 +220,7 @@ def _rotate_about(
     ) -> pl.Expr:
         _can_rotate(axis, geometry)
         _origin_points(points)
-        return _affine_about(column, origin, rotation)
+        return _affine_about(column, origin, _about(rotation, _ZERO))
 
     return build
 
@@ -273,7 +273,7 @@ def _skew_about(
         column: pl.Expr, _: GeoArrowType, origin: pl.Expr, points: GeoArrowType
     ) -> pl.Expr:
         _origin_points(points)
-        return _affine_about(column, origin, shear)
+        return _affine_about(column, origin, _about(shear, _ZERO))
 
     return build
 
@@ -371,7 +371,7 @@ def _scale_about(
     ) -> pl.Expr:
         _can_scale(zfact, geometry)
         _origin_points(points)
-        return _affine_about(column, origin, stretch)
+        return _affine_about(column, origin, _about(stretch, _ZERO))
 
     return build
 
@@ -418,24 +418,44 @@ def scale(
     return on_geometry(geometry, _scale(xfact, yfact, zfact, _origin(origin)))
 
 
-def _affine_transform(
-    matrix: list[float],
-) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+def _can_transform(matrix: list[float], geometry: GeoArrowType) -> None:
     # Anything that reads `z` (c, f) or makes it (the bottom row) other than as it was.
     _, _, c, _, _, _, f, _, *z_row = matrix
     uses_z = c != 0.0 or f != 0.0 or z_row != [0.0, 0.0, 1.0, 0.0]
+    # Without this, a matrix that works with `z` would quietly be half applied.
+    if uses_z and "z" not in geometry._dimension:
+        msg = f"cannot apply a matrix that uses z: {geometry!r} has no z coordinate"
+        raise TypeError(msg)
 
+
+def _affine_transform(
+    matrix: list[float],
+) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-        # Without this, a matrix that works with `z` would quietly be half applied.
-        if uses_z and "z" not in geometry._dimension:
-            msg = f"cannot apply a matrix that uses z: {geometry!r} has no z coordinate"
-            raise TypeError(msg)
+        _can_transform(matrix, geometry)
         return _affine(column, matrix)
 
     return build
 
 
-def affine_transform(geometry: IntoExprColumn, matrix: Sequence[float]) -> pl.Expr:
+def _affine_transform_about(
+    matrix: list[float],
+) -> Callable[[pl.Expr, GeoArrowType, pl.Expr, GeoArrowType], pl.Expr]:
+    def build(
+        column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
+    ) -> pl.Expr:
+        _can_transform(matrix, geometry)
+        _origin_points(points)
+        return _affine_about(column, origin, matrix)
+
+    return build
+
+
+def affine_transform(
+    geometry: IntoExprColumn,
+    matrix: Sequence[float],
+    origin: Origin | IntoExprColumn = (0.0, 0.0, 0.0),
+) -> pl.Expr:
     """Transform every position of a geometry by an affine matrix of your own.
 
     The matrix is given as a flat list in the same order as shapely and GeoPandas take it,
@@ -464,6 +484,18 @@ def affine_transform(geometry: IntoExprColumn, matrix: Sequence[float]) -> pl.Ex
     is refused for a geometry with no `z`, rather than silently half applied.
     `m`, being a measure, is always carried through untouched.
 
+    `origin` is the point the matrix is applied about, by default `(0, 0, 0)`:
+    positions are taken relative to it, transformed, and put back,
+    `x' = a·(x - origin_x) + b·(y - origin_y) + c·(z - origin_z) + xoff + origin_x`
+    and likewise for `y` and `z`. The default leaves the matrix as shapely applies it.
+    It is either
+    - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
+    - a `geoarrow.point` column (or a single point) with a point for every geometry,
+      such as `geo.mean_coordinate("shape")` to transform each geometry about its own middle.
+      A geometry whose origin is missing comes out missing.
+      An origin column that declares a CRS has to declare the geometry's.
+
+    A `z` left out is 0.
     `translate`, `rotate`, `skew` and `scale` are each one of these,
     with the matrix worked out for you.
     Coordinates are transformed as they are, in the units of their CRS.
@@ -485,4 +517,13 @@ def affine_transform(geometry: IntoExprColumn, matrix: Sequence[float]) -> pl.Ex
         g, h, i, zoff,
     ]
     # fmt: on
-    return on_geometry(geometry, _affine_transform(rows))
+    # A column of points, rather than one point given as numbers.
+    if isinstance(origin, str | pl.Expr | pl.Series):
+        return on_geometry_pair(geometry, origin, _affine_transform_about(rows))
+
+    linear = ((a, b, c), (d, e, f), (g, h, i))
+    about = _about(linear, _origin(origin))
+    # Its own offsets on top of those that move it about `origin`.
+    for k, offset in enumerate((xoff, yoff, zoff)):
+        about[4 * k + 3] += offset
+    return on_geometry(geometry, _affine_transform(about))
