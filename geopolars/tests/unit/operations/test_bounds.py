@@ -181,7 +181,7 @@ def test_empty_and_missing_geometries() -> None:
 def test_empty_points_are_skipped() -> None:
     # One linestring through an empty point and two real ones.
     df = pl.DataFrame({"x": [[_NAN, 1.0, 3.0]], "y": [[_NAN, 2.0, 4.0]]}).select(
-        geo.linestring("x", "y")
+        geo.line_string("x", "y")
     )
     out = df.select(geo.bounds("x"))
 
@@ -192,7 +192,7 @@ def test_empty_points_are_skipped() -> None:
 
 def test_a_missing_multigeometry_stays_missing() -> None:
     df = pl.DataFrame({"x": [[1.0], None], "y": [[2.0], None]}).select(
-        geo.multipoint("x", "y")
+        geo.multi_point("x", "y")
     )
     out = df.select(geo.bounds("x"))
 
@@ -208,7 +208,7 @@ def test_the_crs_is_carried_over() -> None:
     )
 
     assert df.select(geo.bounds("x")).schema["x"] == BoxXY(crs="EPSG:4326")
-    multipoints = df.select(geo.multipoint(pl.col("x").implode()))
+    multipoints = df.select(geo.multi_point(pl.col("x").implode()))
     assert multipoints.select(geo.bounds("x")).schema["x"] == pl.List(
         BoxXY(crs="EPSG:4326")
     )
@@ -251,7 +251,7 @@ def _x_bounds(xs: list[list[float]], crs: str | None, margin_x: float = 0.0) -> 
     df = pl.DataFrame(
         {"x": xs, "y": [[0.0] * len(x) for x in xs]},
         schema={"x": pl.List(pl.Float64), "y": pl.List(pl.Float64)},
-    ).select(geo.linestring("x", "y", crs=crs))
+    ).select(geo.line_string("x", "y", crs=crs))
     out = df.select(geo.bounds("x", margin_x=margin_x)).to_series()
     return out.ext.storage().struct.unnest().select("xmin", "xmax").rows()
 
@@ -292,7 +292,7 @@ def test_without_a_crs_bounds_are_left_past_the_edge() -> None:
 
 def test_a_crossing_multigeometry_part_crosses_on_its_own() -> None:
     df = pl.DataFrame({"x": [[10.0, 190.0]], "y": [[0.0, 0.0]]}).select(
-        geo.multipoint("x", "y", crs="EPSG:4326")
+        geo.multi_point("x", "y", crs="EPSG:4326")
     )
     boxes = df.select(geo.bounds("x", margin_x=15.0)).to_series()
 

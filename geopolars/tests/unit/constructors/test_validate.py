@@ -107,7 +107,7 @@ def test_a_null_geometry_stays_null() -> None:
 
 def test_it_leaves_a_whole_column_exactly_as_it_was() -> None:
     df = pl.DataFrame({"line": [_SQUARE, []]}, schema={"line": _XY_VERTICES}).select(
-        geo.linestring("line")
+        geo.line_string("line")
     )
 
     assert_frame_equal(df.select(geo.validate("line")), df)

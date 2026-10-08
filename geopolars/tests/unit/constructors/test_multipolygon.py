@@ -1,4 +1,4 @@
-"""Building `geoarrow.multipolygon` columns with `geo.multipolygon`."""
+"""Building `geoarrow.multipolygon` columns with `geo.multi_polygon`."""
 
 from __future__ import annotations
 
@@ -59,7 +59,7 @@ def test_accepts_bare_lists_of_rings() -> None:
     a list of the ring lists a polygon wraps is the same storage."""
     df = pl.DataFrame(
         {"polygons": [_SQUARE]}, schema={"polygons": _XY_POLYGONS}
-    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
 
     assert df.schema["multipolygon"] == MultiPolygonXY()
     assert_frame_equal(
@@ -71,7 +71,7 @@ def test_accepts_bare_lists_of_rings() -> None:
 def test_an_empty_list_is_an_empty_multipolygon() -> None:
     """See https://geoarrow.org/format.html#empty-geometries"""
     df = pl.DataFrame({"polygons": [[]]}, schema={"polygons": _XY_POLYGONS}).select(
-        geo.multipolygon("polygons").alias("multipolygon")
+        geo.multi_polygon("polygons").alias("multipolygon")
     )
 
     assert df.schema["multipolygon"] == MultiPolygonXY()
@@ -84,7 +84,7 @@ def test_an_empty_list_is_an_empty_multipolygon() -> None:
 def test_a_single_polygon_is_a_valid_multipolygon() -> None:
     df = pl.DataFrame(
         {"polygons": [_SQUARE]}, schema={"polygons": _XY_POLYGONS}
-    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
 
     assert df.schema["multipolygon"] == MultiPolygonXY()
     assert df.schema["multipolygon"] != PolygonXY()
@@ -96,7 +96,7 @@ def test_a_missing_polygon_invalidates_the_whole_multipolygon() -> None:
     df = pl.DataFrame(
         {"polygons": [[*_SQUARE, None], _SQUARE, None]},
         schema={"polygons": _XY_POLYGONS},
-    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
 
     assert df["multipolygon"].is_null().to_list() == [True, False, True]
 
@@ -105,7 +105,7 @@ def test_a_missing_ring_invalidates_the_whole_multipolygon() -> None:
     df = pl.DataFrame(
         {"polygons": [[[*_SQUARE[0], None]], _SQUARE]},
         schema={"polygons": _XY_POLYGONS},
-    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
 
     assert df["multipolygon"].is_null().to_list() == [True, False]
 
@@ -114,7 +114,7 @@ def test_a_missing_vertex_invalidates_the_whole_multipolygon() -> None:
     df = pl.DataFrame(
         {"polygons": [[[[{"x": 1.0, "y": 2.0}, None]]], _SQUARE]},
         schema={"polygons": _XY_POLYGONS},
-    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
 
     assert df["multipolygon"].is_null().to_list() == [True, False]
 
@@ -123,7 +123,7 @@ def test_a_missing_coordinate_invalidates_the_whole_multipolygon() -> None:
     df = pl.DataFrame(
         {"polygons": [[[[{"x": 1.0, "y": None}]]], _SQUARE]},
         schema={"polygons": _XY_POLYGONS},
-    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
 
     assert df["multipolygon"].is_null().to_list() == [True, False]
 
@@ -137,7 +137,7 @@ def test_metadata_is_carried_over_from_the_polygons() -> None:
         pl.DataFrame({"rings": _SQUARE}, schema={"rings": _XY_RINGS})
         .select(polygon=pl.col("rings").ext.to(spherical))
         .select(pl.col("polygon").implode())
-        .select(geo.multipolygon("polygon").alias("multipolygon"))
+        .select(geo.multi_polygon("polygon").alias("multipolygon"))
     )
 
     assert df.schema["multipolygon"].ext_metadata() == metadata
@@ -150,7 +150,7 @@ def test_rejects_polygons_that_are_not_coordinates() -> None:
     df = pl.DataFrame({"polygons": [[[[1.0, 2.0]]]]})
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.multipolygon("polygons"))
+        df.select(geo.multi_polygon("polygons"))
 
 
 def test_rejects_a_column_that_is_not_a_list() -> None:
@@ -160,7 +160,7 @@ def test_rejects_a_column_that_is_not_a_list() -> None:
     )
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.multipolygon("polygon"))
+        df.select(geo.multi_polygon("polygon"))
 
 
 def test_rejects_a_list_of_linestrings() -> None:
@@ -168,30 +168,30 @@ def test_rejects_a_list_of_linestrings() -> None:
     That gather is a multilinestring."""
     df = (
         pl.DataFrame({"vertices": _SQUARE[0]}, schema={"vertices": _XY_VERTICES})
-        .select(geo.linestring("vertices").alias("line"))
+        .select(geo.line_string("vertices").alias("line"))
         .select(pl.col("line").implode())
     )
 
     with pytest.raises(ComputeError, match="expected a list of `geoarrow.polygon`s"):
-        df.select(geo.multipolygon("line"))
+        df.select(geo.multi_polygon("line"))
 
 
 def test_rejects_a_list_of_multilinestrings() -> None:
     """A multilinestring has the storage of a polygon, but is not one."""
     df = (
         pl.DataFrame({"lines": _SQUARE}, schema={"lines": _XY_RINGS})
-        .select(geo.multilinestring("lines").alias("multilinestring"))
+        .select(geo.multi_line_string("lines").alias("multilinestring"))
         .select(pl.col("multilinestring").implode())
     )
 
     with pytest.raises(ComputeError, match="expected a list of `geoarrow.polygon`s"):
-        df.select(geo.multipolygon("multilinestring"))
+        df.select(geo.multi_polygon("multilinestring"))
 
 
 def test_rejects_bad_polygons_while_resolving_the_schema() -> None:
     """The dimension is read off the input's dtype,
     so parts that are not coordinates are a schema error."""
-    lf = pl.LazyFrame({"country": ["nl"]}).select(geo.multipolygon("country"))
+    lf = pl.LazyFrame({"country": ["nl"]}).select(geo.multi_polygon("country"))
 
     with pytest.raises(ComputeError, match="expected a list of"):
         lf.collect_schema()
@@ -200,7 +200,7 @@ def test_rejects_bad_polygons_while_resolving_the_schema() -> None:
 def test_empty_frame_keeps_its_dtype() -> None:
     """A zero-row build still produces a multipolygon column."""
     df = pl.DataFrame(schema={"polygons": _XY_POLYGONS}).select(
-        geo.multipolygon("polygons").alias("multipolygon")
+        geo.multi_polygon("polygons").alias("multipolygon")
     )
 
     assert df.height == 0
@@ -223,7 +223,7 @@ def test_coordinate_columns_keep_their_parts_in_order() -> None:
             "lon": [[[[0.0, 1.0], [2.0]], [[3.0, 4.0]]]],
             "lat": [[[[5.0, 6.0], [7.0]], [[8.0, 9.0]]]],
         }
-    ).select(geo.multipolygon("lon", "lat").alias("multipolygon"))
+    ).select(geo.multi_polygon("lon", "lat").alias("multipolygon"))
     polygons = pl.col("multipolygon").ext.storage()
 
     assert df.select(polygons.list.len())["multipolygon"].to_list() == [2]
@@ -245,7 +245,7 @@ def test_coordinate_columns_are_cast_to_f64() -> None:
     """Coordinates are doubles.
     integer columns are widened rather than refused."""
     df = pl.DataFrame({"lon": [[[[1, 3]]]], "lat": [[[[2, 4]]]]}).select(
-        geo.multipolygon("lon", "lat").alias("multipolygon")
+        geo.multi_polygon("lon", "lat").alias("multipolygon")
     )
 
     assert df.schema["multipolygon"] == MultiPolygonXY()
@@ -259,7 +259,7 @@ def test_a_missing_coordinate_invalidates_the_multipolygon_of_coords() -> None:
     df = pl.DataFrame(
         {"lon": [[[[1.0]]], [[[1.0]]]], "lat": [[[[None]]], [[[2.0]]]]},
         schema=_XY_COORDS,
-    ).select(geo.multipolygon("lon", "lat").alias("multipolygon"))
+    ).select(geo.multi_polygon("lon", "lat").alias("multipolygon"))
 
     assert df["multipolygon"].is_null().to_list() == [True, False]
 
@@ -281,14 +281,14 @@ def test_rejects_coordinate_columns_that_nest_differently(
     df = pl.DataFrame({"lon": lon, "lat": lat}, schema=_XY_COORDS)
 
     with pytest.raises(ComputeError, match="do not nest the same way"):
-        df.select(geo.multipolygon("lon", "lat"))
+        df.select(geo.multi_polygon("lon", "lat"))
 
 
 def test_rejects_coordinate_columns_nested_only_twice() -> None:
     """Two lists per geometry is a polygon's shape;
     a multipolygon needs the polygons around them too."""
     lf = pl.LazyFrame({"lon": [[[1.0]]], "lat": [[[2.0]]]}).select(
-        geo.multipolygon("lon", "lat")
+        geo.multi_polygon("lon", "lat")
     )
 
     with pytest.raises(
@@ -299,12 +299,12 @@ def test_rejects_coordinate_columns_nested_only_twice() -> None:
 
 def test_rejects_a_measure_without_a_y_coordinate() -> None:
     with pytest.raises(TypeError, match="without a y coordinate"):
-        geo.multipolygon("lon", m="dist")
+        geo.multi_polygon("lon", m="dist")
 
 
 def test_empty_frame_of_coordinates_keeps_its_dtype() -> None:
     df = pl.DataFrame(schema=_XY_COORDS).select(
-        geo.multipolygon("lon", "lat").alias("multipolygon")
+        geo.multi_polygon("lon", "lat").alias("multipolygon")
     )
 
     assert df.height == 0
@@ -315,8 +315,8 @@ def test_one_argument_dispatches_to_the_polygon_form() -> None:
     df = pl.DataFrame({"polygons": [_SQUARE]}, schema={"polygons": _XY_POLYGONS})
 
     assert_frame_equal(
-        df.select(geo.multipolygon("polygons")),
-        df.select(geo.multipolygon_from_polygons("polygons")),
+        df.select(geo.multi_polygon("polygons")),
+        df.select(geo.multi_polygon_from_polygons("polygons")),
     )
 
 
@@ -326,6 +326,6 @@ def test_coordinate_columns_dispatch_to_the_column_form() -> None:
     )
 
     assert_frame_equal(
-        df.select(geo.multipolygon("lon", "lat")),
-        df.select(geo.multipolygon_from_columns("lon", "lat")),
+        df.select(geo.multi_polygon("lon", "lat")),
+        df.select(geo.multi_polygon_from_columns("lon", "lat")),
     )

@@ -247,7 +247,7 @@ def _lines(crs: str | None = None) -> pl.DataFrame:
     """Two linestrings and a missing one."""
     return pl.DataFrame(
         {"x": [[0.0, 2.0], [170.0, 190.0], None], "y": [[1.0, 3.0], [0.0, 1.0], None]}
-    ).select(geo.linestring("x", "y", crs=crs).alias("geometry"))
+    ).select(geo.line_string("x", "y", crs=crs).alias("geometry"))
 
 
 def test_a_covering_is_the_bounds_of_every_geometry(tmp_path: Path) -> None:
@@ -304,7 +304,7 @@ def test_a_covering_with_z_bounds_z(tmp_path: Path) -> None:
 def test_a_multigeometry_gets_one_box_around_all_its_parts(tmp_path: Path) -> None:
     path = tmp_path / "covered.parquet"
     df = pl.DataFrame({"x": [[0.0, 5.0]], "y": [[1.0, -1.0]]}).select(
-        geo.multipoint("x", "y").alias("geometry")
+        geo.multi_point("x", "y").alias("geometry")
     )
     gpl.write_parquet(df, path, covering=True)
 

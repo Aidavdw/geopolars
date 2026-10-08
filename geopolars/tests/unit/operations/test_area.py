@@ -125,7 +125,7 @@ def test_a_closed_linestring_still_has_an_area_of_zero(area: Area) -> None:
     closes bounds the space inside it -- only a polygon does."""
     df = pl.DataFrame(
         {"vertices": [_SQUARE]}, schema={"vertices": _XY_VERTICES}
-    ).select(geo.linestring("vertices").alias("line"))
+    ).select(geo.line_string("vertices").alias("line"))
 
     assert _areas(area, df, "line") == [0.0]
 

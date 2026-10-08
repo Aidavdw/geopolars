@@ -167,7 +167,7 @@ def test_translate_keeps_empty_and_missing_linestrings(dimension: Dimension) -> 
         schema={
             "vertices": pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
         },
-    ).select(geo.linestring("vertices").alias("line"))
+    ).select(geo.line_string("vertices").alias("line"))
     out = df.select(geo.translate("line", dx=1.0, dy=1.0).alias("line"))
 
     assert_frame_equal(out, df)
@@ -255,7 +255,7 @@ def test_translate_keeps_empty_and_missing_multilinestrings(
                 pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
             )
         },
-    ).select(geo.multilinestring("lines").alias("multilinestring"))
+    ).select(geo.multi_line_string("lines").alias("multilinestring"))
     out = df.select(
         geo.translate("multilinestring", dx=1.0, dy=1.0).alias("multilinestring")
     )
@@ -338,7 +338,7 @@ def test_translate_keeps_empty_and_missing_multipolygons(
                 pl.List(pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64))))
             )
         },
-    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
     out = df.select(geo.translate("multipolygon", dx=1.0, dy=1.0).alias("multipolygon"))
 
     assert_frame_equal(out, df)
@@ -359,8 +359,8 @@ def test_linestring_namespace_matches_the_functional_api(
     vertices = line_coords.group_by("line", maintain_order=True).agg(XYZ.point())
 
     assert_frame_equal(
-        vertices.select(gpl.col("point").geo.linestring().alias("line")),
-        vertices.select(geo.linestring("point").alias("line")),
+        vertices.select(gpl.col("point").geo.line_string().alias("line")),
+        vertices.select(geo.line_string("point").alias("line")),
     )
 
 
@@ -370,8 +370,8 @@ def test_multipoint_namespace_matches_the_functional_api(
     points = line_coords.group_by("line", maintain_order=True).agg(XYZ.point())
 
     assert_frame_equal(
-        points.select(gpl.col("point").geo.multipoint().alias("multipoint")),
-        points.select(geo.multipoint("point").alias("multipoint")),
+        points.select(gpl.col("point").geo.multi_point().alias("multipoint")),
+        points.select(geo.multi_point("point").alias("multipoint")),
     )
 
 
@@ -404,8 +404,8 @@ def test_multilinestring_namespace_matches_the_functional_api(
     )
 
     assert_frame_equal(
-        lines.select(gpl.col("line").geo.multilinestring().alias("multilinestring")),
-        lines.select(geo.multilinestring("line").alias("multilinestring")),
+        lines.select(gpl.col("line").geo.multi_line_string().alias("multilinestring")),
+        lines.select(geo.multi_line_string("line").alias("multilinestring")),
     )
 
 
@@ -426,8 +426,8 @@ def test_multipolygon_namespace_matches_the_functional_api(
     )
 
     assert_frame_equal(
-        polygons.select(gpl.col("polygon").geo.multipolygon().alias("multipolygon")),
-        polygons.select(geo.multipolygon("polygon").alias("multipolygon")),
+        polygons.select(gpl.col("polygon").geo.multi_polygon().alias("multipolygon")),
+        polygons.select(geo.multi_polygon("polygon").alias("multipolygon")),
     )
 
 
@@ -448,7 +448,7 @@ def test_to_crs_namespace_matches_the_functional_api(
     lines = (
         line_coords.group_by("line", maintain_order=True)
         .agg("x", "y", "z")
-        .select(line=geo.linestring_from_columns("x", "y", z="z", crs="EPSG:4326"))
+        .select(line=geo.line_string_from_columns("x", "y", z="z", crs="EPSG:4326"))
     )
 
     assert_frame_equal(

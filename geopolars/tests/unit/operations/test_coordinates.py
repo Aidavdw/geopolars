@@ -146,7 +146,7 @@ def test_drops_the_crs(axis: str, getter: Getter, geometry: str) -> None:
         geo.point("x", "y", crs="EPSG:4326").alias("point")
     )
     if geometry == "line":
-        df = df.select(geo.linestring(pl.col("point").implode()).alias("line"))
+        df = df.select(geo.line_string(pl.col("point").implode()).alias("line"))
 
     dtype = df.select(getter(geometry)).schema[geometry]
     assert dtype == {"point": pl.Float64, "line": pl.List(pl.Float64)}[geometry]

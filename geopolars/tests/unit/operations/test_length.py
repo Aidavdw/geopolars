@@ -100,7 +100,7 @@ def _line_with_heights(
     vertices = pl.DataFrame(line, schema=["x", "y", "z"], orient="row")
     point = geo.point("x", "y", "z", crs=crs).alias("point")
     return vertices.select(point.implode()).select(
-        geo.linestring("point").alias("line")
+        geo.line_string("point").alias("line")
     )
 
 

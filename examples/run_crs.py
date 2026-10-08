@@ -99,7 +99,7 @@ vertices = pl.DataFrame(
 # The CRS can go on the vertices: building a linestring from them carries
 # the metadata over, so the line knows its CRS without being told twice.
 lines = vertices.group_by("route", maintain_order=True).agg(
-    line=geo.linestring_from_vertices(geo.point("lon", "lat", crs=WGS84).implode())
+    line=geo.line_string_from_vertices(geo.point("lon", "lat", crs=WGS84).implode())
 )
 print(f"Routes in longitude/latitude: {lines}")
 print("declared CRS:", crs_of(lines, "line"), "\n")
@@ -108,7 +108,7 @@ print("Or on the line itself, when it is built from coordinate columns.")
 direct = (
     vertices.group_by("route", maintain_order=True)
     .agg("lon", "lat")
-    .select("route", line=geo.linestring_from_columns("lon", "lat", crs=WGS84))
+    .select("route", line=geo.line_string_from_columns("lon", "lat", crs=WGS84))
 )
 print("  the same lines:", direct.equals(lines), "\n")
 
@@ -119,7 +119,7 @@ try:
         vertices.lazy()
         .group_by("route")
         .agg(
-            geo.linestring_from_vertices(
+            geo.line_string_from_vertices(
                 geo.point("lon", "lat", crs=WGS84).implode(), crs="EPSG:28992"
             )
         )

@@ -145,7 +145,7 @@ def test_rejects_a_column_that_is_not_a_list() -> None:
     """A linestring column is a ring per row, not a polygon per row."""
     df = pl.DataFrame(
         {"vertices": _TRIANGLE}, schema={"vertices": _XY_VERTICES}
-    ).select(geo.linestring("vertices").alias("line"))
+    ).select(geo.line_string("vertices").alias("line"))
 
     with pytest.raises(ComputeError, match="expected a list of"):
         df.select(geo.polygon("line"))

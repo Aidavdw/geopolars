@@ -18,20 +18,20 @@ class ExprGeoNameSpace:
     def __init__(self, expr: pl.Expr):
         self._expr = expr
 
-    def linestring(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.linestring_from_vertices(self._expr, crs=crs)
+    def line_string(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.line_string_from_vertices(self._expr, crs=crs)
 
-    def multipoint(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.multipoint_from_points(self._expr, crs=crs)
+    def multi_point(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.multi_point_from_points(self._expr, crs=crs)
 
-    def multilinestring(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.multilinestring_from_linestrings(self._expr, crs=crs)
+    def multi_line_string(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.multi_line_string_from_line_strings(self._expr, crs=crs)
 
     def polygon(self, *, crs: str | None = None) -> pl.Expr:
         return construct.polygon_from_rings(self._expr, crs=crs)
 
-    def multipolygon(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.multipolygon_from_polygons(self._expr, crs=crs)
+    def multi_polygon(self, *, crs: str | None = None) -> pl.Expr:
+        return construct.multi_polygon_from_polygons(self._expr, crs=crs)
 
     def validate(self) -> pl.Expr:
         return construct.validate(self._expr)

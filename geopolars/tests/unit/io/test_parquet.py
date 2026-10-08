@@ -84,7 +84,7 @@ def test_a_missing_geometry_survives_a_parquet_round_trip(
         schema={
             "vertices": pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
         },
-    ).select(geo.linestring("vertices").alias("line"))
+    ).select(geo.line_string("vertices").alias("line"))
     path = tmp_path / "nulls.parquet"
     df.write_parquet(path)
     back = pl.read_parquet(path)

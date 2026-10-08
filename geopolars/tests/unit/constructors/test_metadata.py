@@ -40,7 +40,7 @@ def _lines(crs: str | None = None) -> pl.DataFrame:
     """One list of two closed lines per row, ready to be gathered."""
     return (
         pl.DataFrame({"x": [0.0, 1.0, 0.0, 0.0], "y": [0.0, 0.0, 1.0, 0.0]})
-        .select(line=geo.linestring(geo.point("x", "y", crs=crs).implode()))
+        .select(line=geo.line_string(geo.point("x", "y", crs=crs).implode()))
         .select(pl.col("line").repeat_by(2))
     )
 
@@ -85,11 +85,11 @@ def test_point_declares_its_crs(coords: pl.DataFrame, dimension: Dimension) -> N
 @pytest.mark.parametrize(
     ("constructor", "nesting", "expected"),
     [
-        (geo.linestring_from_columns, 1, LineStringXY),
-        (geo.multipoint_from_columns, 1, MultiPointXY),
+        (geo.line_string_from_columns, 1, LineStringXY),
+        (geo.multi_point_from_columns, 1, MultiPointXY),
         (geo.polygon_from_columns, 2, PolygonXY),
-        (geo.multilinestring_from_columns, 2, MultiLineStringXY),
-        (geo.multipolygon_from_columns, 3, MultiPolygonXY),
+        (geo.multi_line_string_from_columns, 2, MultiLineStringXY),
+        (geo.multi_polygon_from_columns, 3, MultiPolygonXY),
     ],
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
@@ -114,11 +114,11 @@ def test_coordinate_columns_declare_a_crs(
 @pytest.mark.parametrize(
     ("constructor", "parts", "expected"),
     [
-        (geo.linestring_from_vertices, _points, LineStringXY),
-        (geo.multipoint_from_points, _points, MultiPointXY),
+        (geo.line_string_from_vertices, _points, LineStringXY),
+        (geo.multi_point_from_points, _points, MultiPointXY),
         (geo.polygon_from_rings, _lines, PolygonXY),
-        (geo.multilinestring_from_linestrings, _lines, MultiLineStringXY),
-        (geo.multipolygon_from_polygons, _polygons, MultiPolygonXY),
+        (geo.multi_line_string_from_line_strings, _lines, MultiLineStringXY),
+        (geo.multi_polygon_from_polygons, _polygons, MultiPolygonXY),
     ],
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
@@ -174,7 +174,7 @@ def test_a_crs_is_set_next_to_the_parts_other_metadata() -> None:
         pl.DataFrame({"x": [1.0], "y": [3.0]})
         .select(point=pl.struct("x", "y").ext.to(spherical))
         .select(pl.col("point").implode())
-        .select(line=geo.linestring_from_vertices("point", crs=WGS84))
+        .select(line=geo.line_string_from_vertices("point", crs=WGS84))
     )
 
     metadata = df.schema["line"].ext_metadata()
@@ -185,7 +185,7 @@ def test_python_and_the_plugin_agree_byte_for_byte() -> None:
     """dtypes compare metadata as a string, so both sides have to write the same
     one, even for a CRS that is spelled with whitespace."""
     df = pl.DataFrame({"x": [[1.0]], "y": [[3.0]]}).select(
-        line=geo.linestring_from_columns("x", "y", crs=PROJJSON)
+        line=geo.line_string_from_columns("x", "y", crs=PROJJSON)
     )
 
     assert df.schema["line"] == LineStringXY(crs=PROJJSON)
@@ -193,9 +193,9 @@ def test_python_and_the_plugin_agree_byte_for_byte() -> None:
 
 def test_the_dispatchers_and_namespace_pass_the_crs_on() -> None:
     df = _points().select(
-        dispatched=geo.linestring("point", crs=WGS84),
-        namespaced=gpl.col("point").geo.linestring(crs=WGS84),
-        columns=geo.linestring(
+        dispatched=geo.line_string("point", crs=WGS84),
+        namespaced=gpl.col("point").geo.line_string(crs=WGS84),
+        columns=geo.line_string(
             pl.lit(pl.Series([[1.0]])), pl.lit(pl.Series([[3.0]])), crs=WGS84
         ),
     )

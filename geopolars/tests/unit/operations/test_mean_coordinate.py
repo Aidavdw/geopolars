@@ -95,7 +95,7 @@ def test_a_closed_linestring_keeps_every_vertex() -> None:
     vertex is there to close it, so all five are averaged."""
     df = pl.DataFrame(
         {"vertices": [_SQUARE]}, schema={"vertices": _XY_VERTICES}
-    ).select(geo.linestring("vertices").alias("line"))
+    ).select(geo.line_string("vertices").alias("line"))
     out = df.select(geo.mean_coordinate("line"))
 
     assert_frame_equal(coordinates(out, "line"), pl.DataFrame({"x": [1.6], "y": [1.6]}))
@@ -142,7 +142,7 @@ def test_a_closed_multipoint_keeps_every_point() -> None:
     """A multipoint is not a ring: a repeated point is a point that is there
     twice, and it counts twice."""
     df = pl.DataFrame({"points": [_SQUARE]}, schema={"points": _XY_VERTICES}).select(
-        geo.multipoint("points").alias("multipoint")
+        geo.multi_point("points").alias("multipoint")
     )
     out = df.select(geo.mean_coordinate("multipoint"))
 
@@ -159,7 +159,7 @@ def test_an_empty_or_missing_multipoint_has_no_mean_coordinate(
         schema={
             "points": pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
         },
-    ).select(geo.multipoint("points").alias("multipoint"))
+    ).select(geo.multi_point("points").alias("multipoint"))
 
     out = df.select(geo.mean_coordinate("multipoint"))
 
@@ -197,7 +197,7 @@ def test_a_closed_multilinestring_keeps_every_vertex() -> None:
     """A part that happens to close is still a linestring:
     all five of the square's vertices are averaged"""
     df = pl.DataFrame({"lines": [[_SQUARE]]}, schema={"lines": _XY_RINGS}).select(
-        geo.multilinestring("lines").alias("multilinestring")
+        geo.multi_line_string("lines").alias("multilinestring")
     )
     out = df.select(geo.mean_coordinate("multilinestring"))
 
@@ -216,7 +216,7 @@ def test_an_empty_or_missing_multilinestring_has_no_mean_coordinate(
                 pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
             )
         },
-    ).select(geo.multilinestring("lines").alias("multilinestring"))
+    ).select(geo.multi_line_string("lines").alias("multilinestring"))
 
     out = df.select(geo.mean_coordinate("multilinestring"))
 
@@ -242,7 +242,7 @@ def test_a_multipolygon_of_one_polygon_agrees_with_the_polygon() -> None:
         geo.polygon("rings").alias("polygon")
     )
     multipolygon = polygon.select(
-        geo.multipolygon(pl.col("polygon").implode()).alias("polygon")
+        geo.multi_polygon(pl.col("polygon").implode()).alias("polygon")
     )
 
     assert_frame_equal(
@@ -261,7 +261,7 @@ def test_an_empty_or_missing_multipolygon_has_no_mean_coordinate(
                 pl.List(pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64))))
             )
         },
-    ).select(geo.multipolygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
 
     out = df.select(geo.mean_coordinate("multipolygon"))
 
@@ -324,7 +324,7 @@ def test_an_empty_or_missing_linestring_has_no_mean_coordinate(
         schema={
             "vertices": pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
         },
-    ).select(geo.linestring("vertices").alias("line"))
+    ).select(geo.line_string("vertices").alias("line"))
 
     out = df.select(geo.mean_coordinate("line"))
 

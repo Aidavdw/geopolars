@@ -1,4 +1,4 @@
-"""Building `geoarrow.multipoint` columns with `geopolars.geo.multipoint`."""
+"""Building `geoarrow.multipoint` columns with `geopolars.geo.multi_point`."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def test_accepts_bare_coordinate_structs() -> None:
     df = pl.DataFrame(
         {"points": [[{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]]},
         schema={"points": _XY_POINTS},
-    ).select(geo.multipoint("points").alias("multipoint"))
+    ).select(geo.multi_point("points").alias("multipoint"))
 
     assert df.schema["multipoint"] == MultiPointXY()
     assert_frame_equal(
@@ -55,7 +55,7 @@ def test_the_same_points_build_a_multipoint_and_a_linestring(
 def test_an_empty_list_is_an_empty_multipoint() -> None:
     """See https://geoarrow.org/format.html#empty-geometries"""
     df = pl.DataFrame({"points": [[]]}, schema={"points": _XY_POINTS}).select(
-        geo.multipoint("points").alias("multipoint")
+        geo.multi_point("points").alias("multipoint")
     )
 
     assert df.schema["multipoint"] == MultiPointXY()
@@ -68,7 +68,7 @@ def test_an_empty_list_is_an_empty_multipoint() -> None:
 def test_a_single_point_is_a_valid_multipoint() -> None:
     df = pl.DataFrame(
         {"points": [[{"x": 1.0, "y": 2.0}]]}, schema={"points": _XY_POINTS}
-    ).select(geo.multipoint("points").alias("multipoint"))
+    ).select(geo.multi_point("points").alias("multipoint"))
 
     assert df.schema["multipoint"] == MultiPointXY()
     assert df.schema["multipoint"] != PointXY()
@@ -87,7 +87,7 @@ def test_a_missing_point_invalidates_the_whole_multipoint() -> None:
             ]
         },
         schema={"points": _XY_POINTS},
-    ).select(geo.multipoint("points").alias("multipoint"))
+    ).select(geo.multi_point("points").alias("multipoint"))
 
     assert df["multipoint"].is_null().to_list() == [True, False, True]
 
@@ -97,7 +97,7 @@ def test_a_missing_coordinate_invalidates_the_whole_multipoint() -> None:
     df = pl.DataFrame(
         {"points": [[{"x": 1.0, "y": None}], [{"x": 1.0, "y": 2.0}]]},
         schema={"points": _XY_POINTS},
-    ).select(geo.multipoint("points").alias("multipoint"))
+    ).select(geo.multi_point("points").alias("multipoint"))
 
     assert df["multipoint"].is_null().to_list() == [True, False]
 
@@ -106,7 +106,7 @@ def test_rejects_points_that_are_not_coordinates() -> None:
     df = pl.DataFrame({"points": [[1.0, 2.0]]})
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.multipoint("points"))
+        df.select(geo.multi_point("points"))
 
 
 def test_rejects_a_column_that_is_not_a_list() -> None:
@@ -116,7 +116,7 @@ def test_rejects_a_column_that_is_not_a_list() -> None:
     )
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.multipoint("point"))
+        df.select(geo.multi_point("point"))
 
 
 def test_rejects_a_multipoint_column() -> None:
@@ -124,28 +124,28 @@ def test_rejects_a_multipoint_column() -> None:
     that nesting is a multilinestring."""
     df = pl.DataFrame(
         {"points": [[{"x": 1.0, "y": 2.0}]]}, schema={"points": _XY_POINTS}
-    ).select(geo.multipoint("points").alias("multipoint"))
+    ).select(geo.multi_point("points").alias("multipoint"))
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.multipoint("multipoint"))
+        df.select(geo.multi_point("multipoint"))
 
 
 def test_rejects_a_list_of_linestrings() -> None:
     lines = pl.DataFrame(
         {"vertices": [[{"x": 1.0, "y": 2.0}]]},
         schema={"vertices": pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))},
-    ).select(geo.linestring("vertices").alias("line"))
+    ).select(geo.line_string("vertices").alias("line"))
 
     with pytest.raises(ComputeError, match="expected a list of `geoarrow.point`s"):
         lines.select(pl.col("line").implode().alias("parts")).select(
-            geo.multipoint("parts")
+            geo.multi_point("parts")
         )
 
 
 def test_rejects_bad_points_while_resolving_the_schema() -> None:
     """The dimension is read off the input's dtype,
     so points that are not coordinates are a schema error."""
-    lf = pl.LazyFrame({"survey": ["north"]}).select(geo.multipoint("survey"))
+    lf = pl.LazyFrame({"survey": ["north"]}).select(geo.multi_point("survey"))
 
     with pytest.raises(ComputeError, match="expected a list of"):
         lf.collect_schema()
@@ -154,7 +154,7 @@ def test_rejects_bad_points_while_resolving_the_schema() -> None:
 def test_empty_frame_keeps_its_dtype() -> None:
     """A zero-row build still produces a multipoint column, not a bare list."""
     df = pl.DataFrame(schema={"points": _XY_POINTS}).select(
-        geo.multipoint("points").alias("multipoint")
+        geo.multi_point("points").alias("multipoint")
     )
 
     assert df.height == 0
@@ -175,7 +175,7 @@ def test_coordinate_columns_pair_up_by_position() -> None:
     a geometry, but the columns still have to be read in lockstep, or the x of
     one point lands on the y of another."""
     df = pl.DataFrame({"lon": [[1.0, 3.0]], "lat": [[2.0, 4.0]]}).select(
-        geo.multipoint("lon", "lat").alias("multipoint")
+        geo.multi_point("lon", "lat").alias("multipoint")
     )
 
     assert_frame_equal(
@@ -186,7 +186,7 @@ def test_coordinate_columns_pair_up_by_position() -> None:
 def test_coordinate_columns_are_cast_to_f64() -> None:
     """Coordinates are doubles. integer columns are widened rather than refused."""
     df = pl.DataFrame({"lon": [[1, 3]], "lat": [[2, 4]]}).select(
-        geo.multipoint("lon", "lat").alias("multipoint")
+        geo.multi_point("lon", "lat").alias("multipoint")
     )
 
     assert df.schema["multipoint"] == MultiPointXY()
@@ -197,7 +197,7 @@ def test_coordinate_columns_are_cast_to_f64() -> None:
 
 def test_an_empty_coordinate_list_is_an_empty_multipoint() -> None:
     df = pl.DataFrame({"lon": [[]], "lat": [[]]}, schema=_XY_COORDS).select(
-        geo.multipoint("lon", "lat").alias("multipoint")
+        geo.multi_point("lon", "lat").alias("multipoint")
     )
 
     assert df["multipoint"].is_null().to_list() == [False]
@@ -210,7 +210,7 @@ def test_a_missing_coordinate_list_is_a_missing_multipoint() -> None:
     """See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {"lon": [[1.0], None], "lat": [[2.0], None]}, schema=_XY_COORDS
-    ).select(geo.multipoint("lon", "lat").alias("multipoint"))
+    ).select(geo.multi_point("lon", "lat").alias("multipoint"))
 
     assert df["multipoint"].is_null().to_list() == [False, True]
 
@@ -219,7 +219,7 @@ def test_a_missing_coordinate_invalidates_the_whole_multipoint_of_coords() -> No
     """See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {"lon": [[1.0, 3.0], [1.0]], "lat": [[2.0, None], [2.0]]}, schema=_XY_COORDS
-    ).select(geo.multipoint("lon", "lat").alias("multipoint"))
+    ).select(geo.multi_point("lon", "lat").alias("multipoint"))
 
     assert df["multipoint"].is_null().to_list() == [True, False]
 
@@ -239,13 +239,15 @@ def test_rejects_coordinate_columns_that_nest_differently(
     df = pl.DataFrame({"lon": lon, "lat": lat}, schema=_XY_COORDS)
 
     with pytest.raises(ComputeError, match="do not nest the same way"):
-        df.select(geo.multipoint("lon", "lat"))
+        df.select(geo.multi_point("lon", "lat"))
 
 
 def test_rejects_flat_coordinate_columns() -> None:
     """One coordinate per row is a point column.
     a multipoint needs them grouped."""
-    lf = pl.LazyFrame({"lon": [1.0], "lat": [2.0]}).select(geo.multipoint("lon", "lat"))
+    lf = pl.LazyFrame({"lon": [1.0], "lat": [2.0]}).select(
+        geo.multi_point("lon", "lat")
+    )
 
     with pytest.raises(ComputeError, match="lists of f64, one per multipoint"):
         lf.collect_schema()
@@ -253,7 +255,7 @@ def test_rejects_flat_coordinate_columns() -> None:
 
 def test_rejects_coordinate_columns_that_are_not_numbers() -> None:
     lf = pl.LazyFrame({"lon": [["1.0"]], "lat": [["2.0"]]}).select(
-        geo.multipoint("lon", "lat")
+        geo.multi_point("lon", "lat")
     )
 
     with pytest.raises(ComputeError, match="lists of f64"):
@@ -262,7 +264,7 @@ def test_rejects_coordinate_columns_that_are_not_numbers() -> None:
 
 def test_empty_frame_of_coordinates_keeps_its_dtype() -> None:
     df = pl.DataFrame(schema=_XY_COORDS).select(
-        geo.multipoint("lon", "lat").alias("multipoint")
+        geo.multi_point("lon", "lat").alias("multipoint")
     )
 
     assert df.height == 0
@@ -276,8 +278,8 @@ def test_one_argument_dispatches_to_the_point_form() -> None:
     )
 
     assert_frame_equal(
-        df.select(geo.multipoint("points")),
-        df.select(geo.multipoint_from_points("points")),
+        df.select(geo.multi_point("points")),
+        df.select(geo.multi_point_from_points("points")),
     )
 
 
@@ -285,6 +287,6 @@ def test_coordinate_columns_dispatch_to_the_column_form() -> None:
     df = pl.DataFrame({"lon": [[1.0, 3.0]], "lat": [[2.0, 4.0]], "ele": [[5.0, 6.0]]})
 
     assert_frame_equal(
-        df.select(geo.multipoint("lon", "lat", z="ele")),
-        df.select(geo.multipoint_from_columns("lon", "lat", z="ele")),
+        df.select(geo.multi_point("lon", "lat", z="ele")),
+        df.select(geo.multi_point_from_columns("lon", "lat", z="ele")),
     )

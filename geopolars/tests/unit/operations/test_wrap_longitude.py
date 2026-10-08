@@ -30,7 +30,7 @@ def _points(*x: float, crs: str | None = WGS84) -> pl.LazyFrame:
 def _lines(*lines: list[float], crs: str = WGS84) -> pl.LazyFrame:
     return pl.LazyFrame(
         {"x": list(lines), "y": [[0.0] * len(line) for line in lines]}
-    ).select(geo.linestring_from_columns("x", "y", crs=crs).alias("line"))
+    ).select(geo.line_string_from_columns("x", "y", crs=crs).alias("line"))
 
 
 def test_a_point_wraps_by_whole_turns() -> None:
@@ -121,7 +121,7 @@ def test_every_part_of_a_multipolygon_counts() -> None:
             ],
             "y": [[[ring], [ring]], [[ring], [ring]]],
         }
-    ).select(geo.multipolygon_from_columns("x", "y", crs=WGS84).alias("parts"))
+    ).select(geo.multi_polygon_from_columns("x", "y", crs=WGS84).alias("parts"))
 
     assert _x(multipolygons, skip_crossing=True) == [
         [[[170.0, 175.0, 170.0]], [[190.0, 195.0, 190.0]]],
@@ -160,7 +160,7 @@ def test_missing_and_empty_geometries_pass_through(skip_crossing: bool) -> None:
     lines = pl.LazyFrame(
         {"x": [None, [], [190.0]], "y": [None, [], [0.0]]},
         schema={"x": pl.List(pl.Float64), "y": pl.List(pl.Float64)},
-    ).select(geo.linestring_from_columns("x", "y", crs=WGS84).alias("line"))
+    ).select(geo.line_string_from_columns("x", "y", crs=WGS84).alias("line"))
 
     assert _x(lines, skip_crossing=skip_crossing) == [None, [], [-170.0]]
 

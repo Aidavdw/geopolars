@@ -35,10 +35,10 @@ print(f"We start with one row per vertex: {df}")
 # `.implode()` inside it is what hands a whole group over as the one list a
 # linestring is made of.
 lines = df.group_by("route", maintain_order=True).agg(
-    xy=geo.linestring_from_vertices(geo.point("lon", "lat").implode()),
-    xyz=geo.linestring_from_vertices(geo.point("lon", "lat", z="elevation").implode()),
-    xym=geo.linestring_from_vertices(geo.point("lon", "lat", m="distance").implode()),
-    xyzm=geo.linestring_from_vertices(
+    xy=geo.line_string_from_vertices(geo.point("lon", "lat").implode()),
+    xyz=geo.line_string_from_vertices(geo.point("lon", "lat", z="elevation").implode()),
+    xym=geo.line_string_from_vertices(geo.point("lon", "lat", m="distance").implode()),
+    xyzm=geo.line_string_from_vertices(
         geo.point("lon", "lat", z="elevation", m="distance").implode()
     ),
 )
@@ -60,13 +60,13 @@ print("  a list of PointXYZ ->", repr(lines.schema["xyz"]), "\n")
 
 print("Vertices are one way in. Coordinates that are already grouped are another:")
 print("pass a column per axis, exactly as to `point`, and skip the vertices.")
-print("`geo.linestring` picks between the two by how you call it.")
+print("`geo.line_string` picks between the two by how you call it.")
 grouped = df.group_by("route", maintain_order=True).agg("lon", "lat", "elevation")
 print(grouped)
 direct = grouped.select(
     "route",
-    xy=geo.linestring_from_columns("lon", "lat"),
-    xyz=geo.linestring_from_columns("lon", "lat", z="elevation"),
+    xy=geo.line_string_from_columns("lon", "lat"),
+    xyz=geo.line_string_from_columns("lon", "lat", z="elevation"),
 )
 print(direct)
 print("the same lines:", direct["xy"].equals(lines["xy"]), "\n")
@@ -77,7 +77,7 @@ print("  ", repr(direct.schema["xy"]), "vs", repr(direct.schema["xyz"]), "\n")
 print("The coordinate columns have to nest the same way, or there are no")
 print("vertices to be had.")
 try:
-    grouped.select(geo.linestring_from_columns("lon", pl.col("lat").list.head(1)))
+    grouped.select(geo.line_string_from_columns("lon", pl.col("lat").list.head(1)))
 except Exception as e:
     detail = next(l for l in str(e).splitlines() if "nest the same way" in l)
     print(f"  {type(e).__name__}: {detail.strip()}")
@@ -129,7 +129,7 @@ edge_cases = pl.DataFrame(
         ]
     },
     schema={"vertices": vertex_list},
-).select(line=geo.linestring_from_vertices("vertices"))
+).select(line=geo.line_string_from_vertices("vertices"))
 print(edge_cases)
 print("null:", edge_cases["line"].is_null().to_list(), "\n")
 
@@ -148,7 +148,7 @@ print("identical:", back.schema == moved.schema, "\n")
 print("Wrong input is reported while building the expression, before collecting.")
 for column in ("route", "xy"):
     try:
-        lines.lazy().select(geo.linestring_from_vertices(column)).collect_schema()
+        lines.lazy().select(geo.line_string_from_vertices(column)).collect_schema()
     except Exception as e:
         detail = next(l for l in str(e).splitlines() if "expected" in l)
         print(f"  {column:>5} -> {type(e).__name__}: {detail.strip()}")
@@ -175,7 +175,7 @@ spherical = PointType.ext_from_params(
 carried = (
     df.select(vertex=pl.struct(x=pl.col("lon"), y=pl.col("lat")).ext.to(spherical))
     .select(pl.col("vertex").implode())
-    .select(line=geo.linestring_from_vertices("vertex"))
+    .select(line=geo.line_string_from_vertices("vertex"))
 )
 print("vertices:", repr(spherical), spherical.ext_metadata())
 print("line:    ", repr(carried.schema["line"]), carried.schema["line"].ext_metadata())
@@ -197,7 +197,7 @@ print(f"One row per vertex, now with a ring to belong to: {rings}")
 
 # Two groupings: vertices into rings, then rings into polygons.
 boundaries = rings.group_by("plot", "ring", maintain_order=True).agg(
-    boundary=geo.linestring_from_vertices(geo.point("lon", "lat").implode())
+    boundary=geo.line_string_from_vertices(geo.point("lon", "lat").implode())
 )
 print(f"The rings are ordinary linestrings: {boundaries}")
 

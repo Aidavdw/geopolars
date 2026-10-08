@@ -89,11 +89,11 @@ def test_a_multipolygon_counts_over_all_its_polygons(
 @pytest.mark.parametrize(
     ("constructor", "layers", "rows"),
     [
-        (geo.linestring, 1, [[], None]),
-        (geo.multipoint, 1, [[], None]),
+        (geo.line_string, 1, [[], None]),
+        (geo.multi_point, 1, [[], None]),
         (geo.polygon, 2, [[], [[]], [[], []], None]),
-        (geo.multilinestring, 2, [[], [[]], [[], []], None]),
-        (geo.multipolygon, 3, [[], [[]], [[[]]], [[[]], [[], []]], None]),
+        (geo.multi_line_string, 2, [[], [[]], [[], []], None]),
+        (geo.multi_polygon, 3, [[], [[]], [[[]]], [[[]], [[], []]], None]),
     ],
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
@@ -115,7 +115,7 @@ def test_gives_a_u32_and_drops_the_crs(geometry: str) -> None:
         geo.point("x", "y", crs="EPSG:4326").alias("point")
     )
     if geometry != "point":
-        df = df.select(geo.linestring(pl.col("point").implode()).alias("line"))
+        df = df.select(geo.line_string(pl.col("point").implode()).alias("line"))
     if geometry == "polygon":
         df = df.select(geo.polygon(pl.col("line").implode()).alias("polygon"))
 

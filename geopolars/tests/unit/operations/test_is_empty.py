@@ -96,11 +96,11 @@ def test_a_nan_point_is_empty(dimension: Dimension) -> None:
 @pytest.mark.parametrize(
     ("constructor", "layers", "rows"),
     [
-        (geo.linestring, 1, [[], None]),
-        (geo.multipoint, 1, [[], None]),
+        (geo.line_string, 1, [[], None]),
+        (geo.multi_point, 1, [[], None]),
         (geo.polygon, 2, [[], [[]], [[], []], None]),
-        (geo.multilinestring, 2, [[], [[]], [[], []], None]),
-        (geo.multipolygon, 3, [[], [[]], [[[]]], [[[]], [[], []]], None]),
+        (geo.multi_line_string, 2, [[], [[]], [[], []], None]),
+        (geo.multi_polygon, 3, [[], [[]], [[[]]], [[[]], [[], []]], None]),
     ],
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
@@ -122,7 +122,7 @@ def test_one_part_with_coordinates_is_enough() -> None:
     df = pl.DataFrame(
         {"storage": [[[], [point]], [[point], []]]},
         schema={"storage": _nested(XY, 2)},
-    ).select(geo.multilinestring("storage").alias("multilinestring"))
+    ).select(geo.multi_line_string("storage").alias("multilinestring"))
 
     out = df.select(geo.is_empty("multilinestring"))
 
@@ -131,7 +131,7 @@ def test_one_part_with_coordinates_is_enough() -> None:
 
 @pytest.mark.parametrize(
     ("constructor", "name"),
-    [(geo.linestring, "line"), (geo.multipoint, "multipoint")],
+    [(geo.line_string, "line"), (geo.multi_point, "multipoint")],
     ids=["linestring", "multipoint"],
 )
 def test_only_empty_points_is_empty(
@@ -185,7 +185,7 @@ def test_gives_a_boolean_and_drops_the_crs(geometry: str) -> None:
         geo.point("x", "y", crs="EPSG:4326").alias("point")
     )
     if geometry == "line":
-        df = df.select(geo.linestring(pl.col("point").implode()).alias("line"))
+        df = df.select(geo.line_string(pl.col("point").implode()).alias("line"))
 
     assert df.lazy().select(geo.is_empty(geometry)).collect_schema() == pl.Schema(
         {geometry: pl.Boolean}
