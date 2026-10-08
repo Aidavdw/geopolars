@@ -2,9 +2,9 @@ SHELL=/bin/bash
 
 .PHONY: install install-release polars-src run-geo run-line run-mean-coordinate run-mean-coordinate-manual run-crs rebuild test test-rust test-python clean
 
-# The polars commit we build against, for both Cargo and uv. 
-# Single source of truth.
-POLARS_REV ?= 8a87616112e5c5ee8b862c675bed3cbaa1e202db
+# The polars commit we build against. Cargo.toml is the source of truth;
+# this checks out the same commit for uv to build Python polars from.
+POLARS_REV := $(shell sed -n 's/^polars = .*rev = "\([0-9a-f]*\)".*/\1/p' Cargo.toml)
 POLARS_DIR := .polars
 POLARS_STAMP := $(POLARS_DIR)/.rev-$(POLARS_REV)
 
@@ -47,7 +47,7 @@ test-all: test-rust test-python
 
 ## Rust unit tests. 
 ## Run with --no-default-features  so pyo3's `extension-module` is dropped
-test-rust: polars-src
+test-rust:
 	cargo test -p geopolars --no-default-features
 
 ## Python tests. Delegates to the package Makefile, which builds first.
