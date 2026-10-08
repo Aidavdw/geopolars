@@ -103,6 +103,11 @@ class ExprGeoNameSpace:
 
         return to_crs(self._expr, crs)
 
+    def is_geographic(self, *, ignore_errors: bool = False) -> pl.Expr:
+        from geopolars.geo.crs import is_geographic
+
+        return is_geographic(self._expr, ignore_errors=ignore_errors)
+
     def mean_coordinate(self) -> pl.Expr:
         from geopolars.geo.mean_coordinate import mean_coordinate
 

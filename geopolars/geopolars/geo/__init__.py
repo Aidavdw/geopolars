@@ -33,7 +33,7 @@ from geopolars.geo.construct import (
 )
 from geopolars.geo.coordinates import m, x, y, z
 from geopolars.geo.count_coordinates import count_coordinates
-from geopolars.geo.crs import set_crs, to_crs
+from geopolars.geo.crs import is_geographic, set_crs, to_crs
 from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.is_empty import is_empty
 from geopolars.geo.length import length
@@ -54,6 +54,7 @@ __all__ = [
     "from_wkb",
     "from_wkt",
     "is_empty",
+    "is_geographic",
     "length",
     "line_string",
     "line_string_from_columns",

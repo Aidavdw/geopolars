@@ -437,6 +437,17 @@ def test_set_crs_namespace_matches_the_functional_api() -> None:
     )
 
 
+def test_is_geographic_namespace_matches_the_functional_api() -> None:
+    points = pl.DataFrame({"x": [4.9], "y": [52.4]}).select(
+        geo.point("x", "y", crs="EPSG:4326").alias("point")
+    )
+
+    assert_frame_equal(
+        points.select(gpl.col("point").geo.is_geographic(ignore_errors=True)),
+        points.select(geo.is_geographic("point", ignore_errors=True)),
+    )
+
+
 def test_to_crs_namespace_matches_the_functional_api(
     line_coords: pl.DataFrame,
 ) -> None:

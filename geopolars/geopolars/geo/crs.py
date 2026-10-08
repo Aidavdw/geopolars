@@ -42,6 +42,32 @@ def set_crs(geometry: IntoExprColumn, crs: str, *, force: bool = False) -> pl.Ex
     return on_geometry(geometry, build)
 
 
+def is_geographic(geometry: IntoExprColumn, *, ignore_errors: bool = False) -> pl.Expr:
+    """Whether the column's CRS is geographic: its `x` and `y` are longitude and latitude.
+
+    False if the column has no CRS, or with a projected one.
+    The CRS is the same for every row, so this is decided while the plan is built
+    and gives a single bool (broadcast by `with_columns`), not one per row.
+    A CRS that cannot be read is refused while the plan is built,
+    unless `ignore_errors` is set, in which case it gives False.
+
+    ```python
+    df.with_columns(geo.is_geographic("parcel"))
+    ```
+    """
+
+    def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
+        try:
+            turn = geometry._longitude_turn()
+        except (pl.exceptions.ComputeError, ValueError):
+            if not ignore_errors:
+                raise
+            turn = None
+        return pl.lit(turn is not None)
+
+    return on_geometry(geometry, build)
+
+
 def to_crs(geometry: IntoExprColumn, crs: str) -> pl.Expr:
     """Reproject every coordinate from the column's CRS to `crs`.
 

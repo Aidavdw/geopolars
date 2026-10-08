@@ -184,6 +184,7 @@ the comment says when one without a CRS takes a different tier.
 | `bounds` | 1 | repeats its coordinate | 1 | | 1 | | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part |
 | `set_crs` | 1 | relabels only | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
+| `is_geographic` | 1 | scalar, calls PROJ at plan | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `z` | 1 | like `x`; only with a `z` | 1 | | 1 | | 1 | | 1 | | 1 | |
