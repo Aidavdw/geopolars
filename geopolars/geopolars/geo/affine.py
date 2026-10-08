@@ -312,3 +312,73 @@ def scale(
             msg = f"`{name}` has to be a finite number, got: {factor!r}"
             raise ValueError(msg)
     return on_geometry(geometry, _scale(xfact, yfact, zfact, _origin(origin)))
+
+
+def _affine_transform(
+    matrix: list[float],
+) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+    # Anything that reads `z` (c, f) or makes it (the bottom row) other than as it was.
+    _, _, c, _, _, _, f, _, *z_row = matrix
+    uses_z = c != 0.0 or f != 0.0 or z_row != [0.0, 0.0, 1.0, 0.0]
+
+    def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
+        # Without this, a matrix that works with `z` would quietly be half applied.
+        if uses_z and "z" not in geometry._dimension:
+            msg = f"cannot apply a matrix that uses z: {geometry!r} has no z coordinate"
+            raise TypeError(msg)
+        return _affine(column, matrix)
+
+    return build
+
+
+def affine_transform(geometry: IntoExprColumn, matrix: Sequence[float]) -> pl.Expr:
+    """Transform every position of a geometry by an affine matrix of your own.
+
+    The matrix is given as a flat list in the same order as shapely and GeoPandas take it,
+    so a matrix written for them works here unchanged.
+    Six numbers transform in the plane, leaving `z` as it is:
+
+    ```text
+    [a, b, d, e, xoff, yoff]
+
+    x' = a·x + b·y + xoff
+    y' = d·x + e·y + yoff
+    ```
+
+    Twelve numbers transform in space:
+
+    ```text
+    [a, b, c, d, e, f, g, h, i, xoff, yoff, zoff]
+
+    x' = a·x + b·y + c·z + xoff
+    y' = d·x + e·y + f·z + yoff
+    z' = g·x + h·y + i·z + zoff
+    ```
+
+    A twelve-number matrix that reads `z` (`c` or `f` not 0)
+    or changes it (a bottom row other than `0, 0, 1, 0`)
+    is refused for a geometry with no `z`, rather than silently half applied.
+    `m`, being a measure, is always carried through untouched.
+
+    `translate`, `rotate`, `skew` and `scale` are each one of these,
+    with the matrix worked out for you.
+    Coordinates are transformed as they are, in the units of their CRS.
+    """
+    numbers = [float(n) for n in matrix]
+    if len(numbers) not in (6, 12) or not all(math.isfinite(n) for n in numbers):
+        msg = f"`matrix` has to be 6 or 12 finite numbers, got: {matrix!r}"
+        raise ValueError(msg)
+    if len(numbers) == 6:
+        a, b, d, e, xoff, yoff = numbers
+        c = f = g = h = zoff = 0.0
+        i = 1.0
+    else:
+        a, b, c, d, e, f, g, h, i, xoff, yoff, zoff = numbers
+    # fmt: off
+    rows = [
+        a, b, c, xoff,
+        d, e, f, yoff,
+        g, h, i, zoff,
+    ]
+    # fmt: on
+    return on_geometry(geometry, _affine_transform(rows))

@@ -2,7 +2,13 @@
 Everything in the 'geo' namespace forwards to here.
 """
 
-from geopolars.geo.affine import rotate, scale, skew, translate
+from geopolars.geo.affine import (
+    affine_transform,
+    rotate,
+    scale,
+    skew,
+    translate,
+)
 from geopolars.geo.area import area
 from geopolars.geo.bounds import bounds
 from geopolars.geo.construct import (
@@ -38,6 +44,7 @@ from geopolars.geo.wkt import from_wkt, to_wkt
 from geopolars.geo.wrap_longitude import wrap_longitude
 
 __all__ = [
+    "affine_transform",
     "area",
     "bounds",
     "box",
