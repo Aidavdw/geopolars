@@ -139,6 +139,9 @@ fn complete(values: &Series, nesting: u8) -> PolarsResult<BooleanChunked> {
 ///
 /// This enforces that GeoArrow allows nulls only at the outermost level.
 fn only_complete(parts: Series, nesting: u8) -> PolarsResult<Series> {
+    // `complete` reads every level through `get_inner`, which is the values array whole:
+    // on a slice (such as a streaming morsel) that is every part of the column it came from.
+    let parts = parts.trim_lists_to_normalized_offsets().unwrap_or(parts);
     let complete = complete(&parts, nesting)?;
     if complete.all() {
         return Ok(parts);
@@ -356,4 +359,25 @@ fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsRe
 #[polars_expr(output_type_func_with_kwargs=multipolygon_coords_type)]
 fn multipolygon_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, Kind::MultiPolygon)
+}
+
+#[cfg(test)]
+mod tests {
+    //! What the Python suite cannot see: how much of the column a slice drags along.
+
+    use super::*;
+    use crate::expr::coords::tests::{coords, lists};
+
+    #[test]
+    fn a_slice_of_polygons_keeps_only_its_own_coordinates() {
+        // Three polygons of two rings each, of 2 + 3, 4 + 5 and 6 + 7 coordinates.
+        let polygons = lists(lists(coords(27), &[2, 3, 4, 5, 6, 7]), &[2, 2, 2]);
+        let middle = polygons.slice(1, 1);
+
+        let out = only_complete(middle.clone(), 2).unwrap();
+
+        assert_eq!(out, middle);
+        let rings = out.list().unwrap().get_inner();
+        assert_eq!(rings.list().unwrap().get_inner().len(), 9);
+    }
 }

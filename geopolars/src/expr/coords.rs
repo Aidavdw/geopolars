@@ -44,7 +44,7 @@ fn map_nested(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     //! What the Python suite cannot see: how many coordinates `f` is handed.
     //! A slice gives the right answer either way, just after much more work.
 
@@ -65,7 +65,7 @@ mod tests {
         seen.get()
     }
 
-    fn coords(n: usize) -> Series {
+    pub(crate) fn coords(n: usize) -> Series {
         let x = Series::new("x".into(), vec![1.0; n]);
         let y = Series::new("y".into(), vec![2.0; n]);
         StructChunked::from_series("".into(), n, [x, y].iter())
@@ -74,7 +74,7 @@ mod tests {
     }
 
     /// Each of `lengths` as one list over consecutive values of `inner`.
-    fn lists(inner: Series, lengths: &[i64]) -> Series {
+    pub(crate) fn lists(inner: Series, lengths: &[i64]) -> Series {
         let offsets = std::iter::once(0)
             .chain(lengths.iter().scan(0, |end, len| {
                 *end += len;
