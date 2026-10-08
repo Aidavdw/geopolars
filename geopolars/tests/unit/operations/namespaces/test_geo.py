@@ -88,6 +88,13 @@ def test_translate_rejects_dz_on_a_point_with_no_z(
         df.select(geo.translate("point", dx=0.0, dy=0.0, dz=1.0))
 
 
+def test_translate_rejects_dz_at_plan_time(coords: pl.DataFrame) -> None:
+    lf = coords.select(XY.point()).lazy()
+
+    with pytest.raises(ComputeError, match="cannot translate by dz"):
+        lf.select(geo.translate("point", dx=0.0, dy=0.0, dz=1.0)).collect_schema()
+
+
 def test_translate_rejects_a_plain_float_column() -> None:
     df = pl.DataFrame({"point": [1.0, 2.0]})
 

@@ -332,7 +332,7 @@ Steps P12 to P16 are the same as P7 to P11, but now for a forwarding function.
 
 ## Roadmap
 
-- [ ] make the dz check in translate operate at plan time rather than inside the kernel.
+- [x] make the dz check in translate operate at plan time rather than inside the kernel.
 - [ ] have PROJ pre-check at plan time, so that it cannot fail at execution time.
 
 ### Core IO
