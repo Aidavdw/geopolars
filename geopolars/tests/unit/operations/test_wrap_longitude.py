@@ -14,7 +14,7 @@ from geopolars.datatypes import LineStringXY, PointXYZM
 WGS84 = "EPSG:4326"
 
 
-def _x(df: pl.LazyFrame, **kwargs: bool) -> list:
+def _x(df: pl.LazyFrame, **kwargs: float | bool) -> list:
     """The `x` coordinates of `wrap_longitude` over the frame's one column."""
     (name,) = df.collect_schema().names()
     out = df.select(geo.wrap_longitude(name, **kwargs)).select(geo.x(name))
@@ -165,6 +165,35 @@ def test_missing_and_empty_geometries_pass_through(skip_crossing: bool) -> None:
     assert _x(lines, skip_crossing=skip_crossing) == [None, [], [-170.0]]
 
 
+def test_start_moves_the_range() -> None:
+    """0..360 data: -10 is 350, 370 is 10, and both ends stay where they are."""
+    points = _points(-10.0, 370.0, 0.0, 360.0, 190.0, -370.0)
+
+    assert _x(points, start=0.0) == [350.0, 10.0, 0.0, 360.0, 190.0, 350.0]
+
+
+def test_start_moves_what_counts_as_crossing() -> None:
+    """170..190 lies inside 0..360, and -10..10 crosses its edge at 0."""
+    lines = _lines([170.0, 190.0], [-10.0, 10.0], [-20.0, -10.0])
+
+    assert _x(lines, start=0.0, skip_crossing=True) == [
+        [170.0, 190.0],
+        [-10.0, 10.0],
+        [340.0, 350.0],
+    ]
+
+
+def test_start_is_in_the_unit_of_the_crs() -> None:
+    """Grads: 0..400."""
+    assert _x(_points(-10.0, 410.0, crs="EPSG:4807"), start=0.0) == [390.0, 10.0]
+
+
+@pytest.mark.parametrize("start", [math.nan, math.inf])
+def test_start_has_to_be_finite(start: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        geo.wrap_longitude("point", start=start)
+
+
 def test_grads_have_a_turn_of_400() -> None:
     """NTF (Paris) is in grads: the range is [-200, 200]."""
     assert _x(_points(190.0, 210.0, -250.0, crs="EPSG:4807")) == [190.0, -190.0, 150.0]
@@ -190,9 +219,9 @@ def test_namespace_matches_the_functional_api() -> None:
 
     for skip_crossing in (False, True):
         functional = lines.select(
-            geo.wrap_longitude("line", skip_crossing=skip_crossing)
+            geo.wrap_longitude("line", start=0.0, skip_crossing=skip_crossing)
         )
         namespace = lines.select(
-            gpl.col("line").geo.wrap_longitude(skip_crossing=skip_crossing)
+            gpl.col("line").geo.wrap_longitude(start=0.0, skip_crossing=skip_crossing)
         )
         assert namespace.collect().equals(functional.collect())

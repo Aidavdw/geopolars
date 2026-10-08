@@ -88,8 +88,10 @@ class Geometry:
     def box_to_polygon(self) -> pl.Expr:
         return _box_to_polygon(self._expr)
 
-    def wrap_longitude(self, *, skip_crossing: bool = False) -> pl.Expr:
-        return _wrap_longitude(self._expr, skip_crossing=skip_crossing)
+    def wrap_longitude(
+        self, *, start: float | None = None, skip_crossing: bool = False
+    ) -> pl.Expr:
+        return _wrap_longitude(self._expr, start=start, skip_crossing=skip_crossing)
 
     def x(self) -> pl.Expr:
         return coordinates.x(self._expr)
