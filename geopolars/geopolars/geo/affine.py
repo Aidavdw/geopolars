@@ -73,6 +73,44 @@ def translate(
     return on_geometry(geometry, _translate(dx, dy, dz))
 
 
+Origin = tuple[float, float] | tuple[float, float, float]
+
+
+def _degrees(amount: float, unit: Literal["deg", "pi"], name: str) -> float:
+    """`amount` in degrees, refused while the expression is built if it is not a number."""
+    if unit not in ("deg", "pi"):
+        msg = f'`unit` has to be "deg" or "pi", got: {unit!r}'
+        raise ValueError(msg)
+    if not math.isfinite(amount):
+        msg = f"`{name}` has to be a finite number, got: {amount!r}"
+        raise ValueError(msg)
+    return amount * 180.0 if unit == "pi" else amount
+
+
+def _origin(origin: Origin) -> tuple[float, float, float]:
+    """`origin` as `(x, y, z)`, a `z` left out being 0."""
+    if len(origin) not in (2, 3) or not all(math.isfinite(at) for at in origin):
+        msg = f"`origin` has to be two or three finite numbers, got: {origin!r}"
+        raise ValueError(msg)
+    x, y, *z = origin
+    return x, y, z[0] if z else 0.0
+
+
+def _about(
+    linear: tuple[tuple[float, float, float], ...], origin: tuple[float, float, float]
+) -> list[float]:
+    """The affine matrix that applies the 3×3 `linear` part about `origin` instead of (0, 0, 0).
+
+    That is moving `origin` to (0, 0, 0), applying it, and moving it back:
+    L.(p - origin) + origin, which is L.p + constant offset origin - L.origin.
+    """
+    matrix: list[float] = []
+    for row, at in zip(linear, origin, strict=True):
+        moved = sum(r * o for r, o in zip(row, origin, strict=True))
+        matrix += [*row, at - moved]
+    return matrix
+
+
 def _cos_sin(degrees: float) -> tuple[float, float]:
     """The cosine and sine of an angle, exact for whole quarter turns.
 
@@ -84,6 +122,22 @@ def _cos_sin(degrees: float) -> tuple[float, float]:
         return ((1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0))[int(quarters) % 4]
     radians = math.radians(degrees)
     return math.cos(radians), math.sin(radians)
+
+
+def _tan(degrees: float, name: str) -> float:
+    """The tangent of an angle, exact for whole eighth turns,
+    refused where it does not exist (a quarter turn, either way).
+
+    `math.tan(math.pi / 4)` is 0.9999999999999999 rather than 1.
+    """
+    eighths, rest = divmod(degrees, 45.0)
+    if rest == 0.0:
+        tangent = (0.0, 1.0, None, -1.0)[int(eighths) % 4]
+        if tangent is None:
+            msg = f"`{name}` cannot be a quarter turn (±90°): it would skew without end"
+            raise ValueError(msg)
+        return tangent
+    return math.tan(math.radians(degrees))
 
 
 def _rotate(
@@ -112,12 +166,7 @@ def _rotate(
         ),
     }[axis]
     # fmt: on
-    # Turning about `origin` is moving it to (0, 0, 0), turning, and moving it back:
-    # R.(p - origin) + origin, which is R.p + constant offset origin - R.origin.
-    matrix: list[float] = []
-    for row, at in zip(rotation, origin, strict=True):
-        turned = sum(r * o for r, o in zip(row, origin, strict=True))
-        matrix += [*row, at - turned]
+    matrix = _about(rotation, origin)
 
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         # Turning about `x` or `y` moves positions into and out of `z`,
@@ -137,7 +186,7 @@ def rotate(
     amount: float,
     unit: Literal["deg", "pi"] = "deg",
     axis: Literal["x", "y", "z"] = "z",
-    origin: tuple[float, float] | tuple[float, float, float] = (0.0, 0.0, 0.0),
+    origin: Origin = (0.0, 0.0, 0.0),
 ) -> pl.Expr:
     """Turn every position of a geometry about an axis through `origin`.
 
@@ -158,18 +207,52 @@ def rotate(
     in longitude/latitude, this does not turn anything on the globe,
     and can leave positions outside of the valid range.
     """
-    if unit not in ("deg", "pi"):
-        msg = f'`unit` has to be "deg" or "pi", got: {unit!r}'
-        raise ValueError(msg)
     if axis not in ("x", "y", "z"):
         msg = f'`axis` has to be "x", "y" or "z", got: {axis!r}'
         raise ValueError(msg)
-    if not math.isfinite(amount):
-        msg = f"`amount` has to be a finite number, got: {amount!r}"
-        raise ValueError(msg)
-    if len(origin) not in (2, 3) or not all(math.isfinite(at) for at in origin):
-        msg = f"`origin` has to be two or three finite numbers, got: {origin!r}"
-        raise ValueError(msg)
-    degrees = amount * 180.0 if unit == "pi" else amount
-    x, y, *z = origin
-    return on_geometry(geometry, _rotate(degrees, axis, (x, y, z[0] if z else 0.0)))
+    degrees = _degrees(amount, unit, "amount")
+    return on_geometry(geometry, _rotate(degrees, axis, _origin(origin)))
+
+
+def skew(
+    geometry: IntoExprColumn,
+    xs: float = 0.0,
+    ys: float = 0.0,
+    unit: Literal["deg", "pi"] = "deg",
+    origin: Origin = (0.0, 0.0, 0.0),
+) -> pl.Expr:
+    """Shear every position of a geometry in the plane, by an angle along each axis.
+
+    `xs` leans the geometry along `x`: every position moves along `x`
+    by `tan(xs)` times how far it is from `origin` along `y`,
+    so a line that ran parallel to the `y` axis ends up at an angle `xs` from it,
+    leaning towards positive `x` for a positive angle.
+    `ys` does the same along `y`, by `tan(ys)` times the distance along `x`.
+    Both are applied to the positions as they were:
+
+    ```text
+    x' = x + tan(xs)·(y - origin_y)
+    y' = y + tan(ys)·(x - origin_x)
+    ```
+
+    The angles are in degrees, or with `unit="pi"` in multiples of π radians.
+    A quarter turn (±90°) has no tangent and is refused.
+
+    This works on any geometry: `z` stays as it is,
+    and `m`, being a measure, is always carried through untouched.
+
+    `origin` is the point that stays where it is, `(x, y)` or `(x, y, z)`.
+    It is the same point for every geometry in the column, not the middle of each one.
+    Coordinates are sheared as they are, in the units of their CRS.
+    """
+    tan_x = _tan(_degrees(xs, unit, "xs"), "xs")
+    tan_y = _tan(_degrees(ys, unit, "ys"), "ys")
+    # fmt: off
+    shear = (
+        (1,     tan_x, 0),
+        (tan_y, 1,     0),
+        (0,     0,     1),
+    )
+    # fmt: on
+    matrix = _about(shear, _origin(origin))
+    return on_geometry(geometry, lambda column, _: _affine(column, matrix))

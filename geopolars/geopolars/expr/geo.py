@@ -48,6 +48,15 @@ class ExprGeoNameSpace:
     ) -> pl.Expr:
         return affine.rotate(self._expr, amount, unit=unit, axis=axis, origin=origin)
 
+    def skew(
+        self,
+        xs: float = 0.0,
+        ys: float = 0.0,
+        unit: Literal["deg", "pi"] = "deg",
+        origin: tuple[float, float] | tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ) -> pl.Expr:
+        return affine.skew(self._expr, xs=xs, ys=ys, unit=unit, origin=origin)
+
     def set_crs(self, crs: str, *, force: bool = False) -> pl.Expr:
         from geopolars.geo.crs import set_crs
 

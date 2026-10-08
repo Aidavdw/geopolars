@@ -178,6 +178,7 @@ the comment says when one without a CRS takes a different tier.
 | `mean_coordinate` | 1 | returns the point | 1 | | 1 | skips ring's closing coord | 1 | | 1 | | 1 | skips ring's closing coord |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `rotate` | 2 | about `x`, `y`: needs a `z` | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `skew` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `bounds` | 1 | repeats its coordinate | 1 | | 1 | | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part |
 | `set_crs` | 1 | relabels only | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
@@ -384,9 +385,13 @@ affine transforms:
 - [x] translate
 - [x] rotate
 - [ ] scale
-- [ ] skew
+- [x] skew
 - [ ] transform (with a matrix)
 - [ ] shift (by a value in a different column)
+- [ ] rotate around coordinate from another column
+- [ ] rotate around own centroid (can use the above)
+- [ ] skey around a coordinate from another column
+- [ ] scale around own centroid (can use the above)
 
 transfer transforms
 
