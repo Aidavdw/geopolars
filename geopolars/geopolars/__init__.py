@@ -47,7 +47,7 @@ from geopolars.datatypes import (
 )
 
 # Importing this registers the namespaces on pl.Expr as a side effect.
-from geopolars.expr import ExprGeoNameSpace, PluginExpr, as_plugin, col
+from geopolars.expr import PluginExpr, as_plugin, col
 from geopolars.io import read_parquet, scan_parquet, sink_parquet, write_parquet
 
 __all__ = [
@@ -55,7 +55,6 @@ __all__ = [
     "BoxXYM",
     "BoxXYZ",
     "BoxXYZM",
-    "ExprGeoNameSpace",
     "GeoBox",
     "GeoLineString",
     "GeoMultiLineString",
