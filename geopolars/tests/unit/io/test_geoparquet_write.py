@@ -11,7 +11,9 @@ import shapely
 from polars.testing import assert_frame_equal
 
 import geopolars as gpl
+from geopolars import geo
 from geopolars.datatypes import (
+    BoxXY,
     GeoPoint,
     MultiLineStringXYZ,
     PointXY,
@@ -237,3 +239,123 @@ def test_refuses_the_users_own_geo_key(tmp_path: Path) -> None:
         gpl.write_parquet(
             df, tmp_path / "callback.parquet", metadata=lambda _: {"geo": "{}"}
         )
+
+
+def _lines(crs: str | None = None) -> pl.DataFrame:
+    """Two linestrings and a missing one."""
+    return pl.DataFrame(
+        {"x": [[0.0, 2.0], [170.0, 190.0], None], "y": [[1.0, 3.0], [0.0, 1.0], None]}
+    ).select(geo.linestring("x", "y", crs=crs).alias("geometry"))
+
+
+def test_a_covering_is_the_bounds_of_every_geometry(tmp_path: Path) -> None:
+    path = tmp_path / "covered.parquet"
+    df = _lines()
+    gpl.write_parquet(df, path, covering=True)
+    back = gpl.read_parquet(path)
+
+    assert back.columns == ["geometry", "geometry_bbox"]
+    assert_frame_equal(
+        back.select(pl.col("geometry_bbox").alias("geometry")),
+        df.select(geo.bounds("geometry")),
+    )
+    assert _geo_of(path)["columns"]["geometry"]["covering"] == {
+        "bbox": {
+            bound: ["geometry_bbox", bound]
+            for bound in ["xmin", "ymin", "xmax", "ymax"]
+        }
+    }
+
+
+def test_a_covering_keeps_the_geometrys_crs(tmp_path: Path) -> None:
+    path = tmp_path / "covered.parquet"
+    gpl.write_parquet(_lines(crs=CRS84), path, covering=True)
+    assert gpl.read_parquet(path).schema["geometry_bbox"] == BoxXY(crs=CRS84)
+
+
+def test_a_covering_crosses_the_antimeridian(tmp_path: Path) -> None:
+    path = tmp_path / "covered.parquet"
+    gpl.write_parquet(_lines(crs=CRS84), path, covering=True)
+    boxes = gpl.read_parquet(path)["geometry_bbox"].ext.storage().to_list()
+
+    assert boxes == [
+        {"xmin": 0.0, "ymin": 1.0, "xmax": 2.0, "ymax": 3.0},
+        {"xmin": 170.0, "ymin": 0.0, "xmax": -170.0, "ymax": 1.0},
+        None,
+    ]
+
+
+def test_a_covering_with_z_bounds_z(tmp_path: Path) -> None:
+    path = tmp_path / "covered.parquet"
+    df = pl.DataFrame({"x": [1.0], "y": [2.0], "z": [3.0]}).select(
+        geo.point("x", "y", z="z").alias("geometry")
+    )
+    gpl.write_parquet(df, path, covering=True)
+
+    bbox = _geo_of(path)["columns"]["geometry"]["covering"]["bbox"]
+    assert list(bbox) == ["xmin", "ymin", "zmin", "xmax", "ymax", "zmax"]
+    assert gpl.read_parquet(path)["geometry_bbox"].ext.storage().to_list() == [
+        {"xmin": 1.0, "ymin": 2.0, "zmin": 3.0, "xmax": 1.0, "ymax": 2.0, "zmax": 3.0}
+    ]
+
+
+def test_a_multigeometry_gets_one_box_around_all_its_parts(tmp_path: Path) -> None:
+    path = tmp_path / "covered.parquet"
+    df = pl.DataFrame({"x": [[0.0, 5.0]], "y": [[1.0, -1.0]]}).select(
+        geo.multipoint("x", "y").alias("geometry")
+    )
+    gpl.write_parquet(df, path, covering=True)
+
+    assert gpl.read_parquet(path)["geometry_bbox"].ext.storage().to_list() == [
+        {"xmin": 0.0, "ymin": -1.0, "xmax": 5.0, "ymax": 1.0}
+    ]
+
+
+def test_every_geometry_column_gets_its_own_covering(tmp_path: Path) -> None:
+    path = tmp_path / "covered.parquet"
+    df = _lines().with_columns(pl.col("geometry").alias("other"))
+    gpl.write_parquet(df, path, covering=True)
+
+    assert gpl.read_parquet(path).columns == [
+        "geometry",
+        "other",
+        "geometry_bbox",
+        "other_bbox",
+    ]
+    columns = _geo_of(path)["columns"]
+    assert columns["other"]["covering"]["bbox"]["xmin"] == ["other_bbox", "xmin"]
+
+
+def test_no_covering_unless_asked(tmp_path: Path) -> None:
+    path = tmp_path / "plain.parquet"
+    gpl.write_parquet(_lines(), path)
+
+    assert gpl.read_parquet(path).columns == ["geometry"]
+    assert "covering" not in _geo_of(path)["columns"]["geometry"]
+
+
+def test_sink_writes_the_same_covering(tmp_path: Path) -> None:
+    written, sunk = tmp_path / "written.parquet", tmp_path / "sunk.parquet"
+    gpl.write_parquet(_lines(crs=CRS84), written, covering=True)
+    gpl.sink_parquet(_lines(crs=CRS84).lazy(), sunk, covering=True)
+
+    assert _geo_of(sunk) == _geo_of(written)
+    assert_frame_equal(gpl.read_parquet(sunk), gpl.read_parquet(written))
+
+
+def test_a_covering_refuses_wkb(tmp_path: Path) -> None:
+    path = tmp_path / "refused.parquet"
+    df = pl.DataFrame(schema={"geometry": Wkb()})
+    with pytest.raises(pl.exceptions.SchemaError, match="from_wkb"):
+        gpl.write_parquet(df, path, covering=True)
+    with pytest.raises(pl.exceptions.SchemaError, match="from_wkb"):
+        gpl.sink_parquet(df.lazy(), path, covering=True)
+    assert not path.exists()
+
+
+def test_a_covering_refuses_a_taken_name(tmp_path: Path) -> None:
+    path = tmp_path / "refused.parquet"
+    df = _lines().with_columns(geometry_bbox=pl.lit(1))
+    with pytest.raises(pl.exceptions.DuplicateError, match="geometry_bbox"):
+        gpl.write_parquet(df, path, covering=True)
+    assert not path.exists()

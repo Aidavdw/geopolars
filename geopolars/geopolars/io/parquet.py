@@ -17,6 +17,9 @@ import polars as pl
 from polars.io._expand_paths import _expand_paths
 
 from geopolars import geopolars as _rust
+from geopolars.datatypes import GeoArrowType, GeoBox
+from geopolars.datatypes.encoded import EncodedGeometry
+from geopolars.geo.bounds import _envelope
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -109,11 +112,25 @@ def scan_parquet(
 
     assert first is not None
     return lf.with_columns(
-        pl.col(name).ext.storage().ext.to(dtype)
+        _storage_of(name, dtype).ext.to(dtype)
         for name, dtype in first.items()
         # A file Polars wrote can already have it.
         if schema[name] != dtype
     )
+
+
+def _storage_of(name: str, dtype: pl.DataType) -> pl.Expr:
+    """The column `name`, as the storage `dtype` wraps."""
+    storage = pl.col(name).ext.storage()
+    if not isinstance(dtype, GeoBox):
+        return storage
+    # A covering column can have its bounds in any order: put them in the box's.
+    bounds = [storage.struct.field(field) for field in dtype.ext_storage().to_schema()]
+    # A row without a geometry must not have a bbox, but some writers (geopandas)
+    # give it one with every bound missing instead.
+    # We follow the spec.
+    missing = pl.all_horizontal(bound.is_null() for bound in bounds)
+    return pl.when(~missing).then(pl.struct(bounds)).alias(name)
 
 
 def read_parquet(
@@ -137,6 +154,7 @@ def write_parquet(
     file: str | Path | IO[bytes],
     *,
     metadata: ParquetMetadata | None = None,
+    covering: bool = False,
     **kwargs: Any,
 ) -> None:
     """Write GeoParquet, like `DataFrame.write_parquet`.
@@ -151,10 +169,21 @@ def write_parquet(
     Columns with such data are refused.
     CRS that cannot be written with PROJJSON are also refused.
 
+    With `covering`, every geometry column `<name>` gets a bbox covering:
+    a column `<name>_bbox` with the bounds of each geometry (see `geo.bounds`),
+    which readers can filter on without touching the geometries.
+    A multi-geometry gets one box around all of its parts.
+    A box crossing the antimeridian has `xmin > xmax`.
+    WKB has to be decoded with `geo.from_wkb` first, to be bounded.
+
     You can pass parquet metadata directly as an argument.
     Other keyword arguments are passed on to `DataFrame.write_parquet`.
     """
-    df.write_parquet(file, metadata=_with_geo_metadata(df.schema, metadata), **kwargs)
+    coverings = _coverings(df.schema) if covering else {}
+    if coverings:
+        df = df.with_columns(_bbox_columns(coverings))
+    geo_metadata = _with_geo_metadata(df.schema, metadata, coverings)
+    df.write_parquet(file, metadata=geo_metadata, **kwargs)
 
 
 def sink_parquet(
@@ -162,6 +191,7 @@ def sink_parquet(
     path: str | Path | IO[bytes],
     *,
     metadata: ParquetMetadata | None = None,
+    covering: bool = False,
     **kwargs: Any,
 ) -> pl.LazyFrame | None:
     """Stream GeoParquet to `path`, like `LazyFrame.sink_parquet`.
@@ -172,15 +202,42 @@ def sink_parquet(
 
     Other keyword arguments (such as `lazy`) are passed on to `LazyFrame.sink_parquet`.
     """
-    return lf.sink_parquet(
-        path, metadata=_with_geo_metadata(lf.collect_schema(), metadata), **kwargs
-    )
+    coverings = _coverings(lf.collect_schema()) if covering else {}
+    if coverings:
+        lf = lf.with_columns(_bbox_columns(coverings))
+    geo_metadata = _with_geo_metadata(lf.collect_schema(), metadata, coverings)
+    return lf.sink_parquet(path, metadata=geo_metadata, **kwargs)
+
+
+def _coverings(schema: pl.Schema) -> dict[str, str]:
+    """The bbox column to write for every geometry column: `<name>_bbox`."""
+    coverings = {}
+    for name, dtype in schema.items():
+        if isinstance(dtype, EncodedGeometry):
+            msg = (
+                f"a covering cannot bound the encoded column `{name}` ({dtype!r}); "
+                "decode it with `geo.from_wkb` first"
+            )
+            raise pl.exceptions.SchemaError(msg)
+        if isinstance(dtype, GeoArrowType):
+            bbox = f"{name}_bbox"
+            if bbox in schema:
+                msg = f"the covering of `{name}` would be written to `{bbox}`, which exists"
+                raise pl.exceptions.DuplicateError(msg)
+            coverings[name] = bbox
+    return coverings
+
+
+def _bbox_columns(coverings: dict[str, str]) -> list[pl.Expr]:
+    return [_envelope(name).alias(bbox) for name, bbox in coverings.items()]
 
 
 def _with_geo_metadata(
-    schema: pl.Schema, metadata: ParquetMetadata | None
+    schema: pl.Schema,
+    metadata: ParquetMetadata | None,
+    coverings: dict[str, str],
 ) -> ParquetMetadata | None:
-    geo = _rust.geoparquet_metadata(pl.DataFrame(schema=schema))
+    geo = _rust.geoparquet_metadata(pl.DataFrame(schema=schema), coverings)
     if geo is None:
         return metadata
     if metadata is None:

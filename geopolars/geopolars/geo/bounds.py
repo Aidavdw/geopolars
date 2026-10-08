@@ -102,6 +102,21 @@ def _bounds(
     return _box(storage, geometry._nesting, box, turn, margin_x, margin_y)
 
 
+def _envelope(geometry: IntoExprColumn) -> pl.Expr:
+    """same as `bounds`, except:
+    - One box per row around the whole geometry
+    - all parts of a multi-geometry together.
+    Used for a GeoParquet covering.
+    """
+
+    def build(column: pl.Expr, dtype: GeoArrowType) -> pl.Expr:
+        box = GeoBox.of_dimension(dtype._dimension)._with_metadata_of(dtype)
+        storage = column.ext.storage()
+        return _box(storage, dtype._nesting, box, dtype._longitude_turn(), 0.0, 0.0)
+
+    return on_geometry(geometry, build)
+
+
 def bounds(
     geometry: IntoExprColumn, *, margin_x: float = 0.0, margin_y: float = 0.0
 ) -> pl.Expr:

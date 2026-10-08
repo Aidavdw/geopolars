@@ -353,6 +353,7 @@ Steps P12 to P16 are the same as P7 to P11, but now for a forwarding function.
 - [x] WKT encoding and decoding
 - [x] GeoParquet read
 - [x] GeoParquet write
+- [x] GeoParquet bbox covering (written on request, read as a box)
 
 Later goals:
 

@@ -10,6 +10,7 @@ dependencies = [
     # uv ignores sources for transitive dependencies,
     # but polars pulls this in.
     "polars-runtime-32",
+    "pyarrow>=25.0.1",
     "ruff>=0.16.10",
 ]
 

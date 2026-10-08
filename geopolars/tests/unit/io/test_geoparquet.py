@@ -18,6 +18,8 @@ from polars.testing import assert_frame_equal
 import geopolars as gpl
 from geopolars import geo
 from geopolars.datatypes import (
+    BoxXY,
+    BoxXYZ,
     GeoArrowType,
     LineStringXY,
     MultiLineStringXY,
@@ -67,8 +69,13 @@ def test_the_spec_example_reads() -> None:
     wkb = df.schema["geometry"]
     assert isinstance(wkb, Wkb)
     assert wkb._declares_crs()
-    # The covering is a plain column: nothing reads it yet.
-    assert isinstance(df.schema["bbox"], pl.Struct)
+    # The covering is a box, in the geometry's CRS,
+    # even though the file has its bounds out of order (xmax, xmin, ...).
+    assert isinstance(df.schema["bbox"], BoxXY)
+    assert df.schema["bbox"].ext_metadata() == wkb.ext_metadata()
+    first = df["bbox"].ext.storage()[0]
+    assert list(first) == ["xmin", "ymin", "xmax", "ymax"]
+    assert first["xmin"] < first["xmax"]
 
     polygons = df.select(geo.from_wkb("geometry", MultiPolygonXY))
     # Polygons are promoted, and the CRS comes along.
@@ -243,14 +250,6 @@ def test_fields_it_does_not_use_are_ignored(tmp_path: Path) -> None:
         orientation="counterclockwise",
         bbox=[1, 2, 3, 4],
         vendor={"a": 1},
-        covering={
-            "bbox": {
-                "xmin": ["bbox", "xmin"],
-                "ymin": ["bbox", "ymin"],
-                "xmax": ["bbox", "xmax"],
-                "ymax": ["bbox", "ymax"],
-            }
-        },
     ) | {"creator": {"library": "elsewhere"}}
     path = _write(tmp_path / "points.parquet", geo_metadata)
     assert gpl.read_parquet(path).schema["geometry"] == PointXY(crs="OGC:CRS84")
@@ -275,4 +274,83 @@ def test_storage_that_does_not_match_the_encoding_is_refused(
 ) -> None:
     path = _write(tmp_path / "points.parquet", _geo(encoding=encoding), df)
     with pytest.raises(pl.exceptions.SchemaError, match="stored as"):
+        gpl.scan_parquet(path)
+
+
+def _covering(column: str = "bbox", **paths: list[str]) -> dict[str, Any]:
+    """A bbox covering in `column`, with `paths` replacing the default ones."""
+    bounds = ["xmin", "ymin", "xmax", "ymax"]
+    return {"bbox": {bound: [column, bound] for bound in bounds} | paths}
+
+
+_BOUNDS = {"xmin": 1.0, "ymin": 2.0, "xmax": 3.0, "ymax": 4.0}
+
+
+def test_a_covering_reads_as_a_box_in_the_geometrys_crs(tmp_path: Path) -> None:
+    df = POINTS.with_columns(bbox=pl.lit(_BOUNDS))
+    path = _write(tmp_path / "points.parquet", _geo(covering=_covering()), df)
+    back = gpl.read_parquet(path)
+
+    assert back.schema["bbox"] == BoxXY(crs="OGC:CRS84")
+    assert back["bbox"].ext.storage().to_list() == [_BOUNDS, _BOUNDS]
+
+
+def test_a_covering_without_any_bound_is_a_missing_box(tmp_path: Path) -> None:
+    """The way geopandas writes the bbox of a missing geometry."""
+    df = POINTS.with_columns(
+        geometry=pl.when(pl.col("id") == 1).then("geometry"),
+        bbox=pl.when(pl.col("id") == 1)
+        .then(pl.lit(_BOUNDS))
+        .otherwise(pl.struct(**{bound: pl.lit(None, pl.Float64) for bound in _BOUNDS})),
+    )
+    path = _write(tmp_path / "points.parquet", _geo(covering=_covering()), df)
+    back = gpl.read_parquet(path)
+
+    assert df["bbox"].null_count() == 0
+    assert back["bbox"].ext.storage().to_list() == [_BOUNDS, None]
+
+
+def test_a_covering_with_z_reads_as_a_3d_box(tmp_path: Path) -> None:
+    bounds = {
+        "xmin": 1.0,
+        "ymin": 2.0,
+        "zmin": 5.0,
+        "xmax": 3.0,
+        "ymax": 4.0,
+        "zmax": 6.0,
+    }
+    df = POINTS.with_columns(bbox=pl.lit(bounds))
+    covering = _covering(zmin=["bbox", "zmin"], zmax=["bbox", "zmax"])
+    path = _write(tmp_path / "points.parquet", _geo(covering=covering), df)
+
+    assert gpl.read_parquet(path).schema["bbox"] == BoxXYZ(crs="OGC:CRS84")
+
+
+def test_a_covering_whose_column_is_missing_is_ignored(tmp_path: Path) -> None:
+    path = _write(tmp_path / "points.parquet", _geo(covering=_covering()))
+    assert gpl.read_parquet(path).columns == ["id", "geometry"]
+
+
+@pytest.mark.parametrize(
+    ("covering", "match"),
+    [
+        (_covering(ymax=["elsewhere", "ymax"]), "same column"),
+        (_covering(ymax=["bbox", "maxy"]), "its field `ymax`"),
+        (_covering(zmin=["bbox", "zmin"]), "`zmin` and `zmax`"),
+        (_covering(xmin=["bbox"]), "invalid GeoParquet metadata"),
+    ],
+)
+def test_a_malformed_covering_is_refused(
+    tmp_path: Path, covering: dict[str, Any], match: str
+) -> None:
+    df = POINTS.with_columns(bbox=pl.lit(_BOUNDS))
+    path = _write(tmp_path / "points.parquet", _geo(covering=covering), df)
+    with pytest.raises(pl.exceptions.ComputeError, match=match):
+        gpl.scan_parquet(path)
+
+
+def test_a_covering_that_is_not_bounds_is_refused(tmp_path: Path) -> None:
+    df = POINTS.with_columns(bbox=pl.lit({"xmin": 1.0, "ymin": 2.0}))
+    path = _write(tmp_path / "points.parquet", _geo(covering=_covering()), df)
+    with pytest.raises(pl.exceptions.SchemaError, match="xmin/ymin/xmax/ymax"):
         gpl.scan_parquet(path)

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use polars::prelude::{DataFrame, IntoColumn, PolarsError, Series};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -75,9 +77,13 @@ fn geoparquet_dtypes(py: Python<'_>, geo: &str, schema: PyDataFrame) -> PyResult
 /// See `geopolars.io.parquet._with_geo_metadata`.
 /// `None` if the schema has no geometry columns.
 #[pyfunction]
-#[pyo3(signature = (schema))]
-fn geoparquet_metadata(py: Python<'_>, schema: PyDataFrame) -> PyResult<Option<String>> {
-    geoparquet::GeoParquetMetadata::from_schema(schema.0.schema())
+#[pyo3(signature = (schema, coverings = HashMap::new()))]
+fn geoparquet_metadata(
+    py: Python<'_>,
+    schema: PyDataFrame,
+    coverings: HashMap<String, String>,
+) -> PyResult<Option<String>> {
+    geoparquet::GeoParquetMetadata::from_schema(schema.0.schema(), &coverings)
         .map(|metadata| metadata.map(|metadata| metadata.to_json()))
         .map_err(|e| polars_exception(py, e))
 }

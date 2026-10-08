@@ -6,7 +6,9 @@ use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
-use polars_core::datatypes::extension::{ExtensionTypeFactory, ExtensionTypeImpl};
+use polars_core::datatypes::extension::{
+    ExtensionTypeFactory, ExtensionTypeImpl, ExtensionTypeInstance,
+};
 use polars_core::prelude::DataType;
 
 use super::crs::ExtensionMetadata;
@@ -31,6 +33,12 @@ pub struct GeoBox {
 impl GeoBox {
     pub fn new(dim: GeoDimension, metadata: Arc<ExtensionMetadata>) -> Self {
         Self { dim, metadata }
+    }
+
+    /// Produces a Polars dtype.
+    pub fn dtype(self) -> DataType {
+        let storage = self.dim.box_storage();
+        DataType::Extension(ExtensionTypeInstance(Box::new(self)), Box::new(storage))
     }
 }
 
