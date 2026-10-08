@@ -177,6 +177,7 @@ the comment says when one without a CRS takes a different tier.
 | `distance` | 3 | between 2 points, PROJ + geographiclib; no CRS: 1 | - | | - | | - | | - | | - | |
 | `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | | 1 | skips each ring's closing coordinate |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `set_crs` | 1 | relabels only | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
 | `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |

@@ -431,6 +431,17 @@ def test_multipolygon_namespace_matches_the_functional_api(
     )
 
 
+def test_set_crs_namespace_matches_the_functional_api() -> None:
+    points = pl.DataFrame({"x": [4.9], "y": [52.4]}).select(
+        geo.point("x", "y", crs="EPSG:4326").alias("point")
+    )
+
+    assert_frame_equal(
+        points.select(gpl.col("point").geo.set_crs("EPSG:28992", force=True)),
+        points.select(geo.set_crs("point", "EPSG:28992", force=True)),
+    )
+
+
 def test_to_crs_namespace_matches_the_functional_api(
     line_coords: pl.DataFrame,
 ) -> None:

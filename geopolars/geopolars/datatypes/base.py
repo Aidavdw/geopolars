@@ -73,6 +73,13 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         """Whether the metadata names a CRS. Read in Rust, like all metadata."""
         return _rust.declares_crs(self.ext_metadata())
 
+    def _with_crs(self, crs: str) -> GeoArrowType:
+        """sets metadata's crs to  `crs`.
+        Every other metadata key is kept.
+        """
+        metadata = _rust.with_crs(self.ext_metadata(), crs)
+        return self.ext_from_params(self._extension_name, self._geo_storage, metadata)
+
     def _longitude_turn(self) -> float | None:
         """How far `x` goes in one full turn around the globe, in the CRS's unit:
         `360.0` for degrees. `None` without a CRS, or if `x` is not a longitude.

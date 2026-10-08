@@ -15,6 +15,7 @@ from geopolars.geo.area import area as _area
 from geopolars.geo.box_to_polygon import box_to_polygon as _box_to_polygon
 
 # bound directly: the method's `crs` argument would shadow the module.
+from geopolars.geo.crs import set_crs as _set_crs
 from geopolars.geo.crs import to_crs as _to_crs
 
 # bound directly: `geopolars.geo.distance` is the function, not the module.
@@ -63,6 +64,9 @@ class Geometry:
 
     def translate(self, dx: float, dy: float, dz: float = 0.0) -> pl.Expr:
         return affine.translate(self._expr, dx=dx, dy=dy, dz=dz)
+
+    def set_crs(self, crs: str, *, force: bool = False) -> pl.Expr:
+        return _set_crs(self._expr, crs, force=force)
 
     def to_crs(self, crs: str) -> pl.Expr:
         return _to_crs(self._expr, crs)

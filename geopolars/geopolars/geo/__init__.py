@@ -26,7 +26,7 @@ from geopolars.geo.construct import (
     validate,
 )
 from geopolars.geo.coordinates import m, x, y, z
-from geopolars.geo.crs import to_crs
+from geopolars.geo.crs import set_crs, to_crs
 from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.is_empty import is_empty
 from geopolars.geo.length import length
@@ -63,6 +63,7 @@ __all__ = [
     "polygon",
     "polygon_from_columns",
     "polygon_from_rings",
+    "set_crs",
     "to_crs",
     "to_wkb",
     "to_wkt",
