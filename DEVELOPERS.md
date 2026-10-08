@@ -219,7 +219,7 @@ This code mostly lives in the Python part of GeoPolars.
 There are two ways in:
 
 - The functional API (A2), with a column name, an expression or a Series.
-- The namespace (`Geometry.area`) which simply forwards (A1) to the functional API directly.
+- The namespace (`ExprGeoNameSpace.area`) which simply forwards (A1) to the functional API directly.
 
 From there, the operation goes one of two ways,
 depending on whether it needs to be aware of type information (A3).

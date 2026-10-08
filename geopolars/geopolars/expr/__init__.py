@@ -1,8 +1,8 @@
-from geopolars.expr.geo import Geometry
+from geopolars.expr.geo import ExprGeoNameSpace
 from geopolars.expr.plugin import PluginExpr, as_plugin, col
 
 __all__ = [
-    "Geometry",
+    "ExprGeoNameSpace",
     "PluginExpr",
     "as_plugin",
     "col",

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 @pl.api.register_expr_namespace("geo")
-class Geometry:
+class ExprGeoNameSpace:
     def __init__(self, expr: pl.Expr):
         self._expr = expr
 

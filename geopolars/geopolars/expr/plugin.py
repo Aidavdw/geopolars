@@ -12,7 +12,7 @@ from typing import cast
 
 import polars as pl
 
-from geopolars.expr.geo import Geometry
+from geopolars.expr.geo import ExprGeoNameSpace
 
 
 class PluginExpr(pl.Expr):
@@ -20,7 +20,7 @@ class PluginExpr(pl.Expr):
     The subclass exists so a checker can resolve `.geo`.
     """
 
-    geo: Geometry
+    geo: ExprGeoNameSpace
 
 
 def col(name: str) -> PluginExpr:

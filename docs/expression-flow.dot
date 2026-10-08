@@ -34,7 +34,7 @@ digraph expression_flow {
                          style = "filled", fillcolor = "#eeeeee", color = "#999999"];
         start_functional [label = "geo.area(\"parcel\")", shape = ellipse,
                           style = "filled", fillcolor = "#eeeeee", color = "#999999"];
-        A1 [label = "A1. Forward from the namespace\nGeometry.area"];
+        A1 [label = "A1. Forward from the namespace\nExprGeoNameSpace.area"];
         A2 [label = "A2. Enter the functional API\ngeo.area"];
         A3 [label = "A3. Need the geometry or metadata\nto choose what to lower to?",
             shape = diamond, style = "filled"];
