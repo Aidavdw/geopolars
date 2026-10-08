@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import polars as pl
 
@@ -38,6 +38,14 @@ class ExprGeoNameSpace:
 
     def translate(self, dx: float, dy: float, dz: float = 0.0) -> pl.Expr:
         return affine.translate(self._expr, dx=dx, dy=dy, dz=dz)
+
+    def rotate(
+        self,
+        amount: float,
+        unit: Literal["deg", "pi"] = "deg",
+        axis: Literal["x", "y", "z"] = "z",
+    ) -> pl.Expr:
+        return affine.rotate(self._expr, amount, unit=unit, axis=axis)
 
     def set_crs(self, crs: str, *, force: bool = False) -> pl.Expr:
         from geopolars.geo.crs import set_crs

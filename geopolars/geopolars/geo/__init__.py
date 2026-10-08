@@ -2,7 +2,7 @@
 Everything in the 'geo' namespace forwards to here.
 """
 
-from geopolars.geo.affine import translate
+from geopolars.geo.affine import rotate, translate
 from geopolars.geo.area import area
 from geopolars.geo.bounds import bounds
 from geopolars.geo.construct import (
@@ -66,6 +66,7 @@ __all__ = [
     "polygon",
     "polygon_from_columns",
     "polygon_from_rings",
+    "rotate",
     "set_crs",
     "to_crs",
     "to_polygon",
