@@ -277,7 +277,7 @@ A Tier 1 expression (or one that resolves based on metadata) from A6 starts at P
 #### Callbacks with geometry and metadata
 
 Polars hands the dtype back (across the FFI) with the python callback.
-This will be one of our registered new types, such as `GeoPolygon` (P1).
+This will be one of our registered new types, such as `PolygonType` (P1).
 It can then choose a concrete subclass (e.g. `PolygonXY`),
 based on the dimension using its implementation for `ext_from_params`.
 Metadata is left as-is for now.

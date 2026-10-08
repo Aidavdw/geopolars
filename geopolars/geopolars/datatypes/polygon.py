@@ -16,7 +16,7 @@ from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.dimension import XY, XYM, XYZ, XYZM, Dimension
 
 
-class GeoPolygon(GeoArrowType):
+class PolygonType(GeoArrowType):
     """Base class for `geoarrow.polygon`."""
 
     _extension_name: ClassVar[str] = "geoarrow.polygon"
@@ -26,7 +26,7 @@ class GeoPolygon(GeoArrowType):
     _rings: ClassVar[bool] = True
 
 
-class PolygonXY(GeoPolygon):
+class PolygonXY(PolygonType):
     """A 2D polygon: `geoarrow.polygon` over `List<List<Struct<x, y: f64>>>`.
 
     One list of rings per polygon. That list may be empty: like a linestring,
@@ -36,7 +36,7 @@ class PolygonXY(GeoPolygon):
     _dimension: ClassVar[Dimension] = XY
 
 
-class PolygonXYZ(GeoPolygon):
+class PolygonXYZ(PolygonType):
     """A 3D polygon: `geoarrow.polygon` over `List<List<Struct<x, y, z: f64>>>`.
 
     `z` is the elevation of a vertex.
@@ -45,7 +45,7 @@ class PolygonXYZ(GeoPolygon):
     _dimension: ClassVar[Dimension] = XYZ
 
 
-class PolygonXYM(GeoPolygon):
+class PolygonXYM(PolygonType):
     """A 2D polygon with a measure: `List<List<Struct<x, y, m: f64>>>`.
 
     `m` stands for 'measure', an arbitrary value carried per *vertex* rather
@@ -58,7 +58,7 @@ class PolygonXYM(GeoPolygon):
     _dimension: ClassVar[Dimension] = XYM
 
 
-class PolygonXYZM(GeoPolygon):
+class PolygonXYZM(PolygonType):
     """A 3D polygon with a measure: `List<List<Struct<x, y, z, m: f64>>>`.
 
     `m` stands for 'measure', an arbitrary value carried per *vertex* rather

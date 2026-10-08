@@ -7,7 +7,7 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
-from geopolars.datatypes import GeoPoint, PointXY, PointXYM, PointXYZ, PointXYZM
+from geopolars.datatypes import PointType, PointXY, PointXYM, PointXYZ, PointXYZM
 from tests.unit.conftest import coordinates
 
 
@@ -22,7 +22,7 @@ from tests.unit.conftest import coordinates
     ids=["xy", "xyz", "xym", "xyzm"],
 )
 def test_optional_coordinates_pick_the_dtype(
-    coords: pl.DataFrame, optional: tuple[str, ...], expected: type[GeoPoint]
+    coords: pl.DataFrame, optional: tuple[str, ...], expected: type[PointType]
 ) -> None:
     """Which of `z`/`m` you pass is the only thing that sets the dimension."""
     optional_coords = {name: name for name in optional}

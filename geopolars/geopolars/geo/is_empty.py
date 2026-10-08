@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GeoLineString, GeoMultiPoint
+from geopolars.datatypes import LineStringType, MultiPointType
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -31,7 +31,7 @@ def _is_empty(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     if geometry._nesting == 0:
         return _empty_point(storage)
     # Their vertices or parts are points, which can be empty.
-    if isinstance(geometry, (GeoLineString, GeoMultiPoint)):
+    if isinstance(geometry, (LineStringType, MultiPointType)):
         return storage.list.eval(_empty_point(pl.element())).list.all()
     return _empty(storage, geometry._nesting)
 

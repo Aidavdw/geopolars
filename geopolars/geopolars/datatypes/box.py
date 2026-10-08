@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from polars._typing import PolarsDataType
 
 
-class GeoBox(pl.datatypes.BaseExtension):
+class BoxType(pl.datatypes.BaseExtension):
     """Base class for `geoarrow.box`.
     Instantiate a concrete subclass (`BoxXY()`), never this one.
 
@@ -30,11 +30,11 @@ class GeoBox(pl.datatypes.BaseExtension):
 
     _extension_name: ClassVar[str] = "geoarrow.box"
 
-    #: The coordinates this concrete type bounds. Empty on `GeoBox` itself.
+    #: The coordinates this concrete type bounds. Empty on `BoxType` itself.
     _dimension: ClassVar[Dimension] = ()
 
     #: The concrete type per dimension, filled in by `__init_subclass__`.
-    _by_dimension: ClassVar[dict[Dimension, type[GeoBox]]] = {}
+    _by_dimension: ClassVar[dict[Dimension, type[BoxType]]] = {}
 
     #: Storage type for this concrete type.
     _box_storage: ClassVar[pl.Struct]
@@ -71,12 +71,12 @@ class GeoBox(pl.datatypes.BaseExtension):
         return f"box[{''.join(self._dimension)}]"
 
     @classmethod
-    def of_dimension(cls, dimension: Dimension) -> type[GeoBox]:
+    def of_dimension(cls, dimension: Dimension) -> type[BoxType]:
         """The concrete box bounding these coordinates."""
         return cls._by_dimension[dimension]
 
     @classmethod
-    def _with_metadata_of(cls, other: pl.datatypes.BaseExtension) -> GeoBox:
+    def _with_metadata_of(cls, other: pl.datatypes.BaseExtension) -> BoxType:
         """This (concrete) box type, carrying `other`'s metadata.
         See `GeoArrowType._with_metadata_of`.
         """
@@ -109,25 +109,25 @@ class GeoBox(pl.datatypes.BaseExtension):
         return slf
 
 
-class BoxXY(GeoBox):
+class BoxXY(BoxType):
     """A 2D box: `geoarrow.box` over `Struct<xmin, ymin, xmax, ymax: f64>`."""
 
     _dimension: ClassVar[Dimension] = XY
 
 
-class BoxXYZ(GeoBox):
+class BoxXYZ(BoxType):
     """A 3D box: `Struct<xmin, ymin, zmin, xmax, ymax, zmax: f64>`."""
 
     _dimension: ClassVar[Dimension] = XYZ
 
 
-class BoxXYM(GeoBox):
+class BoxXYM(BoxType):
     """A 2D box with a range of measures: `Struct<xmin, ymin, mmin, xmax, ymax, mmax: f64>`."""
 
     _dimension: ClassVar[Dimension] = XYM
 
 
-class BoxXYZM(GeoBox):
+class BoxXYZM(BoxType):
     """A 3D box with a range of measures:
     `Struct<xmin, ymin, zmin, mmin, xmax, ymax, zmax, mmax: f64>`.
     """

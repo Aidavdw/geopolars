@@ -9,7 +9,7 @@ import pytest
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
-from geopolars.datatypes import BoxXY, BoxXYM, BoxXYZ, BoxXYZM, GeoBox
+from geopolars.datatypes import BoxType, BoxXY, BoxXYM, BoxXYZ, BoxXYZM
 
 _BOUNDS = pl.DataFrame(
     {
@@ -40,7 +40,7 @@ def _storage(df: pl.DataFrame) -> pl.DataFrame:
     ids=["xy", "xyz", "xym", "xyzm"],
 )
 def test_optional_bounds_pick_the_dtype(
-    optional: tuple[str, ...], expected: type[GeoBox]
+    optional: tuple[str, ...], expected: type[BoxType]
 ) -> None:
     optional_bounds = {name: name for name in optional}
     df = _BOUNDS.select(

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GEOMETRIES, GeoArrowType, GeoBox
+from geopolars.datatypes import GEOMETRIES, BoxType, GeoArrowType
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
@@ -48,10 +48,10 @@ def _geometry_of(dtype: pl.DataType) -> GeoArrowType:
     return dtype  # type: ignore[return-value]
 
 
-def _box_of(dtype: pl.DataType) -> GeoBox:
+def _box_of(dtype: pl.DataType) -> BoxType:
     """`dtype` as the concrete box"""
-    if not isinstance(dtype, GeoBox):
-        msg = f"expected a `{GeoBox._extension_name}` column, got: {dtype!r}"
+    if not isinstance(dtype, BoxType):
+        msg = f"expected a `{BoxType._extension_name}` column, got: {dtype!r}"
         raise TypeError(msg)
     return dtype
 
@@ -107,7 +107,7 @@ def on_geometry_pair(
 
 def on_box(
     value: IntoExprColumn,
-    build: Callable[[pl.Expr, GeoBox], pl.Expr],
+    build: Callable[[pl.Expr, BoxType], pl.Expr],
 ) -> pl.Expr:
     """`on_geometry` for an operation on a `geoarrow.box`,
     which is not one of the geometries `on_geometry` accepts.

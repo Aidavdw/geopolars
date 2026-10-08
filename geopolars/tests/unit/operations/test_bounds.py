@@ -8,15 +8,15 @@ from polars.testing import assert_frame_equal
 
 import geopolars as gpl
 from geopolars import geo
-from geopolars.datatypes import BoxXY, GeoBox, PolygonXY
+from geopolars.datatypes import BoxType, BoxXY, PolygonXY
 from tests.unit.conftest import XY, Dimension
 
 _INF = float("inf")
 _NAN = float("nan")
 
 
-def _box_dtype(dimension: Dimension) -> type[GeoBox]:
-    return GeoBox.of_dimension(dimension.coords)
+def _box_dtype(dimension: Dimension) -> type[BoxType]:
+    return BoxType.of_dimension(dimension.coords)
 
 
 def _bounds_per(

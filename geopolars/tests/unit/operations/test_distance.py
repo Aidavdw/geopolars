@@ -7,7 +7,7 @@ import math
 
 import polars as pl
 import pytest
-from geopolars.datatypes import GeoPoint, PointXY
+from geopolars.datatypes import PointType, PointXY
 from polars.exceptions import ComputeError
 from polars.testing import assert_series_equal
 
@@ -231,7 +231,7 @@ def test_the_same_numbers_on_another_ellipsoid_are_another_distance() -> None:
 
 
 def test_metadata_without_a_crs_is_still_planar() -> None:
-    spherical = GeoPoint.ext_from_params(
+    spherical = PointType.ext_from_params(
         "geoarrow.point", PointXY().ext_storage(), '{"edges":"spherical"}'
     )
     df = _pairs([(0.0, 0.0)], [(3.0, 4.0)]).select(

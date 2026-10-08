@@ -8,7 +8,7 @@ from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.dimension import XY, XYM, XYZ, XYZM, Dimension
 
 
-class GeoLineString(GeoArrowType):
+class LineStringType(GeoArrowType):
     """Base class for `geoarrow.linestring`."""
 
     _extension_name: ClassVar[str] = "geoarrow.linestring"
@@ -16,7 +16,7 @@ class GeoLineString(GeoArrowType):
     _nesting: ClassVar[int] = 1
 
 
-class LineStringXY(GeoLineString):
+class LineStringXY(LineStringType):
     """A 2D linestring: `geoarrow.linestring` over `List<Struct<x: f64, y: f64>>`.
 
     One list of vertices per linestring. That list may be empty: unlike a point,
@@ -26,7 +26,7 @@ class LineStringXY(GeoLineString):
     _dimension: ClassVar[Dimension] = XY
 
 
-class LineStringXYZ(GeoLineString):
+class LineStringXYZ(LineStringType):
     """A 3D linestring: `geoarrow.linestring` over `List<Struct<x, y, z: f64>>`.
 
     `z` is the elevation of a vertex.
@@ -35,7 +35,7 @@ class LineStringXYZ(GeoLineString):
     _dimension: ClassVar[Dimension] = XYZ
 
 
-class LineStringXYM(GeoLineString):
+class LineStringXYM(LineStringType):
     """A 2D linestring with a measure: `List<Struct<x, y, m: f64>>`.
 
     `m` stands for 'measure', an arbitrary value carried per *vertex* rather
@@ -48,7 +48,7 @@ class LineStringXYM(GeoLineString):
     _dimension: ClassVar[Dimension] = XYM
 
 
-class LineStringXYZM(GeoLineString):
+class LineStringXYZM(LineStringType):
     """A 3D linestring with a measure: `List<Struct<x, y, z, m: f64>>`.
 
     `m` stands for 'measure', an arbitrary value carried per *vertex* rather

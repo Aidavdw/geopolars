@@ -12,7 +12,7 @@ from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.dimension import XY, XYM, XYZ, XYZM, Dimension
 
 
-class GeoMultiLineString(GeoArrowType):
+class MultiLineStringType(GeoArrowType):
     """Base class for `geoarrow.multilinestring`."""
 
     _extension_name: ClassVar[str] = "geoarrow.multilinestring"
@@ -20,25 +20,25 @@ class GeoMultiLineString(GeoArrowType):
     _nesting: ClassVar[int] = 2
 
 
-class MultiLineStringXY(GeoMultiLineString):
+class MultiLineStringXY(MultiLineStringType):
     """A 2D multilinestring: `List<List<Struct<x: f64, y: f64>>>`."""
 
     _dimension: ClassVar[Dimension] = XY
 
 
-class MultiLineStringXYZ(GeoMultiLineString):
+class MultiLineStringXYZ(MultiLineStringType):
     """A 3D multilinestring: `List<List<Struct<x, y, z: f64>>>`."""
 
     _dimension: ClassVar[Dimension] = XYZ
 
 
-class MultiLineStringXYM(GeoMultiLineString):
+class MultiLineStringXYM(MultiLineStringType):
     """A 2D multilinestring with a measure: `List<List<Struct<x, y, m: f64>>>`."""
 
     _dimension: ClassVar[Dimension] = XYM
 
 
-class MultiLineStringXYZM(GeoMultiLineString):
+class MultiLineStringXYZM(MultiLineStringType):
     """A 3D multilinestring with a measure: `List<List<Struct<x, y, z, m: f64>>>`."""
 
     _dimension: ClassVar[Dimension] = XYZM

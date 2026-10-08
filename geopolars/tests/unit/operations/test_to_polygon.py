@@ -10,12 +10,12 @@ import pytest
 import geopolars as gpl
 from geopolars import geo
 from geopolars.datatypes import (
+    BoxType,
     BoxXY,
     BoxXYM,
     BoxXYZ,
     BoxXYZM,
-    GeoBox,
-    GeoPolygon,
+    PolygonType,
     PolygonXY,
     PolygonXYM,
     PolygonXYZ,
@@ -179,7 +179,7 @@ def test_mixed_rows_are_handled_per_row() -> None:
     ]
 
 
-def _boxes_of(dtype: type[GeoBox], **bounds: list[float]) -> pl.LazyFrame:
+def _boxes_of(dtype: type[BoxType], **bounds: list[float]) -> pl.LazyFrame:
     names = list(dtype().ext_storage().to_schema())
     return pl.LazyFrame({name: bounds[name] for name in names}).select(
         pl.struct(names).ext.to(dtype(crs="EPSG:4326")).alias("box")
@@ -209,7 +209,7 @@ _XYZM = {
     ids=["xy", "xyz", "xym", "xyzm"],
 )
 def test_the_polygon_has_the_boxs_dimension_and_crs(
-    dtype: type[GeoBox], expected: type[GeoPolygon]
+    dtype: type[BoxType], expected: type[PolygonType]
 ) -> None:
     lf = _boxes_of(dtype, **_XYZM).select(geo.to_polygon("box"))
 

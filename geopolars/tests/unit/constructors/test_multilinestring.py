@@ -9,7 +9,7 @@ from polars.testing import assert_frame_equal
 
 from geopolars import geo
 from geopolars.datatypes import (
-    GeoLineString,
+    LineStringType,
     LineStringXY,
     MultiLineStringXY,
 )
@@ -133,7 +133,7 @@ def test_a_missing_coordinate_invalidates_the_whole_multilinestring() -> None:
 
 def test_metadata_is_carried_over_from_the_linestrings() -> None:
     metadata = '{"edges":"spherical"}'
-    spherical = GeoLineString.ext_from_params(
+    spherical = LineStringType.ext_from_params(
         "geoarrow.linestring", LineStringXY().ext_storage(), metadata
     )
     df = (

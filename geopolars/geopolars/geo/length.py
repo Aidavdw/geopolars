@@ -14,7 +14,7 @@ import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import GeoLineString, GeoMultiLineString
+from geopolars.datatypes import LineStringType, MultiLineStringType
 from geopolars.geo._dispatch import on_geometry
 from geopolars.geo.distance import _has_z, _squared_norm
 
@@ -51,7 +51,7 @@ def _geodesic(column: pl.Expr) -> pl.Expr:
 
 
 def _length(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    if not isinstance(geometry, (GeoLineString, GeoMultiLineString)):
+    if not isinstance(geometry, (LineStringType, MultiLineStringType)):
         msg = (
             "a length is measured on a `geoarrow.linestring` "
             f"or `geoarrow.multilinestring` column, got: {geometry!r}"
@@ -64,7 +64,7 @@ def _length(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 
     storage = column.ext.storage()
     has_z = _has_z(geometry)
-    if isinstance(geometry, GeoLineString):
+    if isinstance(geometry, LineStringType):
         return _planar(storage, has_z=has_z)
     return storage.list.eval(_planar(pl.element(), has_z=has_z))
 

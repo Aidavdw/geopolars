@@ -9,8 +9,8 @@ from polars.testing import assert_frame_equal
 
 from geopolars import geo
 from geopolars.datatypes import (
-    GeoPolygon,
     MultiPolygonXY,
+    PolygonType,
     PolygonXY,
 )
 from tests.unit.conftest import Dimension, multipolygon_coordinates
@@ -130,7 +130,7 @@ def test_a_missing_coordinate_invalidates_the_whole_multipolygon() -> None:
 
 def test_metadata_is_carried_over_from_the_polygons() -> None:
     metadata = '{"edges":"spherical"}'
-    spherical = GeoPolygon.ext_from_params(
+    spherical = PolygonType.ext_from_params(
         "geoarrow.polygon", PolygonXY().ext_storage(), metadata
     )
     df = (

@@ -9,11 +9,11 @@ import polars as pl
 import pytest
 from geopolars.datatypes import (
     GeoArrowType,
-    GeoPoint,
     LineStringXY,
     MultiLineStringXY,
     MultiPointXY,
     MultiPolygonXY,
+    PointType,
     PointXY,
     PolygonXY,
 )
@@ -167,7 +167,7 @@ class TestGatheringParts:
 
 
 def test_a_crs_is_set_next_to_the_parts_other_metadata() -> None:
-    spherical = GeoPoint.ext_from_params(
+    spherical = PointType.ext_from_params(
         "geoarrow.point", PointXY().ext_storage(), '{"edges":"spherical"}'
     )
     df = (

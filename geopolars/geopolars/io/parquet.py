@@ -17,7 +17,7 @@ import polars as pl
 from polars.io._expand_paths import _expand_paths
 
 from geopolars import geopolars as _rust
-from geopolars.datatypes import GeoArrowType, GeoBox
+from geopolars.datatypes import BoxType, GeoArrowType
 from geopolars.datatypes.encoded import EncodedGeometry
 from geopolars.geo.bounds import _envelope
 
@@ -122,7 +122,7 @@ def scan_parquet(
 def _storage_of(name: str, dtype: pl.DataType) -> pl.Expr:
     """The column `name`, as the storage `dtype` wraps."""
     storage = pl.col(name).ext.storage()
-    if not isinstance(dtype, GeoBox):
+    if not isinstance(dtype, BoxType):
         return storage
     # A covering column can have its bounds in any order: put them in the box's.
     bounds = [storage.struct.field(field) for field in dtype.ext_storage().to_schema()]

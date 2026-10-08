@@ -14,8 +14,8 @@ import geopolars as gpl
 from geopolars import geo
 from geopolars.datatypes import (
     BoxXY,
-    GeoPoint,
     MultiLineStringXYZ,
+    PointType,
     PointXY,
     PointXYM,
     PointXYZ,
@@ -36,7 +36,9 @@ XY = [{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]
 
 def _point(metadata: str) -> PolarsDataType:
     """A `PointXY` with metadata the constructor would not write."""
-    return GeoPoint.ext_from_params("geoarrow.point", PointXY().ext_storage(), metadata)
+    return PointType.ext_from_params(
+        "geoarrow.point", PointXY().ext_storage(), metadata
+    )
 
 
 def _geo_of(path: Path) -> dict[str, Any]:

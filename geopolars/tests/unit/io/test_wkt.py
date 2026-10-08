@@ -17,13 +17,13 @@ from polars.testing import assert_frame_equal, assert_series_equal
 from geopolars import geo
 from geopolars.datatypes import (
     GeoArrowType,
-    GeoPolygon,
     LineStringXY,
     MultiLineStringXY,
     MultiPointXY,
     MultiPolygonXY,
     PointXY,
     PointXYZ,
+    PolygonType,
     Wkt,
 )
 from tests.unit.conftest import XY, Dimension
@@ -241,7 +241,7 @@ def test_a_conflicting_crs_is_an_error() -> None:
 
 def test_the_type_has_to_be_concrete() -> None:
     with pytest.raises(TypeError, match="concrete geometry type"):
-        geo.from_wkt("g", GeoPolygon)
+        geo.from_wkt("g", PolygonType)
 
 
 def test_from_wkt_wants_strings() -> None:

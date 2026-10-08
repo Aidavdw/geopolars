@@ -16,7 +16,7 @@ import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import GeoMultiPolygon, GeoPolygon
+from geopolars.datatypes import MultiPolygonType, PolygonType
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -59,9 +59,9 @@ def _area(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     # Whether PROJ can use the CRS is for the kernel to check.
     if geometry._declares_crs():
         return _geodesic(column)
-    if isinstance(geometry, GeoPolygon):
+    if isinstance(geometry, PolygonType):
         return _polygon(column.ext.storage())
-    if isinstance(geometry, GeoMultiPolygon):
+    if isinstance(geometry, MultiPolygonType):
         return column.ext.storage().list.eval(_polygon(pl.element()))
     # Everything else has no defined area.
     return pl.when(column.is_not_null()).then(pl.lit(0.0, dtype=pl.Float64))

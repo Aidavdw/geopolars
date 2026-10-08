@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING
 import polars as pl
 
 from geopolars.datatypes import (
-    GeoBox,
-    GeoMultiLineString,
-    GeoMultiPoint,
-    GeoMultiPolygon,
+    BoxType,
+    MultiLineStringType,
+    MultiPointType,
+    MultiPolygonType,
 )
 from geopolars.geo._dispatch import on_geometry
 
@@ -56,7 +56,7 @@ def _around_the_globe(
 def _box(
     part: pl.Expr,
     layers: int,
-    box: GeoBox,
+    box: BoxType,
     turn: float | None,
     margin_x: float,
     margin_y: float,
@@ -91,9 +91,9 @@ def _bounds(
     column: pl.Expr, geometry: GeoArrowType, margin_x: float, margin_y: float
 ) -> pl.Expr:
     storage = column.ext.storage()
-    box = GeoBox.of_dimension(geometry._dimension)._with_metadata_of(geometry)
+    box = BoxType.of_dimension(geometry._dimension)._with_metadata_of(geometry)
     turn = geometry._longitude_turn()
-    if isinstance(geometry, (GeoMultiPoint, GeoMultiLineString, GeoMultiPolygon)):
+    if isinstance(geometry, (MultiPointType, MultiLineStringType, MultiPolygonType)):
         # One box per part. A missing multi-geometry stays missing.
         layers = geometry._nesting - 1
         return storage.list.eval(
@@ -110,7 +110,7 @@ def _envelope(geometry: IntoExprColumn) -> pl.Expr:
     """
 
     def build(column: pl.Expr, dtype: GeoArrowType) -> pl.Expr:
-        box = GeoBox.of_dimension(dtype._dimension)._with_metadata_of(dtype)
+        box = BoxType.of_dimension(dtype._dimension)._with_metadata_of(dtype)
         storage = column.ext.storage()
         return _box(storage, dtype._nesting, box, dtype._longitude_turn(), 0.0, 0.0)
 

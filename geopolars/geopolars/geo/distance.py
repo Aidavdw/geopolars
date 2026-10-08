@@ -15,7 +15,7 @@ import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import GeoPoint
+from geopolars.datatypes import PointType
 from geopolars.geo._dispatch import on_geometry_pair
 
 if TYPE_CHECKING:
@@ -67,7 +67,7 @@ def _distance_squared(
     a: pl.Expr, a_dtype: GeoArrowType, b: pl.Expr, b_dtype: GeoArrowType
 ) -> pl.Expr:
     # TODO: for other shapes, calculate centroid, and take distance on that.
-    if not (isinstance(a_dtype, GeoPoint) and isinstance(b_dtype, GeoPoint)):
+    if not (isinstance(a_dtype, PointType) and isinstance(b_dtype, PointType)):
         msg = (
             "a distance is measured between two `geoarrow.point` columns, "
             f"got: {a_dtype!r} and {b_dtype!r}"

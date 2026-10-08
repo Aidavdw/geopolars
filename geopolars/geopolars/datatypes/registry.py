@@ -11,31 +11,31 @@ import polars as pl
 # which is what registers these types on the Rust side.
 from geopolars import geopolars as _rust  # noqa: F401
 from geopolars.datatypes.base import GeoArrowType
-from geopolars.datatypes.box import GeoBox
+from geopolars.datatypes.box import BoxType
 from geopolars.datatypes.encoded import EncodedGeometry
-from geopolars.datatypes.linestring import GeoLineString
-from geopolars.datatypes.multilinestring import GeoMultiLineString
-from geopolars.datatypes.multipoint import GeoMultiPoint
-from geopolars.datatypes.multipolygon import GeoMultiPolygon
-from geopolars.datatypes.point import GeoPoint
-from geopolars.datatypes.polygon import GeoPolygon
+from geopolars.datatypes.linestring import LineStringType
+from geopolars.datatypes.multilinestring import MultiLineStringType
+from geopolars.datatypes.multipoint import MultiPointType
+from geopolars.datatypes.multipolygon import MultiPolygonType
+from geopolars.datatypes.point import PointType
+from geopolars.datatypes.polygon import PolygonType
 from geopolars.datatypes.wkb import Wkb
 from geopolars.datatypes.wkt import Wkt
 
 # Mirrors `Kind::ALL`
 GEOMETRIES: tuple[type[GeoArrowType], ...] = (
-    GeoPoint,
-    GeoLineString,
-    GeoPolygon,
-    GeoMultiPoint,
-    GeoMultiLineString,
-    GeoMultiPolygon,
+    PointType,
+    LineStringType,
+    PolygonType,
+    MultiPointType,
+    MultiLineStringType,
+    MultiPolygonType,
 )
 
 for _geometry in GEOMETRIES:
     pl.register_extension_type(_geometry._extension_name, _geometry)
 
-pl.register_extension_type(GeoBox._extension_name, GeoBox)
+pl.register_extension_type(BoxType._extension_name, BoxType)
 
 # Mirrors `Encoding::ALL`
 ENCODINGS: tuple[type[EncodedGeometry], ...] = (Wkb, Wkt)

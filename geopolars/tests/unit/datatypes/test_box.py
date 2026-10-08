@@ -8,26 +8,26 @@ from polars.exceptions import ComputeError, SchemaError
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
-from geopolars.datatypes import BoxXY, BoxXYM, BoxXYZ, BoxXYZM, GeoBox
+from geopolars.datatypes import BoxType, BoxXY, BoxXYM, BoxXYZ, BoxXYZM
 
 _BOXES = [BoxXY, BoxXYZ, BoxXYM, BoxXYZM]
 _IDS = ["xy", "xyz", "xym", "xyzm"]
 
 
-def _bounds(dtype: type[GeoBox]) -> pl.DataFrame:
+def _bounds(dtype: type[BoxType]) -> pl.DataFrame:
     names = dtype().ext_storage().to_schema()
     return pl.DataFrame(
         {name: [float(i), float(i) + 10] for i, name in enumerate(names)}
     )
 
 
-def _boxes(dtype: type[GeoBox], crs: str | None = None) -> pl.LazyFrame:
+def _boxes(dtype: type[BoxType], crs: str | None = None) -> pl.LazyFrame:
     bounds = _bounds(dtype)
     return bounds.lazy().select(box=pl.struct(bounds.columns).ext.to(dtype(crs=crs)))
 
 
 @pytest.mark.parametrize("dtype", _BOXES, ids=_IDS)
-def test_dtype_survives_a_lazy_round_trip(dtype: type[GeoBox]) -> None:
+def test_dtype_survives_a_lazy_round_trip(dtype: type[BoxType]) -> None:
     lf = _boxes(dtype)
     df = lf.collect()
 
@@ -49,13 +49,13 @@ def test_dtype_survives_a_lazy_round_trip(dtype: type[GeoBox]) -> None:
     ids=_IDS,
 )
 def test_storage_is_the_spec_struct_of_bounds(
-    dtype: type[GeoBox], fields: list[str]
+    dtype: type[BoxType], fields: list[str]
 ) -> None:
     assert dtype().ext_storage() == pl.Struct(dict.fromkeys(fields, pl.Float64))
 
 
 @pytest.mark.parametrize("dtype", _BOXES, ids=_IDS)
-def test_dtype_renders_its_dimension(dtype: type[GeoBox]) -> None:
+def test_dtype_renders_its_dimension(dtype: type[BoxType]) -> None:
     df = _boxes(dtype).collect()
     tag = "".join(dtype._dimension)
 
@@ -100,7 +100,7 @@ def test_crs_survives_a_lazy_round_trip() -> None:
 )
 def test_unsupported_storage_is_refused(storage: pl.DataType) -> None:
     with pytest.raises(ValueError, match="unsupported 'geoarrow.box' storage"):
-        GeoBox.ext_from_params("geoarrow.box", storage, None)
+        BoxType.ext_from_params("geoarrow.box", storage, None)
 
 
 def test_a_box_is_not_a_geometry_to_a_native_operation() -> None:

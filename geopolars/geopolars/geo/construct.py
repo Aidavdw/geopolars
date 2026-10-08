@@ -8,7 +8,7 @@ import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import GeoBox, GeoPoint
+from geopolars.datatypes import BoxType, PointType
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
@@ -175,7 +175,7 @@ def point(
     # TODO: The spec can be interpreted as saying that 'm' may also not be null.
     # That really limits usability, no?
     complete = pl.all_horizontal([coord.is_not_null() for coord in coords])
-    dtype = GeoPoint.of_dimension(dimension)
+    dtype = PointType.of_dimension(dimension)
     return pl.when(complete).then(pl.struct(coords)).ext.to(dtype(crs=crs))
 
 
@@ -221,7 +221,7 @@ def box(
 
     # A missing bound invalidates the entire box.
     complete = pl.all_horizontal([bound.is_not_null() for bound in bounds])
-    dtype = GeoBox.of_dimension(dimension)
+    dtype = BoxType.of_dimension(dimension)
     return pl.when(complete).then(pl.struct(bounds)).ext.to(dtype(crs=crs))
 
 

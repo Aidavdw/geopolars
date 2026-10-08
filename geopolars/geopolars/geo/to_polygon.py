@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GeoPolygon
+from geopolars.datatypes import PolygonType
 from geopolars.geo._dispatch import on_box
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
-    from geopolars.datatypes import GeoBox
+    from geopolars.datatypes import BoxType
 
 
-def _to_polygon(column: pl.Expr, box: GeoBox) -> pl.Expr:
+def _to_polygon(column: pl.Expr, box: BoxType) -> pl.Expr:
     bounds = column.ext.storage()
     dimension = box._dimension
     low = {axis: bounds.struct.field(f"{axis}min") for axis in dimension}
@@ -52,7 +52,7 @@ def _to_polygon(column: pl.Expr, box: GeoBox) -> pl.Expr:
     ring = pl.concat_arr([vertex(x, y) for x, y in corners])
     # Polars has no elementwise way to wrap a list in another list,
     # so a single ring is reshaped into a list of one ring.
-    polygon_type = GeoPolygon.of_dimension(dimension)
+    polygon_type = PolygonType.of_dimension(dimension)
     storage = polygon_type._geo_storage
     rings = ring.reshape((-1, 1, len(corners))).cast(storage)
 

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GeoPoint
+from geopolars.datatypes import PointType
 from geopolars.geo._dispatch import on_geometry
 from geopolars.geo.coordinates import _axis
 
@@ -92,7 +92,7 @@ def _mean_coordinate(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         # reads as false.
         pl.when(_coordinates(geometry, column) > 0)
         .then(pl.struct(means))
-        .ext.to(GeoPoint.of_dimension(dimension)._with_metadata_of(geometry))
+        .ext.to(PointType.of_dimension(dimension)._with_metadata_of(geometry))
     )
 
 

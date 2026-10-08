@@ -14,7 +14,7 @@ from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.dimension import XY, XYM, XYZ, XYZM, Dimension
 
 
-class GeoPoint(GeoArrowType):
+class PointType(GeoArrowType):
     """Base class for `geoarrow.point`.
 
     Point != Coordinate: a Coordinate is simply the 'encoding'.
@@ -27,13 +27,13 @@ class GeoPoint(GeoArrowType):
     _nesting: ClassVar[int] = 0
 
 
-class PointXY(GeoPoint):
+class PointXY(PointType):
     """A 2D point: `geoarrow.point` over `Struct<x: f64, y: f64>`."""
 
     _dimension: ClassVar[Dimension] = XY
 
 
-class PointXYZ(GeoPoint):
+class PointXYZ(PointType):
     """A 3D point: `geoarrow.point` over `Struct<x: f64, y: f64, z: f64>`.
 
     `z` is the elevation.
@@ -42,7 +42,7 @@ class PointXYZ(GeoPoint):
     _dimension: ClassVar[Dimension] = XYZ
 
 
-class PointXYM(GeoPoint):
+class PointXYM(PointType):
     """A 2D point with a measure: `Struct<x: f64, y: f64, m: f64>`.
 
     `m` stands for 'measure', an arbitrary per-vertex value.
@@ -55,7 +55,7 @@ class PointXYM(GeoPoint):
     _dimension: ClassVar[Dimension] = XYM
 
 
-class PointXYZM(GeoPoint):
+class PointXYZM(PointType):
     """A 3D point with a measure: `Struct<x: f64, y: f64, z: f64, m: f64>`.
 
     `m` stands for 'measure', an arbitrary per-vertex value.

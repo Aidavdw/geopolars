@@ -10,8 +10,8 @@ from polars.testing import assert_frame_equal
 import geopolars as gpl
 from geopolars import geo
 from geopolars.datatypes import (
-    GeoPoint,
     LineStringXY,
+    PointType,
     PointXY,
 )
 from tests.unit.conftest import XY, XYZM, Dimension, coordinates
@@ -297,7 +297,7 @@ def test_the_result_is_a_point_of_the_same_dimension(
 
     out = df.select(geo.mean_coordinate(name))
 
-    assert out.schema[name] == GeoPoint.of_dimension(dimension.coords)()
+    assert out.schema[name] == PointType.of_dimension(dimension.coords)()
 
 
 def test_m_is_averaged_like_any_other_coordinate(line_coords: pl.DataFrame) -> None:
@@ -435,7 +435,7 @@ def test_metadata_is_carried_through_verbatim() -> None:
     """Keys we don't know of either, spelled as they came in."""
     metadata = '{ "edges": "spherical", "x-vendor": [1, 2] }'
     spherical = LineStringXY._with_metadata_of(
-        GeoPoint.ext_from_params("geoarrow.point", PointXY().ext_storage(), metadata)
+        PointType.ext_from_params("geoarrow.point", PointXY().ext_storage(), metadata)
     )
     df = pl.DataFrame({"line": [_SQUARE]}, schema={"line": _XY_VERTICES}).select(
         pl.col("line").ext.to(spherical)

@@ -2,7 +2,7 @@ import tempfile
 from pathlib import Path
 
 import polars as pl
-from geopolars.datatypes import GeoLineString, GeoPoint
+from geopolars.datatypes import LineStringType, PointType
 
 import geopolars as gpl
 from geopolars import (
@@ -163,13 +163,13 @@ for storage in (
     pl.List(pl.Float64),
 ):
     try:
-        GeoLineString.ext_from_params("geoarrow.linestring", storage, None)
+        LineStringType.ext_from_params("geoarrow.linestring", storage, None)
     except ValueError as e:
         print(f"rejected -> {e}")
 
 print("\nMetadata comes along when points are converted into linestrings,")
 print("which is what the spec asks for `edges`.")
-spherical = GeoPoint.ext_from_params(
+spherical = PointType.ext_from_params(
     "geoarrow.point", gpl.PointXY().ext_storage(), '{"edges":"spherical"}'
 )
 carried = (

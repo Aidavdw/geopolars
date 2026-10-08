@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import polars as pl
-from geopolars.datatypes import BoxXY, GeoPoint, PointXY
+from geopolars.datatypes import BoxXY, PointType, PointXY
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
@@ -60,7 +60,7 @@ def test_metadata_survives_a_parquet_round_trip(tmp_path: Path) -> None:
     """The metadata string is the slot `crs` lives in, so losing it on a write
     would silently drop a file's coordinate reference system."""
     metadata = '{"crs":"EPSG:4326"}'
-    dtype = GeoPoint.ext_from_params(
+    dtype = PointType.ext_from_params(
         "geoarrow.point", PointXY().ext_storage(), metadata
     )
     df = pl.DataFrame({"x": [1.0, 2.0], "y": [3.0, 4.0]}).select(

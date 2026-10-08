@@ -2,7 +2,7 @@ import tempfile
 from pathlib import Path
 
 import polars as pl
-from geopolars.datatypes import GeoPoint
+from geopolars.datatypes import PointType
 
 import geopolars as gpl
 from geopolars import PointXY, PointXYM, PointXYZ, PointXYZM, geo
@@ -129,12 +129,12 @@ for storage in (
     pl.Struct({"x": pl.Float32, "y": pl.Float32}),
 ):
     try:
-        GeoPoint.ext_from_params("geoarrow.point", storage, None)
+        PointType.ext_from_params("geoarrow.point", storage, None)
     except ValueError as e:
         print(f"rejected -> {e}")
 
 print("\nMetadata is carried over verbatim")
 xyzm = pl.Struct({"x": pl.Float64, "y": pl.Float64, "z": pl.Float64, "m": pl.Float64})
-carried = GeoPoint.ext_from_params("geoarrow.point", xyzm, '{"crs":"EPSG:4326"}')
+carried = PointType.ext_from_params("geoarrow.point", xyzm, '{"crs":"EPSG:4326"}')
 print("dispatched to:", repr(carried))
 print("metadata carried through:", carried.ext_metadata())

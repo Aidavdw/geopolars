@@ -12,7 +12,7 @@ from polars.testing import assert_series_equal
 import geopolars as gpl
 from geopolars import geo
 from geopolars.datatypes import (
-    GeoLineString,
+    LineStringType,
     LineStringXY,
     MultiLineStringXY,
 )
@@ -238,7 +238,7 @@ def test_every_dimension_of_multilinestring_is_measured(
 
 
 def test_metadata_without_a_crs_is_still_planar() -> None:
-    spherical = GeoLineString.ext_from_params(
+    spherical = LineStringType.ext_from_params(
         "geoarrow.linestring", LineStringXY().ext_storage(), '{"edges":"spherical"}'
     )
     df = _lines([[(0.0, 0.0), (3.0, 4.0)]]).select(

@@ -8,32 +8,32 @@ import pytest
 
 from geopolars import geo
 from geopolars.datatypes import (
-    GeoLineString,
-    GeoMultiLineString,
-    GeoMultiPoint,
-    GeoMultiPolygon,
-    GeoPoint,
-    GeoPolygon,
+    LineStringType,
     LineStringXY,
     LineStringXYM,
     LineStringXYZ,
     LineStringXYZM,
+    MultiLineStringType,
     MultiLineStringXY,
     MultiLineStringXYM,
     MultiLineStringXYZ,
     MultiLineStringXYZM,
+    MultiPointType,
     MultiPointXY,
     MultiPointXYM,
     MultiPointXYZ,
     MultiPointXYZM,
+    MultiPolygonType,
     MultiPolygonXY,
     MultiPolygonXYM,
     MultiPolygonXYZ,
     MultiPolygonXYZM,
+    PointType,
     PointXY,
     PointXYM,
     PointXYZ,
     PointXYZM,
+    PolygonType,
     PolygonXY,
     PolygonXYM,
     PolygonXYZ,
@@ -53,12 +53,12 @@ class Dimension(NamedTuple):
     with whatever the implementation happens to do.
     """
 
-    point_dtype: type[GeoPoint]
-    linestring_dtype: type[GeoLineString]
-    polygon_dtype: type[GeoPolygon]
-    multipoint_dtype: type[GeoMultiPoint]
-    multilinestring_dtype: type[GeoMultiLineString]
-    multipolygon_dtype: type[GeoMultiPolygon]
+    point_dtype: type[PointType]
+    linestring_dtype: type[LineStringType]
+    polygon_dtype: type[PolygonType]
+    multipoint_dtype: type[MultiPointType]
+    multilinestring_dtype: type[MultiLineStringType]
+    multipolygon_dtype: type[MultiPolygonType]
     coords: tuple[str, ...]
 
     @property

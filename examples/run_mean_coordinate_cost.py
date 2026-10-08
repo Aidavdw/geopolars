@@ -21,7 +21,7 @@ import operator
 import time
 
 import polars as pl
-from geopolars.datatypes import GeoLineString
+from geopolars.datatypes import LineStringType
 
 import geopolars as gpl
 from geopolars import geo
@@ -145,7 +145,7 @@ def breakdown(rows: int, vertices: int) -> None:
     """The real expression, piece by piece, against the two bounds around it."""
     _, geo_df = frames(rows, vertices)
     column, storage = pl.col("samples"), pl.col("samples").ext.storage()
-    dtype = GeoLineString.of_dimension(AXES)
+    dtype = LineStringType.of_dimension(AXES)
 
     pieces = {
         "_coordinates (the emptiness check)": impl._coordinates(dtype, column) > 0,

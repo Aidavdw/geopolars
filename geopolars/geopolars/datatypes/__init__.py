@@ -6,44 +6,44 @@ so one registered name and one dispatching class covers them all.
 """
 
 from geopolars.datatypes.base import GeoArrowType
-from geopolars.datatypes.box import BoxXY, BoxXYM, BoxXYZ, BoxXYZM, GeoBox
+from geopolars.datatypes.box import BoxType, BoxXY, BoxXYM, BoxXYZ, BoxXYZM
 from geopolars.datatypes.linestring import (
-    GeoLineString,
+    LineStringType,
     LineStringXY,
     LineStringXYM,
     LineStringXYZ,
     LineStringXYZM,
 )
 from geopolars.datatypes.multilinestring import (
-    GeoMultiLineString,
+    MultiLineStringType,
     MultiLineStringXY,
     MultiLineStringXYM,
     MultiLineStringXYZ,
     MultiLineStringXYZM,
 )
 from geopolars.datatypes.multipoint import (
-    GeoMultiPoint,
+    MultiPointType,
     MultiPointXY,
     MultiPointXYM,
     MultiPointXYZ,
     MultiPointXYZM,
 )
 from geopolars.datatypes.multipolygon import (
-    GeoMultiPolygon,
+    MultiPolygonType,
     MultiPolygonXY,
     MultiPolygonXYM,
     MultiPolygonXYZ,
     MultiPolygonXYZM,
 )
 from geopolars.datatypes.point import (
-    GeoPoint,
+    PointType,
     PointXY,
     PointXYM,
     PointXYZ,
     PointXYZM,
 )
 from geopolars.datatypes.polygon import (
-    GeoPolygon,
+    PolygonType,
     PolygonXY,
     PolygonXYM,
     PolygonXYZ,
@@ -55,38 +55,38 @@ from geopolars.datatypes.wkt import Wkt
 
 __all__ = [
     "GEOMETRIES",
+    "BoxType",
     "BoxXY",
     "BoxXYM",
     "BoxXYZ",
     "BoxXYZM",
     "GeoArrowType",
-    "GeoBox",
-    "GeoLineString",
-    "GeoMultiLineString",
-    "GeoMultiPoint",
-    "GeoMultiPolygon",
-    "GeoPoint",
-    "GeoPolygon",
+    "LineStringType",
     "LineStringXY",
     "LineStringXYM",
     "LineStringXYZ",
     "LineStringXYZM",
+    "MultiLineStringType",
     "MultiLineStringXY",
     "MultiLineStringXYM",
     "MultiLineStringXYZ",
     "MultiLineStringXYZM",
+    "MultiPointType",
     "MultiPointXY",
     "MultiPointXYM",
     "MultiPointXYZ",
     "MultiPointXYZM",
+    "MultiPolygonType",
     "MultiPolygonXY",
     "MultiPolygonXYM",
     "MultiPolygonXYZ",
     "MultiPolygonXYZM",
+    "PointType",
     "PointXY",
     "PointXYM",
     "PointXYZ",
     "PointXYZM",
+    "PolygonType",
     "PolygonXY",
     "PolygonXYM",
     "PolygonXYZ",

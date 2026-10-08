@@ -40,7 +40,7 @@ fn with_crs(metadata: Option<&str>, crs: &str) -> PyResult<Option<String>> {
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
-/// See `GeoBox._longitude_turn`.
+/// See `BoxType._longitude_turn`.
 #[pyfunction]
 #[pyo3(signature = (metadata))]
 fn longitude_turn(py: Python<'_>, metadata: Option<&str>) -> PyResult<Option<f64>> {

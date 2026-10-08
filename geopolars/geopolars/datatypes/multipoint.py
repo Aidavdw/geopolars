@@ -12,7 +12,7 @@ from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.dimension import XY, XYM, XYZ, XYZM, Dimension
 
 
-class GeoMultiPoint(GeoArrowType):
+class MultiPointType(GeoArrowType):
     """Base class for `geoarrow.multipoint`."""
 
     _extension_name: ClassVar[str] = "geoarrow.multipoint"
@@ -20,25 +20,25 @@ class GeoMultiPoint(GeoArrowType):
     _nesting: ClassVar[int] = 1
 
 
-class MultiPointXY(GeoMultiPoint):
+class MultiPointXY(MultiPointType):
     """A 2D multipoint: `geoarrow.multipoint` over `List<Struct<x: f64, y: f64>>`."""
 
     _dimension: ClassVar[Dimension] = XY
 
 
-class MultiPointXYZ(GeoMultiPoint):
+class MultiPointXYZ(MultiPointType):
     """A 3D multipoint: `geoarrow.multipoint` over `List<Struct<x, y, z: f64>>`."""
 
     _dimension: ClassVar[Dimension] = XYZ
 
 
-class MultiPointXYM(GeoMultiPoint):
+class MultiPointXYM(MultiPointType):
     """A 2D multipoint with a measure: `List<Struct<x, y, m: f64>>`."""
 
     _dimension: ClassVar[Dimension] = XYM
 
 
-class MultiPointXYZM(GeoMultiPoint):
+class MultiPointXYZM(MultiPointType):
     """A 3D multipoint with a measure: `List<Struct<x, y, z, m: f64>>`."""
 
     _dimension: ClassVar[Dimension] = XYZM
