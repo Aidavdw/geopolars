@@ -117,6 +117,9 @@ def test_turning_out_of_the_plane_needs_a_z_at_plan_time(
         ({"axis": "w"}, "`axis`"),
         ({"amount": math.nan}, "`amount`"),
         ({"amount": math.inf}, "`amount`"),
+        ({"origin": (1.0,)}, "`origin`"),
+        ({"origin": (1.0, 2.0, 3.0, 4.0)}, "`origin`"),
+        ({"origin": (1.0, math.nan)}, "`origin`"),
     ],
 )
 def test_bad_arguments_are_refused(kwargs: dict[str, object], match: str) -> None:
@@ -124,6 +127,41 @@ def test_bad_arguments_are_refused(kwargs: dict[str, object], match: str) -> Non
 
     with pytest.raises(ValueError, match=match):
         geo.rotate("point", **arguments)  # type: ignore[arg-type]
+
+
+def test_a_quarter_turn_about_an_origin(
+    coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    """About (1, 1), (x, y) becomes (1 - (y - 1), 1 + (x - 1)): exact, like about (0, 0)."""
+    df = coords.select(dimension.point())
+    out = df.select(geo.rotate("point", 90, origin=(1.0, 1.0)))
+
+    expected = coordinates(df).with_columns(x=2 - pl.col("y"), y=pl.col("x"))
+    assert_frame_equal(coordinates(out), expected, check_exact=True)
+
+
+def test_the_origin_itself_stays_where_it_is() -> None:
+    df = pl.DataFrame({"x": [5.0], "y": [7.0]}).select(XY.point())
+
+    assert_frame_equal(df.select(geo.rotate("point", 33, origin=(5.0, 7.0))), df)
+
+
+def test_turning_about_x_through_an_origin(coords: pl.DataFrame) -> None:
+    """About the x axis through (0, 1, 1), (x, y, z) becomes (x, 1 - (z - 1), 1 + (y - 1))."""
+    df = coords.select(XYZM.point())
+    out = df.select(geo.rotate("point", 90, axis="x", origin=(0.0, 1.0, 1.0)))
+
+    expected = coordinates(df).with_columns(y=2 - pl.col("z"), z=pl.col("y"))
+    assert_frame_equal(coordinates(out), expected, check_exact=True)
+
+
+def test_a_two_dimensional_origin_is_at_z_zero(coords: pl.DataFrame) -> None:
+    df = coords.select(XYZ.point())
+
+    assert_frame_equal(
+        df.select(geo.rotate("point", 30, axis="y", origin=(2.0, 3.0))),
+        df.select(geo.rotate("point", 30, axis="y", origin=(2.0, 3.0, 0.0))),
+    )
 
 
 def test_every_vertex_of_every_ring_turns(
@@ -156,6 +194,10 @@ def test_the_namespace_forwards(line_coords: pl.DataFrame) -> None:
     df = XYZ.lines(line_coords)
 
     assert_frame_equal(
-        line_coordinates(df.select(gpl.col("line").geo.rotate(0.25, "pi", "x"))),
-        line_coordinates(df.select(geo.rotate("line", 45, axis="x"))),
+        line_coordinates(
+            df.select(gpl.col("line").geo.rotate(0.25, "pi", "x", (1.0, 2.0, 3.0)))
+        ),
+        line_coordinates(
+            df.select(geo.rotate("line", 45, axis="x", origin=(1.0, 2.0, 3.0)))
+        ),
     )

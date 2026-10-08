@@ -368,7 +368,7 @@ Later goals:
 
 - [x] Area
 - [x] Length
-- [ ] getters for coordinates (z/m)
+- [x] getters for coordinates (z/m)
 - [ ] CRS: opaque SRIDs refused for reprojection?
 - [x] is_empty for all geo
 - [ ] validity checking functions
@@ -381,11 +381,12 @@ Later goals:
 
 affine transforms:
 
-- [ ] translate
+- [x] translate
 - [x] rotate
 - [ ] scale
 - [ ] skew
 - [ ] transform (with a matrix)
+- [ ] shift (by a value in a different column)
 
 transfer transforms
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Literal
 
 import polars as pl
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
-def _affine(column: pl.Expr, matrix: tuple[float, ...]) -> pl.Expr:
+def _affine(column: pl.Expr, matrix: Sequence[float]) -> pl.Expr:
     """Transform every position (`x`, `y`, `z`) of a geometry by an affine matrix,
     given row by row as the twelve numbers of
 
@@ -87,29 +87,37 @@ def _cos_sin(degrees: float) -> tuple[float, float]:
 
 
 def _rotate(
-    degrees: float, axis: Literal["x", "y", "z"]
+    degrees: float,
+    axis: Literal["x", "y", "z"],
+    origin: tuple[float, float, float],
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
     cos, sin = _cos_sin(degrees)
     # Counter-clockwise for a positive angle, looking down the axis from its positive end.
     # fmt: off
-    matrix = {
+    rotation = {
         "x": (
-            1,   0,    0,   0,
-            0,   cos, -sin, 0,
-            0,   sin,  cos, 0,
+            (1,    0,    0),
+            (0,    cos, -sin),
+            (0,    sin,  cos),
         ),
         "y": (
-            cos,  0,   sin, 0,
-            0,    1,   0,   0,
-            -sin, 0,   cos, 0,
+            (cos,  0,    sin),
+            (0,    1,    0),
+            (-sin, 0,    cos),
         ),
         "z": (
-            cos, -sin, 0,   0,
-            sin,  cos, 0,   0,
-            0,    0,   1,   0,
+            (cos, -sin,  0),
+            (sin,  cos,  0),
+            (0,    0,    1),
         ),
     }[axis]
     # fmt: on
+    # Turning about `origin` is moving it to (0, 0, 0), turning, and moving it back:
+    # R.(p - origin) + origin, which is R.p + constant offset origin - R.origin.
+    matrix: list[float] = []
+    for row, at in zip(rotation, origin, strict=True):
+        turned = sum(r * o for r, o in zip(row, origin, strict=True))
+        matrix += [*row, at - turned]
 
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         # Turning about `x` or `y` moves positions into and out of `z`,
@@ -129,8 +137,9 @@ def rotate(
     amount: float,
     unit: Literal["deg", "pi"] = "deg",
     axis: Literal["x", "y", "z"] = "z",
+    origin: tuple[float, float] | tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> pl.Expr:
-    """Turn every position of a geometry about an axis through the origin.
+    """Turn every position of a geometry about an axis through `origin`.
 
     `amount` is in degrees, or with `unit="pi"` in multiples of π radians:
     `rotate("shape", 90)` and `rotate("shape", 0.5, unit="pi")` are the same quarter turn.
@@ -142,7 +151,9 @@ def rotate(
     Turning about `x` or `y` needs a geometry with a `z`, and is refused for one without.
     `m`, being a measure, is always carried through untouched.
 
-    The origin is that of the coordinates, `(0, 0, 0)`, not the middle of each geometry.
+    `origin` is the point the axis runs through, `(x, y)` or `(x, y, z)`,
+    by default `(0, 0, 0)`. A `z` left out is 0.
+    It is the same point for every geometry in the column, not the middle of each one.
     Coordinates are turned as they are, in the units of their CRS:
     in longitude/latitude, this does not turn anything on the globe,
     and can leave positions outside of the valid range.
@@ -156,5 +167,9 @@ def rotate(
     if not math.isfinite(amount):
         msg = f"`amount` has to be a finite number, got: {amount!r}"
         raise ValueError(msg)
+    if len(origin) not in (2, 3) or not all(math.isfinite(at) for at in origin):
+        msg = f"`origin` has to be two or three finite numbers, got: {origin!r}"
+        raise ValueError(msg)
     degrees = amount * 180.0 if unit == "pi" else amount
-    return on_geometry(geometry, _rotate(degrees, axis))
+    x, y, *z = origin
+    return on_geometry(geometry, _rotate(degrees, axis, (x, y, z[0] if z else 0.0)))
