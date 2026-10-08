@@ -183,6 +183,7 @@ the comment says when one without a CRS takes a different tier.
 | `z` | 1 | like `x`; only with a `z` | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `m` | 1 | like `x`; only with an `m` | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `is_empty` | 1 | NaN `x` and `y` | 1 | no vertices, or only empty ones | 1 | only empty rings | 1 | no points, or only empty ones | 1 | only empty parts | 1 | only empty polygons |
+| `wrap_longitude` | 1 | needs a geographic CRS | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `to_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `from_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
 | `to_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
@@ -339,8 +340,6 @@ Ready to run!
 Steps P12 to P16 are the same as P7 to P11, but now for a forwarding function.
 
 ## Roadmap
-
-- [ ] Allow conversion of boundingbox to polygon with z/m.
 
 ### Core IO
 

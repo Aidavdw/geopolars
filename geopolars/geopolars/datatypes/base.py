@@ -73,6 +73,13 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         """Whether the metadata names a CRS. Read in Rust, like all metadata."""
         return _rust.declares_crs(self.ext_metadata())
 
+    def _longitude_turn(self) -> float | None:
+        """How far `x` goes in one full turn around the globe, in the CRS's unit:
+        `360.0` for degrees. `None` without a CRS, or if `x` is not a longitude.
+        Asked of PROJ, in Rust.
+        """
+        return _rust.longitude_turn(self.ext_metadata())
+
     def __repr__(self) -> str:
         return type(self).__name__
 

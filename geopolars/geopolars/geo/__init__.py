@@ -33,6 +33,7 @@ from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.wkb import from_wkb, to_wkb
 from geopolars.geo.wkt import from_wkt, to_wkt
+from geopolars.geo.wrap_longitude import wrap_longitude
 
 __all__ = [
     "area",
@@ -67,6 +68,7 @@ __all__ = [
     "to_wkt",
     "translate",
     "validate",
+    "wrap_longitude",
     "x",
     "y",
     "z",

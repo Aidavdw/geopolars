@@ -9,7 +9,18 @@ import pytest
 
 import geopolars as gpl
 from geopolars import geo
-from geopolars.datatypes import BoxXYM, BoxXYZ, BoxXYZM, GeoBox, PolygonXY
+from geopolars.datatypes import (
+    BoxXY,
+    BoxXYM,
+    BoxXYZ,
+    BoxXYZM,
+    GeoBox,
+    GeoPolygon,
+    PolygonXY,
+    PolygonXYM,
+    PolygonXYZ,
+    PolygonXYZM,
+)
 
 
 def _polygons(*bounds: tuple[float | None, ...], crs: str | None = None) -> pl.Series:
@@ -168,17 +179,96 @@ def test_mixed_rows_are_handled_per_row() -> None:
     ]
 
 
-@pytest.mark.parametrize("dtype", [BoxXYZ, BoxXYM, BoxXYZM], ids=str)
-def test_a_box_with_z_or_m_is_refused_at_plan_time(dtype: type[GeoBox]) -> None:
+def _boxes_of(dtype: type[GeoBox], **bounds: list[float]) -> pl.LazyFrame:
     names = list(dtype().ext_storage().to_schema())
-    lf = (
-        pl.LazyFrame({name: [0.0] for name in names})
-        .select(pl.struct(names).ext.to(dtype()).alias("box"))
-        .select(geo.box_to_polygon("box"))
+    return pl.LazyFrame({name: bounds[name] for name in names}).select(
+        pl.struct(names).ext.to(dtype(crs="EPSG:4326")).alias("box")
     )
 
-    with pytest.raises(TypeError, match="cannot hold z or m bounds"):
-        lf.collect_schema()
+
+_XYZM = {
+    "xmin": [0.0],
+    "ymin": [1.0],
+    "zmin": [2.0],
+    "mmin": [3.0],
+    "xmax": [10.0],
+    "ymax": [11.0],
+    "zmax": [12.0],
+    "mmax": [13.0],
+}
+
+
+@pytest.mark.parametrize(
+    ("dtype", "expected"),
+    [
+        (BoxXY, PolygonXY),
+        (BoxXYZ, PolygonXYZ),
+        (BoxXYM, PolygonXYM),
+        (BoxXYZM, PolygonXYZM),
+    ],
+    ids=["xy", "xyz", "xym", "xyzm"],
+)
+def test_the_polygon_has_the_boxs_dimension_and_crs(
+    dtype: type[GeoBox], expected: type[GeoPolygon]
+) -> None:
+    lf = _boxes_of(dtype, **_XYZM).select(geo.box_to_polygon("box"))
+
+    assert lf.collect_schema()["box"] == expected(crs="EPSG:4326")
+    assert lf.collect().schema["box"] == expected(crs="EPSG:4326")
+
+
+def test_z_and_m_follow_x() -> None:
+    """The vertices at xmin take the minima, those at xmax the maxima,
+    so both ends of every range survive."""
+    (polygon,) = (
+        _boxes_of(BoxXYZM, **_XYZM)
+        .select(geo.box_to_polygon("box").ext.storage())
+        .collect()
+        .to_series()
+        .to_list()
+    )
+
+    assert [tuple(vertex.values()) for vertex in polygon[0]] == [
+        (0.0, 1.0, 2.0, 3.0),
+        (10.0, 1.0, 12.0, 13.0),
+        (10.0, 11.0, 12.0, 13.0),
+        (0.0, 11.0, 2.0, 3.0),
+        (0.0, 1.0, 2.0, 3.0),
+    ]
+
+
+@pytest.mark.parametrize("axis", ["z", "m"])
+@pytest.mark.parametrize(
+    ("low", "high"), [(math.inf, -math.inf), (1.0, 0.0)], ids=["inf", "reversed"]
+)
+def test_an_empty_z_or_m_range_gives_an_empty_polygon(
+    axis: str, low: float, high: float
+) -> None:
+    """Only x has the antimeridian exception: any other reversed range holds nothing."""
+    bounds = {**_XYZM, f"{axis}min": [low], f"{axis}max": [high]}
+    out = _boxes_of(BoxXYZM, **bounds).select(geo.box_to_polygon("box")).collect()
+
+    assert out.select(pl.col("box").ext.storage()).item().to_list() == []
+
+
+def test_a_z_box_continues_past_the_antimeridian() -> None:
+    """The turn only moves x: z still follows it."""
+    bounds = {**_XYZM, "xmin": [170.0], "xmax": [-170.0]}
+    (polygon,) = (
+        _boxes_of(BoxXYZ, **bounds)
+        .select(geo.box_to_polygon("box").ext.storage())
+        .collect()
+        .to_series()
+        .to_list()
+    )
+
+    assert [(vertex["x"], vertex["z"]) for vertex in polygon[0]] == [
+        (170.0, 2.0),
+        (190.0, 12.0),
+        (190.0, 12.0),
+        (170.0, 2.0),
+        (170.0, 2.0),
+    ]
 
 
 def test_a_geometry_is_refused_at_plan_time() -> None:

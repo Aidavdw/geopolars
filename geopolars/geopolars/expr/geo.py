@@ -30,6 +30,9 @@ from geopolars.geo.length import length as _length
 # bound directly: `geopolars.geo.mean_coordinate` is the function, not the module.
 from geopolars.geo.mean_coordinate import mean_coordinate as _mean_coordinate
 
+# bound directly: `geopolars.geo.wrap_longitude` is the function, not the module.
+from geopolars.geo.wrap_longitude import wrap_longitude as _wrap_longitude
+
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
@@ -84,6 +87,9 @@ class Geometry:
 
     def box_to_polygon(self) -> pl.Expr:
         return _box_to_polygon(self._expr)
+
+    def wrap_longitude(self, *, skip_crossing: bool = False) -> pl.Expr:
+        return _wrap_longitude(self._expr, skip_crossing=skip_crossing)
 
     def x(self) -> pl.Expr:
         return coordinates.x(self._expr)

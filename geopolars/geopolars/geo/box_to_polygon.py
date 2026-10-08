@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import BoxXY, PolygonXY
+from geopolars.datatypes import GeoPolygon
 from geopolars.geo._dispatch import on_box
 
 if TYPE_CHECKING:
@@ -15,37 +15,45 @@ if TYPE_CHECKING:
 
 
 def _box_to_polygon(column: pl.Expr, box: GeoBox) -> pl.Expr:
-    # FIXME: allow creation of PolygonXYZM or PolygonXYZ or PolygonXYM
-    if not isinstance(box, BoxXY):
-        # A polygon is flat: it has nowhere to keep a range of z or m.
-        msg = (
-            f"expected a `BoxXY`, as a polygon cannot hold z or m bounds, got: {box!r}"
-        )
-        raise TypeError(msg)
-
     bounds = column.ext.storage()
-    xmin, ymin, xmax, ymax = (
-        bounds.struct.field(name) for name in ("xmin", "ymin", "xmax", "ymax")
-    )
-    # The spec writes an empty range as `inf` to `-inf`.
+    dimension = box._dimension
+    low = {axis: bounds.struct.field(f"{axis}min") for axis in dimension}
+    high = {axis: bounds.struct.field(f"{axis}max") for axis in dimension}
+
+    # The spec writes an empty range as `inf` to `-inf`, in any dimension.
     # `xmin > xmax` is otherwise a box crossing the antimeridian;
-    # the exception does not apply to y.
-    empty_x = (xmin > xmax) & ((xmin == float("inf")) | (xmax == float("-inf")))
-    empty = empty_x | (ymin > ymax)
-    crosses_antimeridian = xmin > xmax
+    # the exception does not apply to the other dimensions.
+    crosses_antimeridian = low["x"] > high["x"]
+    empty_x = crosses_antimeridian & (
+        (low["x"] == float("inf")) | (high["x"] == float("-inf"))
+    )
+    empty = pl.any_horizontal(
+        empty_x, *(low[axis] > high[axis] for axis in dimension if axis != "x")
+    )
 
     turn = box._longitude_turn()
     if turn is not None:
         # Continue east past the antimeridian (to 190 rather than -170),
         # so the polygon covers the side the box means.
-        xmax = pl.when(crosses_antimeridian).then(xmax + turn).otherwise(xmax)
+        high["x"] = (
+            pl.when(crosses_antimeridian).then(high["x"] + turn).otherwise(high["x"])
+        )
+
+    def vertex(x: dict[str, pl.Expr], y: dict[str, pl.Expr]) -> pl.Expr:
+        # z and m follow x: the vertices at xmin take every other minimum,
+        # those at xmax every other maximum.
+        # Both bounds survive, and the ring stays flat (a tilted plane).
+        return pl.struct(
+            **{axis: (y if axis == "y" else x)[axis] for axis in dimension}
+        )
 
     # The exterior ring, counter-clockwise and closed.
-    corners = [(xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax), (xmin, ymin)]
-    ring = pl.concat_arr([pl.struct(x=x, y=y) for x, y in corners])
+    corners = [(low, low), (high, low), (high, high), (low, high), (low, low)]
+    ring = pl.concat_arr([vertex(x, y) for x, y in corners])
     # Polars has no elementwise way to wrap a list in another list,
     # so a single ring is reshaped into a list of one ring.
-    storage = PolygonXY._geo_storage
+    polygon_type = GeoPolygon.of_dimension(dimension)
+    storage = polygon_type._geo_storage
     rings = ring.reshape((-1, 1, len(corners))).cast(storage)
 
     polygon = (
@@ -55,19 +63,24 @@ def _box_to_polygon(column: pl.Expr, box: GeoBox) -> pl.Expr:
         # Without a longitude there is no way around: no polygon describes it.
         polygon = polygon.when(crosses_antimeridian).then(None)
     polygon = polygon.otherwise(rings)
-    return polygon.ext.to(PolygonXY._with_metadata_of(box))
+    return polygon.ext.to(polygon_type._with_metadata_of(box))
 
 
 def box_to_polygon(box: IntoExprColumn) -> pl.Expr:
-    """The rectangle a `BoxXY` describes, as a `PolygonXY` with the box's CRS.
+    """The rectangle a box describes, as a polygon with the box's dimension and CRS:
+    `BoxXY` gives a `PolygonXY`, `BoxXYZ` a `PolygonXYZ`, and so on.
 
     The polygon has a single, counter-clockwise exterior ring of five vertices,
     starting and ending at `(xmin, ymin)`.
+    z and m follow x: the two vertices at `xmin` take `zmin` and `mmin`,
+    the two at `xmax` take `zmax` and `mmax`.
+    Both ends of every range survive, and the ring stays flat:
+    a plane tilting from the `xmin` side up to the `xmax` side.
 
     | box                                     | polygon                         |
     |-----------------------------------------|---------------------------------|
     | missing                                 | missing                         |
-    | an empty x or y range (`inf` to `-inf`) | empty (no rings)                |
+    | an empty range in any dimension         | empty (no rings)                |
     | `xmin > xmax`, geographic CRS           | continues past the antimeridian |
     | `xmin > xmax`, any other CRS, or none   | missing                         |
 
@@ -80,7 +93,7 @@ def box_to_polygon(box: IntoExprColumn) -> pl.Expr:
     so a point at -175 is not inside it to them.
     Without a geographic CRS there is no way around, and no polygon describes the box.
 
-    A box with z or m bounds is refused, as a polygon has nowhere to keep them.
+    An empty range is `inf` to `-inf`, or any other reversed range outside of x.
 
     ```python
     df.select(geo.box_to_polygon("extent"))
