@@ -169,14 +169,15 @@ the comment says when one without a CRS takes a different tier.
 | - | - | - | - | - | - | - | - | - | - | - | - | - |
 | `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + geographiclib; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | as list of Polygon |
 | `length` | - | | 3 | PROJ + geographiclib; no CRS: 1 | - | | - | | 3 | as list of LineString | - | |
-| `distance` | 3 | point to point only; PROJ + geographiclib; no CRS: 1 | - | | - | | - | | - | | - | |
+| `distance` | 3 | between 2 points, PROJ + geographiclib; no CRS: 1 | - | | - | | - | | - | | - | |
 | `mean_coordinate` | 1 | returns the point itself | 1 | | 1 | skips each ring's closing coordinate | 1 | | 1 | | 1 | skips each ring's closing coordinate |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
 | `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
-| `z` | 1 | as `x`; only with a `z` | 1 | | 1 | | 1 | | 1 | | 1 | |
-| `m` | 1 | as `x`; only with an `m` | 1 | | 1 | | 1 | | 1 | | 1 | |
+| `z` | 1 | like `x`; only with a `z` | 1 | | 1 | | 1 | | 1 | | 1 | |
+| `m` | 1 | like `x`; only with an `m` | 1 | | 1 | | 1 | | 1 | | 1 | |
+| `is_empty` | 1 | NaN `x` and `y` | 1 | no vertices | 1 | only empty rings | 1 | no points | 1 | only empty parts | 1 | only empty polygons |
 | `to_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `from_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
 | `to_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
@@ -354,7 +355,7 @@ Later goals:
 - [x] Length
 - [ ] getters for coordinates (z/m)
 - [ ] CRS: opaque SRIDs refused for reprojection?
-- [ ] is_empty for all geo
+- [x] is_empty for all geo
 - [ ] validity checking functions
 - [ ] Handling closing of loop consistently for polygon
 - [ ] mean coordinate

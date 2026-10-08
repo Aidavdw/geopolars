@@ -18,6 +18,9 @@ from geopolars.geo.crs import to_crs as _to_crs
 from geopolars.geo.distance import distance as _distance
 from geopolars.geo.distance import distance_squared as _distance_squared
 
+# bound directly: `geopolars.geo.is_empty` is the function, not the module.
+from geopolars.geo.is_empty import is_empty as _is_empty
+
 # bound directly: `geopolars.geo.length` is the function, not the module.
 from geopolars.geo.length import length as _length
 
@@ -72,6 +75,9 @@ class Geometry:
 
     def area(self) -> pl.Expr:
         return _area(self._expr)
+
+    def is_empty(self) -> pl.Expr:
+        return _is_empty(self._expr)
 
     def x(self) -> pl.Expr:
         return coordinates.x(self._expr)

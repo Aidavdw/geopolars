@@ -26,6 +26,7 @@ from geopolars.geo.construct import (
 from geopolars.geo.coordinates import m, x, y, z
 from geopolars.geo.crs import to_crs
 from geopolars.geo.distance import distance, distance_squared
+from geopolars.geo.is_empty import is_empty
 from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.wkb import from_wkb, to_wkb
@@ -37,11 +38,12 @@ __all__ = [
     "distance_squared",
     "from_wkb",
     "from_wkt",
+    "is_empty",
     "length",
-    "m",
     "linestring",
     "linestring_from_columns",
     "linestring_from_vertices",
+    "m",
     "mean_coordinate",
     "multilinestring",
     "multilinestring_from_columns",
