@@ -129,30 +129,25 @@ def test_one_part_with_coordinates_is_enough() -> None:
     assert out["multilinestring"].to_list() == [False, False]
 
 
-def test_a_multipoint_of_only_empty_points_is_empty(dimension: Dimension) -> None:
-    """One non-empty point is enough to make the multipoint non-empty."""
+@pytest.mark.parametrize(
+    ("constructor", "name"),
+    [(geo.linestring, "line"), (geo.multipoint, "multipoint")],
+    ids=["linestring", "multipoint"],
+)
+def test_only_empty_points_is_empty(
+    constructor: object, name: str, dimension: Dimension
+) -> None:
+    """One non-empty point is enough to make the whole non-empty."""
     empty = dict.fromkeys(dimension.coords, math.nan)
     point = dict.fromkeys(dimension.coords, 1.0)
     df = pl.DataFrame(
         {"storage": [[empty], [empty, empty], [empty, point], [point, empty]]},
         schema={"storage": _nested(dimension, 1)},
-    ).select(geo.multipoint("storage").alias("multipoint"))
+    ).select(constructor("storage").alias(name))  # type: ignore[operator]
 
-    out = df.select(geo.is_empty("multipoint"))
+    out = df.select(geo.is_empty(name))
 
-    assert out["multipoint"].to_list() == [True, True, False, False]
-
-
-def test_a_nan_vertex_does_not_empty_a_linestring() -> None:
-    """Only a multipoint's parts are points: a linestring's vertices are not."""
-    nan = {"x": math.nan, "y": math.nan}
-    df = pl.DataFrame({"storage": [[nan]]}, schema={"storage": _nested(XY, 1)}).select(
-        geo.linestring("storage").alias("line")
-    )
-
-    out = df.select(geo.is_empty("line"))
-
-    assert out["line"].to_list() == [False]
+    assert out[name].to_list() == [True, True, False, False]
 
 
 @pytest.mark.parametrize(

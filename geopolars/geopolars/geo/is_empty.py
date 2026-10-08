@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GeoMultiPoint
+from geopolars.datatypes import GeoLineString, GeoMultiPoint
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -30,8 +30,8 @@ def _is_empty(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     storage = column.ext.storage()
     if geometry._nesting == 0:
         return _empty_point(storage)
-    # Stored like a linestring, but its parts are points, which can be empty.
-    if isinstance(geometry, GeoMultiPoint):
+    # Their vertices or parts are points, which can be empty.
+    if isinstance(geometry, (GeoLineString, GeoMultiPoint)):
         return storage.list.eval(_empty_point(pl.element())).list.all()
     return _empty(storage, geometry._nesting)
 
@@ -42,13 +42,13 @@ def is_empty(geometry: IntoExprColumn) -> pl.Expr:
     | in                 | empty when                             |
     |--------------------|----------------------------------------|
     | `Point…`           | `x` and `y` are both NaN               |
-    | `LineString…`      | it has no vertices                     |
+    | `LineString…`      | it has no vertices, or only empty ones |
     | `Polygon…`         | it has no rings, or only empty ones    |
     | `MultiPoint…`      | it has no points, or only empty ones   |
     | `MultiLineString…` | it has no parts, or only empty ones    |
     | `MultiPolygon…`    | it has no polygons, or only empty ones |
 
-    A multipoint whose points are all empty is empty as well,
+    A linestring or multipoint whose points are all empty is empty as well,
     but a single non-empty point makes it non-empty.
     A missing geometry is neither empty nor not: it gives null.
 
