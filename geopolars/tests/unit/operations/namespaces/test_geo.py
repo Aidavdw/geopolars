@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
-from polars.exceptions import ComputeError
 from polars.testing import assert_frame_equal
 
 import geopolars as gpl
@@ -84,28 +83,28 @@ def test_translate_rejects_dz_on_a_point_with_no_z(
 ) -> None:
     df = coords.select(dimension.point())
 
-    with pytest.raises(ComputeError, match="cannot translate by dz"):
+    with pytest.raises(TypeError, match="cannot translate by dz"):
         df.select(geo.translate("point", dx=0.0, dy=0.0, dz=1.0))
 
 
 def test_translate_rejects_dz_at_plan_time(coords: pl.DataFrame) -> None:
     lf = coords.select(XY.point()).lazy()
 
-    with pytest.raises(ComputeError, match="cannot translate by dz"):
+    with pytest.raises(TypeError, match="cannot translate by dz"):
         lf.select(geo.translate("point", dx=0.0, dy=0.0, dz=1.0)).collect_schema()
 
 
 def test_translate_rejects_a_plain_float_column() -> None:
     df = pl.DataFrame({"point": [1.0, 2.0]})
 
-    with pytest.raises(ComputeError, match="expected a `geoarrow.point`"):
+    with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         df.select(geo.translate("point", dx=1.0, dy=1.0))
 
 
 def test_translate_rejects_a_bare_coordinate_struct() -> None:
     df = pl.DataFrame({"point": [{"x": 1.0, "y": 2.0}]})
 
-    with pytest.raises(ComputeError, match="expected a `geoarrow.point`"):
+    with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         df.select(geo.translate("point", dx=1.0, dy=1.0))
 
 
@@ -156,7 +155,7 @@ def test_translate_rejects_dz_on_a_linestring_with_no_z(
 ) -> None:
     df = XY.lines(line_coords)
 
-    with pytest.raises(ComputeError, match="cannot translate by dz"):
+    with pytest.raises(TypeError, match="cannot translate by dz"):
         df.select(geo.translate("line", dx=0.0, dy=0.0, dz=1.0))
 
 
@@ -209,7 +208,7 @@ def test_translate_rejects_dz_on_a_multipoint_with_no_z(
 ) -> None:
     df = XY.multipoints(line_coords)
 
-    with pytest.raises(ComputeError, match="cannot translate by dz"):
+    with pytest.raises(TypeError, match="cannot translate by dz"):
         df.select(geo.translate("multipoint", dx=0.0, dy=0.0, dz=1.0))
 
 
@@ -241,7 +240,7 @@ def test_translate_rejects_dz_on_a_multilinestring_with_no_z(
 ) -> None:
     df = XY.multilinestrings(ring_coords)
 
-    with pytest.raises(ComputeError, match="cannot translate by dz"):
+    with pytest.raises(TypeError, match="cannot translate by dz"):
         df.select(geo.translate("multilinestring", dx=0.0, dy=0.0, dz=1.0))
 
 
@@ -324,7 +323,7 @@ def test_translate_rejects_dz_on_a_multipolygon_with_no_z(
 ) -> None:
     df = XY.multipolygons(multipolygon_coords)
 
-    with pytest.raises(ComputeError, match="cannot translate by dz"):
+    with pytest.raises(TypeError, match="cannot translate by dz"):
         df.select(geo.translate("multipolygon", dx=0.0, dy=0.0, dz=1.0))
 
 
@@ -462,5 +461,5 @@ def test_translate_rejects_a_non_geometry_while_resolving_the_schema() -> None:
     so a bad column is a schema error."""
     lf = pl.LazyFrame({"lon": [1.0]}).select(geo.translate("lon", dx=1.0, dy=1.0))
 
-    with pytest.raises(ComputeError, match="expected a `geoarrow.point`"):
+    with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         lf.collect_schema()

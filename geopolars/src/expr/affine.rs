@@ -5,7 +5,7 @@ use polars::prelude::*;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::map_coords;
+use super::coords::{map_coords, same_geometry};
 use crate::geoarrow::{describe, GeoDimension};
 
 #[derive(Deserialize)]
@@ -46,23 +46,8 @@ fn shift(coords: &Series, dim: GeoDimension, kwargs: &TranslateKwargs) -> Polars
     Ok(out.into_series())
 }
 
-/// `output_type_func_with_kwargs` for `translate`:
-/// the input geometry, as long as there is a z for `dz` to shift.
-fn translated_type(input_fields: &[Field], kwargs: TranslateKwargs) -> PolarsResult<Field> {
-    let field = &input_fields[0];
-    let geo = describe(field.dtype())?;
-
-    // Without this, translating an XY column by dz would quietly do nothing.
-    // Checked here rather than in the kernel, so it fails while the plan is built.
-    polars_ensure!(
-        kwargs.dz == 0.0 || geo.dim.has_z(),
-        SchemaMismatch: "cannot translate by dz: {} has no z coordinate", field.dtype()
-    );
-    Ok(field.clone())
-}
-
 /// See `translate`.
-#[polars_expr(output_type_func_with_kwargs=translated_type)]
+#[polars_expr(output_type_func=same_geometry)]
 fn translate(inputs: &[Series], kwargs: TranslateKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
     let out = map_coords(inputs[0].ext()?.storage(), geo.kind.nesting(), &|coords| {

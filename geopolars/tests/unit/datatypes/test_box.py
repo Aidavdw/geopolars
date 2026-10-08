@@ -112,4 +112,4 @@ def test_a_box_is_not_a_geometry_to_a_native_operation() -> None:
 def test_a_box_is_not_a_geometry_to_a_plugin() -> None:
     """Refused while the plan is built, by the Rust `describe`."""
     with pytest.raises(ComputeError, match=r"got: ext\[box\[xy\]\]"):
-        _boxes(BoxXY).select(geo.translate("box", dx=1, dy=1)).collect_schema()
+        _boxes(BoxXY).select(geo.validate("box")).collect_schema()
