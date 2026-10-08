@@ -29,11 +29,12 @@ pub fn map_coords(
     map_nested(trimmed.as_ref().unwrap_or(storage), nesting, f)
 }
 
-/// For every coordinate `map_coords` hands its kernel, the row of `storage` it is part of.
+/// Where each row of `storage` is among the coordinates `map_coords` hands its kernel:
+/// row `r` is coordinates `bounds[r]..bounds[r + 1]`.
 ///
 /// For a kernel that needs something per geometry (such as the point to rotate it about)
 /// at every one of its coordinates.
-pub fn row_of_each_coordinate(storage: &Series, nesting: u8) -> PolarsResult<Vec<IdxSize>> {
+pub fn coordinate_bounds(storage: &Series, nesting: u8) -> PolarsResult<Vec<i64>> {
     // The same coordinates as `map_coords` hands over: trimmed, and in one chunk,
     // as `apply_to_inner` rechunks every layer.
     let storage = storage.rechunk();
@@ -41,29 +42,22 @@ pub fn row_of_each_coordinate(storage: &Series, nesting: u8) -> PolarsResult<Vec
         .trim_lists_to_normalized_offsets()
         .unwrap_or(storage)
         .rechunk();
-    // Row `r` is made of the items `bounds[r]..bounds[r + 1]` of the current layer.
     let mut bounds: Vec<i64> = (0..=layer.len() as i64).collect();
     for _ in 0..nesting {
         let list = layer.list()?.rechunk();
         let offsets = list.downcast_as_array().offsets();
-        bounds = bounds.iter().map(|&at| offsets[at as usize]).collect();
+        for at in &mut bounds {
+            *at = offsets[*at as usize];
+        }
         layer = list.get_inner();
     }
 
-    let first = bounds.first().copied().unwrap_or(0);
-    let mut rows = Vec::with_capacity((bounds.last().copied().unwrap_or(0) - first) as usize);
-    for (row, part) in bounds.windows(2).enumerate() {
-        rows.extend(std::iter::repeat_n(
-            row as IdxSize,
-            (part[1] - part[0]) as usize,
-        ));
-    }
+    let (first, last) = (bounds[0], bounds[bounds.len() - 1]);
     polars_ensure!(
-        first == 0 && rows.len() == layer.len(),
-        ComputeError: "the rows span coordinates {first}..{}, out of {}",
-        first as usize + rows.len(), layer.len()
+        first == 0 && last as usize == layer.len(),
+        ComputeError: "the rows span coordinates {first}..{last}, out of {}", layer.len()
     );
-    Ok(rows)
+    Ok(bounds)
 }
 
 fn map_nested(
@@ -128,19 +122,14 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn every_coordinate_of_a_slice_knows_its_row() {
+    fn every_row_of_a_slice_knows_its_coordinates() {
         let lines = lists(coords(9), &[2, 3, 4]);
-        assert_eq!(
-            row_of_each_coordinate(&lines.slice(1, 2), 1).unwrap(),
-            [0, 0, 0, 1, 1, 1, 1]
-        );
+        assert_eq!(coordinate_bounds(&lines.slice(1, 2), 1).unwrap(), [0, 3, 7]);
 
         // Three polygons of two rings each, of 2 + 3, 4 + 5 and 6 + 7 coordinates.
         let polygons = lists(lists(coords(27), &[2, 3, 4, 5, 6, 7]), &[2, 2, 2]);
-        let rows = row_of_each_coordinate(&polygons.slice(1, 1), 2).unwrap();
-        assert_eq!(rows, [0; 9]);
-        let rows = row_of_each_coordinate(&polygons, 2).unwrap();
-        assert_eq!(rows, [[0; 5].as_slice(), &[1; 9], &[2; 13]].concat());
+        assert_eq!(coordinate_bounds(&polygons.slice(1, 1), 2).unwrap(), [0, 9]);
+        assert_eq!(coordinate_bounds(&polygons, 2).unwrap(), [0, 5, 14, 27]);
     }
 
     #[test]

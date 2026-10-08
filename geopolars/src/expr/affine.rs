@@ -10,7 +10,7 @@ use polars_arrow::compute::utils::combine_validities_and;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{map_coords, row_of_each_coordinate, same_geometry};
+use super::coords::{coordinate_bounds, map_coords, same_geometry};
 use crate::geoarrow::{describe, GeoDimension, Kind};
 
 /// An affine transformation of the coordinates that are positions (`x`, `y` and `z`),
@@ -237,8 +237,8 @@ fn affine_about(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series>
         at.downcast_as_array().values().as_slice()
     }
     let (ox, oy, oz) = (values(&ox), values(&oy), oz.as_ref().map(values));
-    let rows = (geo.kind.nesting() > 0)
-        .then(|| row_of_each_coordinate(storage, geo.kind.nesting()))
+    let bounds = (geo.kind.nesting() > 0)
+        .then(|| coordinate_bounds(storage, geo.kind.nesting()))
         .transpose()?;
     let axes = if geo.dim.has_z() { 3 } else { 2 };
     let shift = |axis: usize| -> Option<Vec<f64>> {
@@ -257,9 +257,15 @@ fn affine_about(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series>
                 .collect(),
             None => moved.iter().map(|moved| -(moved - offset)).collect(),
         };
-        Some(match &rows {
+        Some(match &bounds {
             None => per_geometry,
-            Some(rows) => rows.iter().map(|&row| per_geometry[row as usize]).collect(),
+            Some(bounds) => {
+                let mut shift = Vec::with_capacity(*bounds.last().unwrap_or(&0) as usize);
+                for (part, value) in bounds.windows(2).zip(per_geometry) {
+                    shift.resize(part[1] as usize, value);
+                }
+                shift
+            }
         })
     };
     let shifts = [0, 1, 2].map(|axis| if axis < axes { shift(axis) } else { None });
