@@ -79,6 +79,11 @@ class Geometry:
 
         return is_empty(self._expr)
 
+    def count_coordinates(self) -> pl.Expr:
+        from geopolars.geo.count_coordinates import count_coordinates
+
+        return count_coordinates(self._expr)
+
     def bounds(self, *, margin_x: float = 0.0, margin_y: float = 0.0) -> pl.Expr:
         from geopolars.geo.bounds import bounds
 

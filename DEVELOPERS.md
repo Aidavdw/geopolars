@@ -184,6 +184,7 @@ the comment says when one without a CRS takes a different tier.
 | `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
 | `z` | 1 | like `x`; only with a `z` | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `m` | 1 | like `x`; only with an `m` | 1 | | 1 | | 1 | | 1 | | 1 | |
+| `count_coordinates` | 1 | `0` if empty | 1 | | 1 | skips ring's closing coord | 1 | | 1 | | 1 | skips ring's closing coord |
 | `is_empty` | 1 | NaN `x` and `y` | 1 | no verts or only empty | 1 | only empty rings | 1 | no verts, or only empty | 1 | only empty parts | 1 | only empty polygons |
 | `wrap_longitude` | 1 | needs geographic CRS | 1 | | 1 | | 1 | | 1 | | 1 | |
 | `to_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | | 2 | | 2 | |

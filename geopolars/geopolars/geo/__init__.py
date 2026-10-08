@@ -27,6 +27,7 @@ from geopolars.geo.construct import (
     validate,
 )
 from geopolars.geo.coordinates import m, x, y, z
+from geopolars.geo.count_coordinates import count_coordinates
 from geopolars.geo.crs import set_crs, to_crs
 from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.is_empty import is_empty
@@ -41,6 +42,7 @@ __all__ = [
     "bounds",
     "box",
     "box_to_polygon",
+    "count_coordinates",
     "distance",
     "distance_squared",
     "from_wkb",
