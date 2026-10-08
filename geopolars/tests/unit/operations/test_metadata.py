@@ -23,6 +23,7 @@ KEEPS_METADATA: dict[str, Callable[[str], pl.Expr]] = {
     "translate": lambda name: geo.translate(name, 1.0, -1.0),
     "rotate": lambda name: geo.rotate(name, 30),
     "skew": lambda name: geo.skew(name, 30, -15),
+    "scale": lambda name: geo.scale(name, 2.0, 0.5, origin=(1.0, 1.0)),
 }
 
 

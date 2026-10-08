@@ -57,6 +57,17 @@ class ExprGeoNameSpace:
     ) -> pl.Expr:
         return affine.skew(self._expr, xs=xs, ys=ys, unit=unit, origin=origin)
 
+    def scale(
+        self,
+        xfact: float = 1.0,
+        yfact: float = 1.0,
+        zfact: float = 1.0,
+        origin: tuple[float, float] | tuple[float, float, float] = (0.0, 0.0, 0.0),
+    ) -> pl.Expr:
+        return affine.scale(
+            self._expr, xfact=xfact, yfact=yfact, zfact=zfact, origin=origin
+        )
+
     def set_crs(self, crs: str, *, force: bool = False) -> pl.Expr:
         from geopolars.geo.crs import set_crs
 

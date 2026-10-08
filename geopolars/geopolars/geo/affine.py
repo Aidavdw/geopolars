@@ -256,3 +256,59 @@ def skew(
     # fmt: on
     matrix = _about(shear, _origin(origin))
     return on_geometry(geometry, lambda column, _: _affine(column, matrix))
+
+
+def _scale(
+    xfact: float, yfact: float, zfact: float, origin: tuple[float, float, float]
+) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+    # fmt: off
+    stretch = (
+        (xfact, 0,     0),
+        (0,     yfact, 0),
+        (0,     0,     zfact),
+    )
+    # fmt: on
+    matrix = _about(stretch, origin)
+
+    def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
+        # Without this, scaling an XY column by zfact would quietly do nothing.
+        if zfact != 1.0 and "z" not in geometry._dimension:
+            msg = f"cannot scale by zfact: {geometry!r} has no z coordinate"
+            raise TypeError(msg)
+        return _affine(column, matrix)
+
+    return build
+
+
+def scale(
+    geometry: IntoExprColumn,
+    xfact: float = 1.0,
+    yfact: float = 1.0,
+    zfact: float = 1.0,
+    origin: Origin = (0.0, 0.0, 0.0),
+) -> pl.Expr:
+    """Stretch every position of a geometry away from (or towards) `origin`,
+    by a factor along each axis:
+
+    ```text
+    x' = origin_x + xfact·(x - origin_x)
+    ```
+
+    and the same for `y` and `z`.
+    A factor above 1 stretches, one between 0 and 1 shrinks,
+    a negative one mirrors as well, and 0 flattens the geometry onto `origin` along that axis.
+
+    A `zfact` other than 1 is refused for a geometry with no `z`,
+    rather than silently ignored.
+    `m`, being a measure, is always carried through untouched.
+
+    `origin` is the point that stays where it is, `(x, y)` or `(x, y, z)`,
+    by default `(0, 0, 0)`. A `z` left out is 0.
+    It is the same point for every geometry in the column, not the middle of each one.
+    Coordinates are scaled as they are, in the units of their CRS.
+    """
+    for name, factor in (("xfact", xfact), ("yfact", yfact), ("zfact", zfact)):
+        if not math.isfinite(factor):
+            msg = f"`{name}` has to be a finite number, got: {factor!r}"
+            raise ValueError(msg)
+    return on_geometry(geometry, _scale(xfact, yfact, zfact, _origin(origin)))
