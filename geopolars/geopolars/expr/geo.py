@@ -8,35 +8,6 @@ import polars as pl
 
 from geopolars.geo import affine, construct, coordinates, wkb, wkt
 
-# bound directly: `geopolars.geo.area` is the function, not the module.
-from geopolars.geo.area import area as _area
-
-# bound directly: `geopolars.geo.bounds` is the function, not the module.
-from geopolars.geo.bounds import bounds as _bounds
-
-# bound directly: `geopolars.geo.box_to_polygon` is the function, not the module.
-from geopolars.geo.box_to_polygon import box_to_polygon as _box_to_polygon
-
-# bound directly: the method's `crs` argument would shadow the module.
-from geopolars.geo.crs import set_crs as _set_crs
-from geopolars.geo.crs import to_crs as _to_crs
-
-# bound directly: `geopolars.geo.distance` is the function, not the module.
-from geopolars.geo.distance import distance as _distance
-from geopolars.geo.distance import distance_squared as _distance_squared
-
-# bound directly: `geopolars.geo.is_empty` is the function, not the module.
-from geopolars.geo.is_empty import is_empty as _is_empty
-
-# bound directly: `geopolars.geo.length` is the function, not the module.
-from geopolars.geo.length import length as _length
-
-# bound directly: `geopolars.geo.mean_coordinate` is the function, not the module.
-from geopolars.geo.mean_coordinate import mean_coordinate as _mean_coordinate
-
-# bound directly: `geopolars.geo.wrap_longitude` is the function, not the module.
-from geopolars.geo.wrap_longitude import wrap_longitude as _wrap_longitude
-
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
@@ -69,39 +40,61 @@ class Geometry:
         return affine.translate(self._expr, dx=dx, dy=dy, dz=dz)
 
     def set_crs(self, crs: str, *, force: bool = False) -> pl.Expr:
-        return _set_crs(self._expr, crs, force=force)
+        from geopolars.geo.crs import set_crs
+
+        return set_crs(self._expr, crs, force=force)
 
     def to_crs(self, crs: str) -> pl.Expr:
-        return _to_crs(self._expr, crs)
+        from geopolars.geo.crs import to_crs
+
+        return to_crs(self._expr, crs)
 
     def mean_coordinate(self) -> pl.Expr:
-        return _mean_coordinate(self._expr)
+        from geopolars.geo.mean_coordinate import mean_coordinate
+
+        return mean_coordinate(self._expr)
 
     def distance(self, other: IntoExprColumn) -> pl.Expr:
-        return _distance(self._expr, other)
+        from geopolars.geo.distance import distance
+
+        return distance(self._expr, other)
 
     def distance_squared(self, other: IntoExprColumn) -> pl.Expr:
-        return _distance_squared(self._expr, other)
+        from geopolars.geo.distance import distance_squared
+
+        return distance_squared(self._expr, other)
 
     def length(self) -> pl.Expr:
-        return _length(self._expr)
+        from geopolars.geo.length import length
+
+        return length(self._expr)
 
     def area(self) -> pl.Expr:
-        return _area(self._expr)
+        from geopolars.geo.area import area
+
+        return area(self._expr)
 
     def is_empty(self) -> pl.Expr:
-        return _is_empty(self._expr)
+        from geopolars.geo.is_empty import is_empty
+
+        return is_empty(self._expr)
 
     def bounds(self, *, margin_x: float = 0.0, margin_y: float = 0.0) -> pl.Expr:
-        return _bounds(self._expr, margin_x=margin_x, margin_y=margin_y)
+        from geopolars.geo.bounds import bounds
+
+        return bounds(self._expr, margin_x=margin_x, margin_y=margin_y)
 
     def box_to_polygon(self) -> pl.Expr:
-        return _box_to_polygon(self._expr)
+        from geopolars.geo.box_to_polygon import box_to_polygon
+
+        return box_to_polygon(self._expr)
 
     def wrap_longitude(
         self, *, start: float | None = None, skip_crossing: bool = False
     ) -> pl.Expr:
-        return _wrap_longitude(self._expr, start=start, skip_crossing=skip_crossing)
+        from geopolars.geo.wrap_longitude import wrap_longitude
+
+        return wrap_longitude(self._expr, start=start, skip_crossing=skip_crossing)
 
     def x(self) -> pl.Expr:
         return coordinates.x(self._expr)
