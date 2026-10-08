@@ -248,7 +248,7 @@ These do not need to know the exact data type here.
 The rust side will do the switching inside of their tier 2 or tier 3 kernel.
 
 For tier 2, the arguments are packed into `kwargs` (A7),
-which the rust side can later deserialize into a struct like `TranslateKwargs`.
+which the rust side can later deserialize into a struct like `AffineMatrix`.
 Tier 3 works basically the same way here, with kwargs for what the external library needs (A9),
 (e.g. the target CRS of `to_crs`).
 

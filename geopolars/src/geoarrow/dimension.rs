@@ -68,7 +68,6 @@ impl GeoDimension {
     }
 
     /// `true` if this dimension has an `m` (measure) value.
-    #[allow(dead_code)]
     pub const fn has_m(self) -> bool {
         matches!(self, GeoDimension::XYM | GeoDimension::XYZM)
     }

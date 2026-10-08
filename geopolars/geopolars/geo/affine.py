@@ -16,6 +16,28 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
+def _affine(column: pl.Expr, matrix: tuple[float, ...]) -> pl.Expr:
+    """Transform every position (`x`, `y`, `z`) of a geometry by an affine matrix,
+    given row by row as the twelve numbers of
+
+    ```text
+    | x' |   | a  b  c  xoff |   | x |
+    | y' | = | d  e  f  yoff | · | y |
+    | z' |   | g  h  i  zoff |   | z |
+                                 | 1 |
+    ```
+
+    A geometry without a `z` reads it as 0 and has no `z'`.
+    """
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[column],
+        function_name="affine",
+        is_elementwise=True,
+        kwargs={"coefficients": [float(c) for c in matrix]},
+    )
+
+
 def _translate(
     dx: float, dy: float, dz: float
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
@@ -24,13 +46,13 @@ def _translate(
         if dz != 0.0 and "z" not in geometry._dimension:
             msg = f"cannot translate by dz: {geometry!r} has no z coordinate"
             raise TypeError(msg)
-        return register_plugin_function(
-            plugin_path=LIB,
-            args=[column],
-            function_name="translate",
-            is_elementwise=True,
-            kwargs={"dx": dx, "dy": dy, "dz": dz},
-        )
+        # fmt: off
+        return _affine(column, (
+            1, 0, 0, dx,
+            0, 1, 0, dy,
+            0, 0, 1, dz,
+        ))
+        # fmt: on
 
     return build
 
