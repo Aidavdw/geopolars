@@ -71,7 +71,11 @@ class ExprGeoNameSpace:
         xfact: float = 1.0,
         yfact: float = 1.0,
         zfact: float = 1.0,
-        origin: tuple[float, float] | tuple[float, float, float] = (0.0, 0.0, 0.0),
+        origin: tuple[float, float] | tuple[float, float, float] | IntoExprColumn = (
+            0.0,
+            0.0,
+            0.0,
+        ),
     ) -> pl.Expr:
         return affine.scale(
             self._expr, xfact=xfact, yfact=yfact, zfact=zfact, origin=origin

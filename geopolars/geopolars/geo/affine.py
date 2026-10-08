@@ -310,24 +310,48 @@ def skew(
     return on_geometry(geometry, lambda column, _: _affine(column, matrix))
 
 
-def _scale(
-    xfact: float, yfact: float, zfact: float, origin: tuple[float, float, float]
-) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+def _stretch(
+    xfact: float, yfact: float, zfact: float
+) -> tuple[tuple[float, float, float], ...]:
     # fmt: off
-    stretch = (
+    return (
         (xfact, 0,     0),
         (0,     yfact, 0),
         (0,     0,     zfact),
     )
     # fmt: on
-    matrix = _about(stretch, origin)
+
+
+def _can_scale(zfact: float, geometry: GeoArrowType) -> None:
+    # Without this, scaling an XY column by zfact would quietly do nothing.
+    if zfact != 1.0 and "z" not in geometry._dimension:
+        msg = f"cannot scale by zfact: {geometry!r} has no z coordinate"
+        raise TypeError(msg)
+
+
+def _scale(
+    xfact: float, yfact: float, zfact: float, origin: tuple[float, float, float]
+) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+    matrix = _about(_stretch(xfact, yfact, zfact), origin)
 
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-        # Without this, scaling an XY column by zfact would quietly do nothing.
-        if zfact != 1.0 and "z" not in geometry._dimension:
-            msg = f"cannot scale by zfact: {geometry!r} has no z coordinate"
-            raise TypeError(msg)
+        _can_scale(zfact, geometry)
         return _affine(column, matrix)
+
+    return build
+
+
+def _scale_about(
+    xfact: float, yfact: float, zfact: float
+) -> Callable[[pl.Expr, GeoArrowType, pl.Expr, GeoArrowType], pl.Expr]:
+    stretch = _stretch(xfact, yfact, zfact)
+
+    def build(
+        column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
+    ) -> pl.Expr:
+        _can_scale(zfact, geometry)
+        _origin_points(points)
+        return _affine_about(column, origin, stretch)
 
     return build
 
@@ -337,7 +361,7 @@ def scale(
     xfact: float = 1.0,
     yfact: float = 1.0,
     zfact: float = 1.0,
-    origin: Origin = (0.0, 0.0, 0.0),
+    origin: Origin | IntoExprColumn = (0.0, 0.0, 0.0),
 ) -> pl.Expr:
     """Stretch every position of a geometry away from (or towards) `origin`,
     by a factor along each axis:
@@ -354,15 +378,23 @@ def scale(
     rather than silently ignored.
     `m`, being a measure, is always carried through untouched.
 
-    `origin` is the point that stays where it is, `(x, y)` or `(x, y, z)`,
-    by default `(0, 0, 0)`. A `z` left out is 0.
-    It is the same point for every geometry in the column, not the middle of each one.
+    `origin` is the point that stays where it is, by default `(0, 0, 0)`. It is either
+    - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
+    - a `geoarrow.point` column (or a single point) with a point for every geometry,
+      such as `geo.mean_coordinate("shape")` to scale each geometry about its own middle.
+      A geometry whose origin is missing comes out missing.
+      An origin column that declares a CRS has to declare the geometry's.
+
+    A `z` left out is 0.
     Coordinates are scaled as they are, in the units of their CRS.
     """
     for name, factor in (("xfact", xfact), ("yfact", yfact), ("zfact", zfact)):
         if not math.isfinite(factor):
             msg = f"`{name}` has to be a finite number, got: {factor!r}"
             raise ValueError(msg)
+    # A column of points, rather than one point given as numbers.
+    if isinstance(origin, str | pl.Expr | pl.Series):
+        return on_geometry_pair(geometry, origin, _scale_about(xfact, yfact, zfact))
     return on_geometry(geometry, _scale(xfact, yfact, zfact, _origin(origin)))
 
 

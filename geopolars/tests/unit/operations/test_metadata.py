@@ -27,6 +27,9 @@ KEEPS_METADATA: dict[str, Callable[[str], pl.Expr]] = {
     ),
     "skew": lambda name: geo.skew(name, 30, -15),
     "scale": lambda name: geo.scale(name, 2.0, 0.5, origin=(1.0, 1.0)),
+    "scale about a column": lambda name: geo.scale(
+        name, 2.0, 0.5, origin=geo.mean_coordinate(name)
+    ),
     "affine_transform": lambda name: geo.affine_transform(name, [1, 2, 3, 4, 5, 6]),
 }
 
