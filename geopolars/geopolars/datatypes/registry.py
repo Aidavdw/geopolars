@@ -23,7 +23,7 @@ from geopolars.datatypes.wkb import Wkb
 from geopolars.datatypes.wkt import Wkt
 
 # Mirrors `Kind::ALL`
-GEOMETRIES: tuple[type[GeoArrowType], ...] = (
+GEOMETRY_DTYPES: tuple[type[GeoArrowType], ...] = (
     PointType,
     LineStringType,
     PolygonType,
@@ -32,7 +32,7 @@ GEOMETRIES: tuple[type[GeoArrowType], ...] = (
     MultiPolygonType,
 )
 
-for _geometry in GEOMETRIES:
+for _geometry in GEOMETRY_DTYPES:
     pl.register_extension_type(_geometry._extension_name, _geometry)
 
 pl.register_extension_type(BoxType._extension_name, BoxType)

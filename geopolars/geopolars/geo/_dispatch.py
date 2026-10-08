@@ -20,20 +20,20 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GEOMETRIES, BoxType, GeoArrowType
+from geopolars.datatypes import GEOMETRY_DTYPES, BoxType, GeoArrowType
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
 
 # analog of `Kind::ALL` x `Dimension::ALL` on the Rust side.
 GEOMETRY_TYPES: tuple[type[GeoArrowType], ...] = tuple(
-    concrete for geometry in GEOMETRIES for concrete in geometry.dimensions()
+    concrete for geometry in GEOMETRY_DTYPES for concrete in geometry.dimensions()
 )
 
 
 def _names() -> str:
     """The extension names, for an error message. Mirrors `Kind::names`."""
-    names = [f"`{geometry._extension_name}`" for geometry in GEOMETRIES]
+    names = [f"`{geometry._extension_name}`" for geometry in GEOMETRY_DTYPES]
     return f"{', '.join(names[:-1])} or {names[-1]}"
 
 

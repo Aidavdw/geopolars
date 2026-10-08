@@ -13,7 +13,9 @@ if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
 
 
-def translate(expr: IntoExprColumn, dx: float, dy: float, dz: float = 0.0) -> pl.Expr:
+def translate(
+    geometry: IntoExprColumn, dx: float, dy: float, dz: float = 0.0
+) -> pl.Expr:
     """Shift every coordinate of a geometry by a constant offset.
 
     Works on any geometry, of any dimension. A non-zero `dz` is rejected for a
@@ -22,7 +24,7 @@ def translate(expr: IntoExprColumn, dx: float, dy: float, dz: float = 0.0) -> pl
     """
     return register_plugin_function(
         plugin_path=LIB,
-        args=[expr],
+        args=[geometry],
         function_name="translate",
         is_elementwise=True,
         kwargs={"dx": dx, "dy": dy, "dz": dz},

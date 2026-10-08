@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
-def set_crs(expr: IntoExprColumn, crs: str, *, force: bool = False) -> pl.Expr:
+def set_crs(geometry: IntoExprColumn, crs: str, *, force: bool = False) -> pl.Expr:
     """Declare the CRS the coordinates are in, without moving them.
 
     `crs` is anything PROJ accepts:
@@ -39,10 +39,10 @@ def set_crs(expr: IntoExprColumn, crs: str, *, force: bool = False) -> pl.Expr:
             raise ValueError(msg)
         return column.ext.storage().ext.to(geometry._with_crs(crs))
 
-    return on_geometry(expr, build)
+    return on_geometry(geometry, build)
 
 
-def to_crs(expr: IntoExprColumn, crs: str) -> pl.Expr:
+def to_crs(geometry: IntoExprColumn, crs: str) -> pl.Expr:
     """Reproject every coordinate from the column's CRS to `crs`.
 
     `crs` is anything PROJ accepts:
@@ -52,7 +52,7 @@ def to_crs(expr: IntoExprColumn, crs: str) -> pl.Expr:
     """
     return register_plugin_function(
         plugin_path=LIB,
-        args=[expr],
+        args=[geometry],
         function_name="to_crs",
         is_elementwise=True,
         kwargs={"to": crs},

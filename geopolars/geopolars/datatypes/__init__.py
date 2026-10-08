@@ -49,12 +49,12 @@ from geopolars.datatypes.polygon import (
     PolygonXYZ,
     PolygonXYZM,
 )
-from geopolars.datatypes.registry import GEOMETRIES
+from geopolars.datatypes.registry import GEOMETRY_DTYPES
 from geopolars.datatypes.wkb import Wkb
 from geopolars.datatypes.wkt import Wkt
 
 __all__ = [
-    "GEOMETRIES",
+    "GEOMETRY_DTYPES",
     "BoxType",
     "BoxXY",
     "BoxXYM",
