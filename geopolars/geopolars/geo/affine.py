@@ -266,12 +266,24 @@ def rotate(
     return on_geometry(geometry, _rotate(degrees, axis, _origin(origin)))
 
 
+def _skew_about(
+    shear: tuple[tuple[float, float, float], ...],
+) -> Callable[[pl.Expr, GeoArrowType, pl.Expr, GeoArrowType], pl.Expr]:
+    def build(
+        column: pl.Expr, _: GeoArrowType, origin: pl.Expr, points: GeoArrowType
+    ) -> pl.Expr:
+        _origin_points(points)
+        return _affine_about(column, origin, shear)
+
+    return build
+
+
 def skew(
     geometry: IntoExprColumn,
     xs: float = 0.0,
     ys: float = 0.0,
     unit: Literal["deg", "pi"] = "deg",
-    origin: Origin = (0.0, 0.0, 0.0),
+    origin: Origin | IntoExprColumn = (0.0, 0.0, 0.0),
 ) -> pl.Expr:
     """Shear every position of a geometry in the plane, by an angle along each axis.
 
@@ -293,8 +305,13 @@ def skew(
     This works on any geometry: `z` stays as it is,
     and `m`, being a measure, is always carried through untouched.
 
-    `origin` is the point that stays where it is, `(x, y)` or `(x, y, z)`.
-    It is the same point for every geometry in the column, not the middle of each one.
+    `origin` is the point that stays where it is, by default `(0, 0, 0)`. It is either
+    - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
+    - a `geoarrow.point` column (or a single point) with a point for every geometry,
+      such as `geo.mean_coordinate("shape")` to skew each geometry about its own middle.
+      A geometry whose origin is missing comes out missing.
+      An origin column that declares a CRS has to declare the geometry's.
+
     Coordinates are sheared as they are, in the units of their CRS.
     """
     tan_x = _tan(_degrees(xs, unit, "xs"), "xs")
@@ -306,6 +323,9 @@ def skew(
         (0,     0,     1),
     )
     # fmt: on
+    # A column of points, rather than one point given as numbers.
+    if isinstance(origin, str | pl.Expr | pl.Series):
+        return on_geometry_pair(geometry, origin, _skew_about(shear))
     matrix = _about(shear, _origin(origin))
     return on_geometry(geometry, lambda column, _: _affine(column, matrix))
 

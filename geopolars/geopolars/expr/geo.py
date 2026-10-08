@@ -62,7 +62,11 @@ class ExprGeoNameSpace:
         xs: float = 0.0,
         ys: float = 0.0,
         unit: Literal["deg", "pi"] = "deg",
-        origin: tuple[float, float] | tuple[float, float, float] = (0.0, 0.0, 0.0),
+        origin: tuple[float, float] | tuple[float, float, float] | IntoExprColumn = (
+            0.0,
+            0.0,
+            0.0,
+        ),
     ) -> pl.Expr:
         return affine.skew(self._expr, xs=xs, ys=ys, unit=unit, origin=origin)
 

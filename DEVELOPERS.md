@@ -178,7 +178,7 @@ the comment says when one without a CRS takes a different tier.
 | `mean_coordinate` | 1 | returns the point | 1 | | 1 | skips ring's closing coord | 1 | | 1 | | 1 | skips ring's closing coord |
 | `translate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `rotate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `skew` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
+| `skew` | 2 | `origin` may be a point column | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `scale` | 2 | `zfact`: needs a `z`; `origin` may be a point column | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `affine_transform` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
 | `bounds` | 1 | repeats its coordinate | 1 | | 1 | | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part |
@@ -392,7 +392,7 @@ affine transforms:
 - [ ] shift (by a value in a different column)
 - [x] rotate around coordinate from another column
 - [x] scale around coordinate from another column
-- [ ] skew around a coordinate from another column
+- [x] skew around a coordinate from another column
 - [ ] rotate around own centroid (can use the above)
 - [ ] scale around own centroid (can use the above)
 - [ ] skew around own centroid (can use the above)

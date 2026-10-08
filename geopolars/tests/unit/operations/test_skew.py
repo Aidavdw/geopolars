@@ -160,3 +160,85 @@ def test_the_namespace_forwards(coords: pl.DataFrame) -> None:
         df.select(gpl.col("point").geo.skew(0.1, -0.2, "pi", (1.0, 2.0))),
         df.select(geo.skew("point", xs=18, ys=-36, origin=(1.0, 2.0))),
     )
+
+
+def _origins(x: float, y: float) -> pl.Expr:
+    """The same point for every row, as a column."""
+    return geo.point(pl.lit(x), pl.lit(y))
+
+
+@pytest.mark.parametrize(("xs", "ys"), [(45, 0), (30, -10)], ids=["exact", "rounded"])
+def test_a_column_of_one_origin_is_the_same_as_its_numbers(
+    ring_coords: pl.DataFrame, dimension: Dimension, xs: float, ys: float
+) -> None:
+    """The kernel that takes an origin per row, against the one that takes one origin."""
+    df = dimension.polygons(ring_coords).with_columns(origin=_origins(1.5, -2.0))
+
+    assert_frame_equal(
+        df.select(geo.skew("polygon", xs, ys, origin="origin")),
+        df.select(geo.skew("polygon", xs, ys, origin=(1.5, -2.0))),
+        check_exact=True,
+    )
+
+
+def test_each_geometry_skews_about_its_own_origin(
+    ring_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    df = dimension.polygons(ring_coords).with_columns(
+        origin=geo.mean_coordinate("polygon")
+    )
+    out = df.select(geo.skew("polygon", 30, -10, origin="origin"))
+
+    for row, origin in enumerate(df["origin"].ext.storage().to_list()):
+        alone = df.slice(row, 1).select(
+            geo.skew("polygon", 30, -10, origin=(origin["x"], origin["y"]))
+        )
+        assert_frame_equal(out.slice(row, 1), alone, check_exact=True)
+
+
+def test_skewing_about_its_own_middle_keeps_the_middle(
+    ring_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    df = dimension.polygons(ring_coords)
+    middle = geo.mean_coordinate("polygon")
+    skewed = df.select(geo.skew("polygon", 30, -10, origin=middle))
+
+    assert_frame_equal(
+        coordinates(skewed.select(middle), "polygon"),
+        coordinates(df.select(middle), "polygon"),
+    )
+
+
+def test_points_skew_about_a_single_origin(coords: pl.DataFrame) -> None:
+    df = coords.select(XY.point())
+
+    assert_frame_equal(
+        df.select(geo.skew("point", 45, -45, origin=_origins(1.0, 2.0))),
+        df.select(geo.skew("point", 45, -45, origin=(1.0, 2.0))),
+        check_exact=True,
+    )
+
+
+def test_a_missing_origin_gives_a_missing_geometry(line_coords: pl.DataFrame) -> None:
+    df = XY.lines(line_coords).with_columns(
+        origin=pl.when(pl.int_range(pl.len()) == 0).then(geo.mean_coordinate("line"))
+    )
+    out = df.select(geo.skew("line", 30, origin="origin"))
+
+    assert out["line"].is_null().to_list() == [False, True]
+
+
+def test_an_origin_column_has_to_hold_points(line_coords: pl.DataFrame) -> None:
+    lf = XY.lines(line_coords).lazy()
+
+    with pytest.raises(TypeError, match="`origin` has to be a `geoarrow.point`"):
+        lf.select(geo.skew("line", 30, origin="line")).collect_schema()
+
+
+def test_the_namespace_forwards_an_origin_column(line_coords: pl.DataFrame) -> None:
+    df = XY.lines(line_coords).with_columns(origin=geo.mean_coordinate("line"))
+
+    assert_frame_equal(
+        df.select(gpl.col("line").geo.skew(30, -10, origin="origin")),
+        df.select(geo.skew("line", 30, -10, origin="origin")),
+    )
