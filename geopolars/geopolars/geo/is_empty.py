@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
+from geopolars.datatypes import GeoMultiPoint
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -21,29 +22,34 @@ def _empty(parts: pl.Expr, layers: int) -> pl.Expr:
     return parts.list.eval(_empty(pl.element(), layers - 1)).list.all()
 
 
+def _empty_point(point: pl.Expr) -> pl.Expr:
+    return point.struct.field("x").is_nan() & point.struct.field("y").is_nan()
+
+
 def _is_empty(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     storage = column.ext.storage()
-    # A point always stores one coordinate,
-    # so GeoArrow spells the empty point as a NaN `x` and `y`.
     if geometry._nesting == 0:
-        return storage.struct.field("x").is_nan() & storage.struct.field("y").is_nan()
+        return _empty_point(storage)
+    # Stored like a linestring, but its parts are points, which can be empty.
+    if isinstance(geometry, GeoMultiPoint):
+        return storage.list.eval(_empty_point(pl.element())).list.all()
     return _empty(storage, geometry._nesting)
 
 
 def is_empty(geometry: IntoExprColumn) -> pl.Expr:
-    """Whether a geometry is empty: it has no coordinates at all.
+    """Whether a geometry is empty: it has no coordinates, or only empty points.
 
     | in                 | empty when                             |
     |--------------------|----------------------------------------|
     | `Point…`           | `x` and `y` are both NaN               |
     | `LineString…`      | it has no vertices                     |
     | `Polygon…`         | it has no rings, or only empty ones    |
-    | `MultiPoint…`      | it has no points                       |
+    | `MultiPoint…`      | it has no points, or only empty ones   |
     | `MultiLineString…` | it has no parts, or only empty ones    |
     | `MultiPolygon…`    | it has no polygons, or only empty ones |
 
-    A NaN point inside a multipoint is a point like any other,
-    not an empty one.
+    A multipoint whose points are all empty is empty as well,
+    but a single non-empty point makes it non-empty.
     A missing geometry is neither empty nor not: it gives null.
 
     ```python
