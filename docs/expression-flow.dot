@@ -1,10 +1,10 @@
-// What happens in GeoPolars when an expression is used: once when it is added
-// to a query, and once when Polars plans that query.
-// Explained step by step in DEVELOPERS.md, under "Typical flow".
+// Visualisation of a typical expression call.
+// See DEVELOPERS.md for a text companion of this ^-^
 //
 // Render with: dot -Tsvg docs/expression-flow.dot -o expression-flow.svg
 //
-// Only our own code is drawn. Whatever Polars does in between is an edge.
+// This diagram contains only code that is part of this plugin.
+// Whatever Polars does in between is left out.
 // Blue runs in our Python package, orange in our compiled library.
 // A red edge crosses the FFI.
 

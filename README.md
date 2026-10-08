@@ -8,7 +8,7 @@ so stay tuned!
 ## Developer Documentation
 
 If you are interested in the design paradigm and architecture used for this plugin,
-or are curious about developing GeoPolars further, read [DEVELOPERS.md](DEVELOPERS.md).
+or are curious about developing GeoPolars further, read [DEVELOPERS.md](docs/DEVELOPERS.md).
 
 ## Two APIs
 
