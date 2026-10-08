@@ -29,6 +29,21 @@ fn declares_crs(metadata: Option<&str>) -> PyResult<bool> {
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
+/// See `GeoBox._longitude_turn`.
+#[pyfunction]
+#[pyo3(signature = (metadata))]
+fn longitude_turn(py: Python<'_>, metadata: Option<&str>) -> PyResult<Option<f64>> {
+    let metadata = geoarrow::crs::ExtensionMetadata::parse(metadata)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    if !metadata.declares_crs() {
+        return Ok(None);
+    }
+    metadata
+        .crs()
+        .and_then(|crs| geoarrow::geodetic::longitude_turn(&crs))
+        .map_err(|e| polars_exception(py, e))
+}
+
 /// See `geopolars.io.parquet._geometry_dtypes`.
 ///
 /// Dtypes cross as an empty frame:
@@ -81,6 +96,7 @@ fn geopolars(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // that hook is already by calling the plugin functions.
     m.add_function(wrap_pyfunction!(extension_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(declares_crs, m)?)?;
+    m.add_function(wrap_pyfunction!(longitude_turn, m)?)?;
     m.add_function(wrap_pyfunction!(geoparquet_dtypes, m)?)?;
     m.add_function(wrap_pyfunction!(geoparquet_metadata, m)?)?;
     geoarrow::register().map_err(|e| {

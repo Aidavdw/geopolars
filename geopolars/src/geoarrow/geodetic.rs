@@ -91,6 +91,39 @@ impl GeodeticCrs {
     }
 }
 
+/// How far `x` goes in one full turn around the globe, in the CRS's own unit:
+/// `360.0` for degrees, `400.0` for grads.
+/// `None` if `x` is not a longitude, as in a projected CRS.
+///
+/// `crs` is anything PROJ accepts.
+pub fn longitude_turn(crs: &str) -> PolarsResult<Option<f64>> {
+    let ctx = Context::new()?;
+    let c_crs = CString::new(crs)
+        .map_err(|_| polars_err!(ComputeError: "a CRS cannot contain a NUL byte: {crs:?}"))?;
+
+    // SAFETY: as in `GeodeticCrs::of`.
+    unsafe {
+        let parsed = ctx.object(proj_create(ctx.0, c_crs.as_ptr()), crs)?;
+        let horizontal = ctx.horizontal(&parsed, crs)?;
+        let cs = ctx.object(
+            proj_crs_get_coordinate_system(ctx.0, horizontal.crs().0),
+            crs,
+        )?;
+        if proj_cs_get_type(ctx.0, cs.0) != PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL {
+            return Ok(None);
+        }
+        let turn = std::f64::consts::TAU / ctx.unit_factor(&cs, crs)?;
+        // EPSG rounds a unit's size to 15 digits, which would make a degree's turn
+        // 359.99999999999994. Units with a whole turn get it back exactly.
+        let whole = turn.round();
+        Ok(Some(if (turn - whole).abs() <= 1e-12 * whole {
+            whole
+        } else {
+            turn
+        }))
+    }
+}
+
 /// A PROJ context of our own.
 /// Cannot be shared between threads.
 struct Context(*mut PJ_CONTEXT);
@@ -116,17 +149,40 @@ impl Context {
     /// # Safety
     /// `crs` must be a CRS created in this context.
     unsafe fn meters_per_horizontal_unit(&self, crs: &Object<'_>, name: &str) -> PolarsResult<f64> {
-        // A compound CRS (horizontal + vertical) puts `x` and `y` in its first part.
-        let horizontal = if proj_get_type(crs.0) == PJ_TYPE_PJ_TYPE_COMPOUND_CRS {
-            Some(self.object(proj_crs_get_sub_crs(self.0, crs.0, 0), name)?)
-        } else {
-            None
-        };
-        let horizontal = horizontal.as_ref().unwrap_or(crs);
-        let cs = self.object(proj_crs_get_coordinate_system(self.0, horizontal.0), name)?;
+        let horizontal = self.horizontal(crs, name)?;
+        let cs = self.object(
+            proj_crs_get_coordinate_system(self.0, horizontal.crs().0),
+            name,
+        )?;
         if proj_cs_get_type(self.0, cs.0) == PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL {
             return Ok(1.0);
         }
+        self.unit_factor(&cs, name)
+    }
+
+    /// The part of `crs` that holds `x` and `y`:
+    /// a compound CRS (horizontal + vertical) puts them in its first part.
+    ///
+    /// # Safety
+    /// `crs` must be a CRS created in this context.
+    unsafe fn horizontal<'a>(
+        &'a self,
+        crs: &'a Object<'a>,
+        name: &str,
+    ) -> PolarsResult<Horizontal<'a>> {
+        Ok(if proj_get_type(crs.0) == PJ_TYPE_PJ_TYPE_COMPOUND_CRS {
+            Horizontal::Part(self.object(proj_crs_get_sub_crs(self.0, crs.0, 0), name)?)
+        } else {
+            Horizontal::Whole(crs)
+        })
+    }
+
+    /// The size of one unit of the coordinate system `cs`'s first axis:
+    /// in metres for a length, in radians for an angle.
+    ///
+    /// # Safety
+    /// `cs` must be a coordinate system created in this context.
+    unsafe fn unit_factor(&self, cs: &Object<'_>, name: &str) -> PolarsResult<f64> {
         let mut factor = 0.0;
         let ok = proj_cs_get_axis_info(
             self.0,
@@ -158,7 +214,7 @@ impl Context {
                 CStr::from_ptr(message).to_string_lossy().into_owned()
             }
         };
-        polars_err!(ComputeError: "cannot find the ellipsoid of {crs}: {message}")
+        polars_err!(ComputeError: "PROJ cannot use the CRS {crs}: {message}")
     }
 }
 
@@ -166,6 +222,21 @@ impl Drop for Context {
     fn drop(&mut self) {
         // SAFETY: every `Object` borrows the context, so they are all gone by now.
         unsafe { proj_context_destroy(self.0) };
+    }
+}
+
+/// See [`Context::horizontal`].
+enum Horizontal<'a> {
+    Whole(&'a Object<'a>),
+    Part(Object<'a>),
+}
+
+impl Horizontal<'_> {
+    fn crs(&self) -> &Object<'_> {
+        match self {
+            Horizontal::Whole(crs) => crs,
+            Horizontal::Part(crs) => crs,
+        }
     }
 }
 
@@ -233,6 +304,23 @@ mod tests {
         let sphere = GeodeticCrs::of("+proj=longlat +R=1000 +type=crs").unwrap();
 
         assert_eq!((sphere.semi_major, sphere.flattening), (1000.0, 0.0));
+    }
+
+    #[test]
+    fn a_turn_is_counted_in_the_unit_of_the_longitude() {
+        assert_eq!(longitude_turn("EPSG:4326").unwrap(), Some(360.0));
+        // NTF (Paris), in grads.
+        assert_eq!(longitude_turn("EPSG:4807").unwrap(), Some(400.0));
+        // WGS 84 with EGM96 heights on top: still longitude/latitude.
+        assert_eq!(longitude_turn("EPSG:4326+5773").unwrap(), Some(360.0));
+    }
+
+    #[test]
+    fn only_a_longitude_has_a_turn() {
+        assert_eq!(longitude_turn("EPSG:28992").unwrap(), None);
+        // Earth-centred XYZ.
+        assert_eq!(longitude_turn("EPSG:4978").unwrap(), None);
+        assert!(longitude_turn("EPSG:not-a-code").is_err());
     }
 
     #[test]

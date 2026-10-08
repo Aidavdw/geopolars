@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
-from geopolars.datatypes import GEOMETRIES, GeoArrowType
+from geopolars.datatypes import GEOMETRIES, GeoArrowType, GeoBox
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
@@ -46,6 +46,14 @@ def _geometry_of(dtype: pl.DataType) -> GeoArrowType:
         msg = f"{UNSUPPORTED}, got: {dtype!r}"
         raise TypeError(msg)
     return dtype  # type: ignore[return-value]
+
+
+def _box_of(dtype: pl.DataType) -> GeoBox:
+    """`dtype` as the concrete box"""
+    if not isinstance(dtype, GeoBox):
+        msg = f"expected a `{GeoBox._extension_name}` column, got: {dtype!r}"
+        raise TypeError(msg)
+    return dtype
 
 
 def _to_expr(value: IntoExprColumn) -> pl.Expr:
@@ -95,3 +103,18 @@ def on_geometry_pair(
         return _to_expr(second).pipe_with_dtype(resolved_second)
 
     return _to_expr(first).pipe_with_dtype(resolved_first)
+
+
+def on_box(
+    value: IntoExprColumn,
+    build: Callable[[pl.Expr, GeoBox], pl.Expr],
+) -> pl.Expr:
+    """`on_geometry` for an operation on a `geoarrow.box`,
+    which is not one of the geometries `on_geometry` accepts.
+    """
+    expr = _to_expr(value)
+
+    def resolved(expr: pl.Expr, dtype: pl.DataType) -> pl.Expr:
+        return build(expr, _box_of(dtype)).alias(expr.meta.output_name())
+
+    return expr.pipe_with_dtype(resolved)

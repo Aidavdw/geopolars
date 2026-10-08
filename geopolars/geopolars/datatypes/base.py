@@ -91,10 +91,10 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         return tuple(cls._by_dimension.values())
 
     @classmethod
-    def _with_metadata_of(cls, other: GeoArrowType) -> GeoArrowType:
+    def _with_metadata_of(cls, other: pl.datatypes.BaseExtension) -> GeoArrowType:
         """This (concrete) type, carrying `other`'s metadata.
 
-        For an operation that builds one geometry out of another:
+        For an operation that builds one geometry out of another (or out of a box):
         a fresh `cls()` has no metadata and would drop the CRS.
         The metadata is copied as the string it is, never parsed here,
         so the result compares equal to the same dtype built in Rust.

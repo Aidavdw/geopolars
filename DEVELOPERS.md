@@ -340,6 +340,8 @@ Steps P12 to P16 are the same as P7 to P11, but now for a forwarding function.
 
 ## Roadmap
 
+- [ ] Allow conversion of boundingbox to polygon with z/m.
+
 ### Core IO
 
 - [x] WKB encoding and decoding
