@@ -40,7 +40,12 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
 
     It is measured on the plane the coordinates lie in, even when they carry a CRS,
     and the CRS is carried over to the result.
-    Holes are taken out. 'z' and 'm' are ignored: this is the centroid of the footprint.
+    Holes are taken out.
+    Only the two-dimensional part is considered: 'z' and 'm' are ignored.
+    For a 3D polygon that gives the centroid of its footprint
+    (its shadow on the x/y plane), which is not its centroid in 3D,
+    and the result has no 'z'.
+    A vertical polygon has a footprint that encloses nothing, so it has no centroid.
 
     A null geometry, an empty polygon, and a polygon that encloses nothing
     (all of its vertices on a line) have no centroid.

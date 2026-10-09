@@ -87,7 +87,10 @@ def area_planar(
     A multipolygon gets the area of each of its polygons, in order, as a list;
     sum it with `.list.sum()` for the area of the whole
     (which assumes its polygons do not overlap, as the spec requires).
-    'z' and 'm' are ignored: this is the area of the footprint.
+    Only the two-dimensional part is considered: 'z' and 'm' are ignored.
+    For a 3D polygon that gives the area of its footprint
+    (its shadow on the x/y plane), not the area of its surface in 3D:
+    a tilted polygon gets less than its true area, and a vertical one gets `0.0`.
 
     An empty polygon encloses nothing, so it gets `0.0`.
     Every other geometry (points, linestrings and their multi forms)
