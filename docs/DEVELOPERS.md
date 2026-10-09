@@ -113,8 +113,14 @@ An example: The mean coordinate.
 We can directly access the individual coordinate columns,
 and use Polars' mean implementation on it.
 If this is possible, this is preferred because you will never re-invent the wheel.
-Such operations will always be the most efficient,
-and the planner will be able to apply further optimisations.
+The main gain with operations like this is that the planner will be able to apply further optimisations.
+An operation implemented this way is preferred for simple operations that:
+
+- do not require many expressions to represent
+- do not run nested (`list.eval` eats up performance).
+
+For more complicated operations, it is preferable to implement a custom rust kernel.
+But don't take my word as gospel! Benchmark, benchmark, benchmark!
 
 You might want to change exactly what you want to put here using `pipe_with_dtype`
 (through `on_geometry`) to change what you wish to lower it to based on the metadata.
@@ -160,6 +166,17 @@ Examples are:
   - no M (measure) values
   - no CRS-awareness on a data level (this has to be carried separately)
   - no curved geometries
+
+### Switch implementation depending on geometry
+
+You can use the same trick with `pipe_with_dtype` that we use with a Tier 1 implementation
+to switch implementation based on the geometry/metadata.
+This is useful for:
+
+- early exits (e.g. for counting coordinates,
+  'return row count if counting points (native), or use my kernel x otherwise' ).
+- switching kernels based on geometry or metadata (e.g. for `area`, forward to `area_planar`
+  for equal projection CRSes, but use `area_geodesic` for other stuff)
 
 ### Tier per operation
 
