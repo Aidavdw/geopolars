@@ -1,18 +1,20 @@
-"""The centroid of a linestring or polygon: the centre of its length or area."""
+"""The centroid of a (multi)linestring or (multi)polygon: the centre of its length or area."""
 
 from __future__ import annotations
 
 import polars as pl
 import pytest
+
+from geopolars import geo
 from geopolars.datatypes import (
     GeoArrowType,
     LineStringXY,
     LineStringXYM,
     LineStringXYZ,
+    MultiLineStringXY,
+    MultiPolygonXY,
     PointXY,
 )
-
-from geopolars import geo
 from tests.unit.conftest import XY, Dimension
 
 _XY_VERTICES = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
@@ -100,13 +102,13 @@ def test_a_polygon_that_encloses_nothing_has_no_centroid() -> None:
     assert _centroids(_polygons([_ring((0, 0), (2, 0), (1, 0))])) == [None]
 
 
-def test_rejects_a_multilinestring_while_resolving_the_schema(
-    ring_coords: pl.DataFrame,
+def test_rejects_a_multipoint_while_resolving_the_schema(
+    line_coords: pl.DataFrame,
 ) -> None:
-    lf = XY.multilinestrings(ring_coords).lazy().select(geo.centroid("multilinestring"))
+    lf = XY.multipoints(line_coords).lazy().select(geo.centroid("multipoint"))
 
     with pytest.raises(
-        TypeError, match="centroid expects a `geoarrow.linestring` or `geoarrow.polygon`"
+        TypeError, match=r"centroid expects a \(multi\)linestring or \(multi\)polygon"
     ):
         lf.collect_schema()
 
@@ -221,7 +223,13 @@ def test_the_crs_of_a_line_is_carried_over() -> None:
 def test_a_line_without_length_has_no_centroid() -> None:
     df = _lines(None, [], [(1, 1)], [(1, 1), (1, 1)], _HOOK)
 
-    assert _line_centroids(df) == [None, None, None, None, pytest.approx((4 / 3, 1 / 6))]
+    assert _line_centroids(df) == [
+        None,
+        None,
+        None,
+        None,
+        pytest.approx((4 / 3, 1 / 6)),
+    ]
 
 
 def test_a_line_with_a_missing_coordinate_has_no_centroid() -> None:
@@ -253,3 +261,129 @@ def test_line_rows_line_up_across_chunks_and_slices() -> None:
     got = _line_centroids(df.slice(1, 4))
 
     assert got == pytest.approx([(4 / 3, 1 / 6), None, (11.0, 10.0), (4 / 3, 1 / 6)])
+
+
+# Multi-geometries: a list of centroids, one per part
+
+
+def _multilines(*multis: list[Line] | None) -> pl.DataFrame:
+    """A `multi` column of `MultiLineStringXY`, one row per list of parts."""
+    rows = [
+        None
+        if multi is None
+        else [
+            None if line is None else [{"x": x, "y": y} for x, y in line]
+            for line in multi
+        ]
+        for multi in multis
+    ]
+    storage = pl.Series("multi", rows, dtype=pl.List(_XY_VERTICES))
+    return pl.DataFrame(storage.ext.to(MultiLineStringXY()))
+
+
+def _multipolygons(
+    *multis: list[list[Ring]] | None, crs: str | None = None
+) -> pl.DataFrame:
+    """A `multi` column of `MultiPolygonXY`, one row per list of polygons."""
+    storage = pl.Series("multi", list(multis), dtype=pl.List(_XY_RINGS))
+    return pl.DataFrame(storage.ext.to(MultiPolygonXY(crs=crs)))
+
+
+def _multi_centroids(df: pl.DataFrame) -> list[list[tuple[float, ...] | None] | None]:
+    out = df.select(geo.centroid("multi")).to_series().ext.storage().to_list()
+    return [
+        None
+        if parts is None
+        else [None if c is None else tuple(c.values()) for c in parts]
+        for parts in out
+    ]
+
+
+def test_a_multilinestring_gets_a_centroid_per_part() -> None:
+    df = _multilines([[(0, 0), (2, 4)], _HOOK, None, [(1, 1)]], None, [])
+
+    got = _multi_centroids(df)
+
+    assert got == [
+        [pytest.approx((1.0, 2.0)), pytest.approx((4 / 3, 1 / 6)), None, None],
+        None,
+        [],
+    ]
+
+
+def test_a_multipolygon_gets_a_centroid_per_part() -> None:
+    df = _multipolygons([[_SQUARE], [_L], []], None, [])
+
+    got = _multi_centroids(df)
+
+    assert got == [
+        [pytest.approx((0.5, 0.5)), pytest.approx((5 / 6, 5 / 6)), None],
+        None,
+        [],
+    ]
+
+
+def test_each_part_of_a_multilinestring_is_measured_like_a_lone_linestring(
+    ring_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    multis = dimension.multilinestrings(ring_coords)
+    out = multis.select(geo.centroid("multilinestring"))
+    lone = (
+        multis.select(pl.col("multilinestring").ext.storage().explode())
+        .select(pl.col("multilinestring").ext.to(dimension.linestring_dtype()))
+        .select(geo.centroid("multilinestring"))
+    )
+
+    assert out.schema["multilinestring"] == pl.List(dimension.point_dtype())
+    assert out.explode("multilinestring").equals(lone)
+
+
+def test_each_part_of_a_multipolygon_is_measured_like_a_lone_polygon(
+    multipolygon_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    multis = dimension.multipolygons(multipolygon_coords)
+    out = multis.select(geo.centroid("multipolygon"))
+    lone = (
+        multis.select(pl.col("multipolygon").ext.storage().explode())
+        .select(pl.col("multipolygon").ext.to(dimension.polygon_dtype()))
+        .select(geo.centroid("multipolygon"))
+    )
+
+    assert out.schema["multipolygon"] == pl.List(PointXY())
+    assert out.explode("multipolygon").equals(lone)
+
+
+def test_the_crs_of_a_multi_geometry_is_carried_into_its_list() -> None:
+    df = _multipolygons([[_SQUARE]], crs="EPSG:4326")
+
+    out = df.select(geo.centroid("multi"))
+
+    assert out.schema["multi"] == pl.List(PointXY._with_metadata_of(df.schema["multi"]))
+
+
+def test_multi_rows_line_up_across_chunks_and_slices() -> None:
+    square = _ring((10, 10), (12, 10), (12, 12), (10, 12))
+    df = pl.concat(
+        [
+            _multipolygons([[_SQUARE]], [[_L], [_SQUARE]]),
+            _multipolygons(None, [[square]]),
+        ],
+        rechunk=False,
+    )
+    assert df.n_chunks() == 2
+
+    got = _multi_centroids(df.slice(1, 3))
+
+    assert got == [
+        [pytest.approx((5 / 6, 5 / 6)), pytest.approx((0.5, 0.5))],
+        None,
+        [pytest.approx((11.0, 11.0))],
+    ]
+
+
+def test_the_namespace_matches_the_function_for_multi_geometries() -> None:
+    df = _multilines([[(0, 0), (2, 4)], _HOOK])
+
+    assert df.select(pl.col("multi").geo.centroid()).equals(
+        df.select(geo.centroid("multi"))
+    )

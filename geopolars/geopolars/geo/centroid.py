@@ -1,9 +1,10 @@
-"""The centroid of a linestring or polygon: the centre of its length or area.
+"""The centroid of a (multi)linestring or (multi)polygon: the centre of its length or area.
 Note that this is not the mean coordinate, which weighs every vertex the same!
 
 A native kernel (A-tier) does either in one pass over the storage:
 it weighs every segment of a linestring by its length,
 and applies the shoelace formula over a polygon's planar area.
+A multi-geometry gets a list of centroids, one per part.
 """
 
 from __future__ import annotations
@@ -13,7 +14,12 @@ from typing import TYPE_CHECKING
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import LineStringType, PolygonType
+from geopolars.datatypes import (
+    LineStringType,
+    MultiLineStringType,
+    MultiPolygonType,
+    PolygonType,
+)
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -24,11 +30,12 @@ if TYPE_CHECKING:
 
 
 def _centroid(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    """The centroid of a linestring or polygon, per row."""
-    if not isinstance(geometry, (LineStringType, PolygonType)):
+    """The centroid of a (multi)linestring or (multi)polygon, per row."""
+    accepted = (LineStringType, PolygonType, MultiLineStringType, MultiPolygonType)
+    if not isinstance(geometry, accepted):
         msg = (
-            f"centroid expects a `{LineStringType._extension_name}` "
-            f"or `{PolygonType._extension_name}` column, got: {geometry!r}"
+            "centroid expects a (multi)linestring or (multi)polygon column, "
+            f"got: {geometry!r}"
         )
         raise TypeError(msg)
     return register_plugin_function(
@@ -63,14 +70,20 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     A null geometry, an empty polygon, and a polygon that encloses nothing
     (all of its vertices on a line) have no centroid.
 
-    | in                     | out          |
-    |------------------------|--------------|
-    | `LineStringXY`         | `PointXY`    |
-    | `LineStringXYZ`        | `PointXYZ`   |
-    | `LineStringXYM`        | `PointXYM`   |
-    | `LineStringXYZM`       | `PointXYZM`  |
-    | `PolygonXY`            | `PointXY`    |
-    | `PolygonXYZM`          | `PointXY`    |
+    A multilinestring or multipolygon gets a list of centroids, one per part,
+    each measured as for a lone linestring or polygon.
+    A part without a centroid is null within the list; a null row stays null.
+
+    | in                     | out              |
+    |------------------------|------------------|
+    | `LineStringXY`         | `PointXY`        |
+    | `LineStringXYZ`        | `PointXYZ`       |
+    | `LineStringXYM`        | `PointXYM`       |
+    | `LineStringXYZM`       | `PointXYZM`      |
+    | `PolygonXY`            | `PointXY`        |
+    | `PolygonXYZM`          | `PointXY`        |
+    | `MultiLineStringXYZ`   | `list[PointXYZ]` |
+    | `MultiPolygonXYZM`     | `list[PointXY]`  |
 
     ```python
     df.select(geo.centroid("parcel"), geo.centroid("road"))

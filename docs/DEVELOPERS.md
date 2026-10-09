@@ -206,7 +206,7 @@ the comment says when one without a CRS takes a different tier.
 | `length` | - | C if `allow_non_lines` | A/B | fwd `*_planar` `*_geodesic` | - | C if `allow_non_lines` | - | C if `allow_non_lines` | A/B | as list of LineString | - | C if `allow_non_lines` |
 | `length_planar` | - | C if `allow_non_lines` | A | CRS ignored | - | C if `allow_non_lines` | - | C if `allow_non_lines` | A | as list of LineString | - | C if `allow_non_lines` |
 | `length_geodesic` | - | C if `allow_non_lines` | B | PROJ + ggl; needs a CRS | - | C if `allow_non_lines` | - | C if `allow_non_lines` | B | as list of LineString | - | C if `allow_non_lines` |
-| `centroid` | - | | A | length-weighted; keeps z/m | A | shoelace; XY only | - | | - | | - | |
+| `centroid` | - | | A | length-weighted; keeps z/m | A | shoelace; XY only | - | | A | list, one per part | A | list, one per part |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |
