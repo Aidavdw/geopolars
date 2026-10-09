@@ -41,6 +41,7 @@ from geopolars.geo.count_coordinates import count_coordinates
 from geopolars.geo.crs import is_geographic, set_crs, to_crs
 from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.exterior import exterior
+from geopolars.geo.interior import interior
 from geopolars.geo.is_empty import is_empty
 from geopolars.geo.length import length, length_geodesic, length_planar
 from geopolars.geo.mean_coordinate import mean_coordinate
@@ -64,6 +65,7 @@ __all__ = [
     "exterior",
     "from_wkb",
     "from_wkt",
+    "interior",
     "is_empty",
     "is_geographic",
     "length",

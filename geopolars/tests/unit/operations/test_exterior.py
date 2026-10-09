@@ -120,3 +120,25 @@ def test_the_namespace_matches_the_function() -> None:
     assert df.select(pl.col("polygon").geo.exterior()).equals(
         df.select(geo.exterior("polygon"))
     )
+
+
+def test_a_missing_polygon_in_a_multipolygon_has_no_exterior() -> None:
+    df = _multipolygons([[_SQUARE], None, []])
+
+    assert _rings(df, "multi") == [[_SQUARE, None, []]]
+
+
+def test_multipolygon_rows_line_up_across_chunks_and_slices() -> None:
+    square = _ring((10, 10), (12, 10), (12, 12), (10, 12))
+    df = pl.concat(
+        [
+            _multipolygons([[_OUTER, _HOLE]], [[_SQUARE], [square]]),
+            _multipolygons(None, [[square, _HOLE]], [[], [_OUTER]]),
+        ],
+        rechunk=False,
+    )
+    assert df.n_chunks() == 2
+
+    got = _rings(df.slice(1, 4), "multi")
+
+    assert got == [[_SQUARE, square], None, [square], [[], _OUTER]]
