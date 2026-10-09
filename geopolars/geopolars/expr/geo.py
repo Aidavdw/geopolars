@@ -138,6 +138,16 @@ class ExprGeoNameSpace:
 
         return area(self._expr)
 
+    def area_planar(self) -> pl.Expr:
+        from geopolars.geo.area import area_planar
+
+        return area_planar(self._expr)
+
+    def area_geodesic(self) -> pl.Expr:
+        from geopolars.geo.area import area_geodesic
+
+        return area_geodesic(self._expr)
+
     def is_empty(self) -> pl.Expr:
         from geopolars.geo.is_empty import is_empty
 

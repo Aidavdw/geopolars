@@ -11,11 +11,13 @@ use std::ptr;
 use polars::prelude::*;
 use proj_sys::{
     proj_as_projjson, proj_context_create, proj_context_destroy, proj_context_errno,
-    proj_context_errno_string, proj_create, proj_crs_get_coordinate_system,
-    proj_crs_get_geodetic_crs, proj_crs_get_sub_crs, proj_cs_get_axis_info, proj_cs_get_type,
-    proj_destroy, proj_ellipsoid_get_parameters, proj_get_ellipsoid, proj_get_type, PJ, PJ_CONTEXT,
+    proj_context_errno_string, proj_coordoperation_get_method_info, proj_create,
+    proj_crs_get_coordinate_system, proj_crs_get_coordoperation, proj_crs_get_geodetic_crs,
+    proj_crs_get_sub_crs, proj_cs_get_axis_info, proj_cs_get_type, proj_destroy,
+    proj_ellipsoid_get_parameters, proj_get_ellipsoid, proj_get_type, PJ, PJ_CONTEXT,
     PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL, PJ_TYPE_PJ_TYPE_COMPOUND_CRS,
     PJ_TYPE_PJ_TYPE_GEOGRAPHIC_2D_CRS, PJ_TYPE_PJ_TYPE_GEOGRAPHIC_3D_CRS,
+    PJ_TYPE_PJ_TYPE_PROJECTED_CRS,
 };
 
 /// The geographic CRS a CRS is defined on: the CRS itself if it is one already,
@@ -121,6 +123,53 @@ pub fn longitude_turn(crs: &str) -> PolarsResult<Option<f64>> {
         } else {
             turn
         }))
+    }
+}
+
+/// Equal-area projection methods whose name does not say "Equal Area".
+const EQUAL_AREA_METHODS: &[&str] = &[
+    "Equal Earth",
+    "Mollweide",
+    "Sinusoidal",
+    "Eckert IV",
+    "Eckert VI",
+    "Goode Homolosine",
+    "Interrupted Goode Homolosine",
+    "Bonne",
+];
+
+/// Whether `crs` is projected with an equal-area projection,
+/// so that areas on its plane are areas on the ellipsoid.
+/// `false` for a CRS that is not projected, such as one in longitude/latitude.
+///
+/// `crs` is anything PROJ accepts.
+pub fn is_equal_area(crs: &str) -> PolarsResult<bool> {
+    let ctx = Context::new()?;
+    let c_crs = CString::new(crs)
+        .map_err(|_| polars_err!(ComputeError: "a CRS cannot contain a NUL byte: {crs:?}"))?;
+
+    // SAFETY: as in `GeodeticCrs::of`.
+    unsafe {
+        let parsed = ctx.object(proj_create(ctx.0, c_crs.as_ptr()), crs)?;
+        let horizontal = ctx.horizontal(&parsed, crs)?;
+        if proj_get_type(horizontal.crs().0) != PJ_TYPE_PJ_TYPE_PROJECTED_CRS {
+            return Ok(false);
+        }
+        let conversion = ctx.object(proj_crs_get_coordoperation(ctx.0, horizontal.crs().0), crs)?;
+        let mut name = ptr::null();
+        let ok = proj_coordoperation_get_method_info(
+            ctx.0,
+            conversion.0,
+            &mut name,
+            ptr::null_mut(),
+            ptr::null_mut(),
+        );
+        if ok == 0 || name.is_null() {
+            return Err(ctx.error(crs));
+        }
+        // Owned by `conversion`, which is still alive.
+        let name = CStr::from_ptr(name).to_string_lossy();
+        Ok(name.contains("Equal Area") || EQUAL_AREA_METHODS.contains(&name.as_ref()))
     }
 }
 

@@ -55,6 +55,21 @@ fn longitude_turn(py: Python<'_>, metadata: Option<&str>) -> PyResult<Option<f64
         .map_err(|e| polars_exception(py, e))
 }
 
+/// See `GeoArrowType._is_equal_area`.
+#[pyfunction]
+#[pyo3(signature = (metadata))]
+fn is_equal_area(py: Python<'_>, metadata: Option<&str>) -> PyResult<bool> {
+    let metadata = geoarrow::crs::ExtensionMetadata::parse(metadata)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    if !metadata.declares_crs() {
+        return Ok(false);
+    }
+    metadata
+        .crs()
+        .and_then(|crs| geoarrow::geodetic::is_equal_area(&crs))
+        .map_err(|e| polars_exception(py, e))
+}
+
 /// See `geopolars.io.parquet._geometry_dtypes`.
 ///
 /// Dtypes cross as an empty frame:
@@ -113,6 +128,7 @@ fn geopolars(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(declares_crs, m)?)?;
     m.add_function(wrap_pyfunction!(with_crs, m)?)?;
     m.add_function(wrap_pyfunction!(longitude_turn, m)?)?;
+    m.add_function(wrap_pyfunction!(is_equal_area, m)?)?;
     m.add_function(wrap_pyfunction!(geoparquet_dtypes, m)?)?;
     m.add_function(wrap_pyfunction!(geoparquet_metadata, m)?)?;
     geoarrow::register().map_err(|e| {

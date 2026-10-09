@@ -1,7 +1,6 @@
-//! The area a geometry encloses along the ellipsoid, for geometries that declare a CRS.
-//!
-//! Planar areas are written in plain Polars expressions instead, on the Python side;
-//! [`planar_area`] is the same in Rust, for kernels that need one.
+//! The area a geometry encloses:
+//! - on the plane its coordinates lie in ([`area_planar`]),
+//! - along the ellipsoid of its CRS ([`area_geodesic`]).
 
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray};
@@ -9,10 +8,10 @@ use polars_arrow::datatypes::ArrowDataType;
 use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
-use geo_traits::PolygonTrait;
+use geo_traits::{MultiPolygonTrait, PolygonTrait};
 
 use super::distance::GeodesicMetric;
-use crate::geoarrow::geotraits::{LineString, Polygon};
+use crate::geoarrow::geotraits::{for_each_geometry, Geometry, LineString, Polygon};
 use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
 
@@ -63,16 +62,88 @@ fn crs_of(field: &Field) -> PolarsResult<String> {
     geo.metadata.crs()
 }
 
-/// `output_type_func` for [`area_geodesic`]: an `f64`, in the unit of the CRS squared,
-/// or a list of them for a multipolygon.
-fn areas(input_fields: &[Field]) -> PolarsResult<Field> {
-    // Check if the CRS can be used by PROJ. If not, raise error at plan time rather than at runtime.
-    GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
-    let dtype = match describe(input_fields[0].dtype())?.kind {
+/// Points are refused rather than given an area of `0.0`.
+fn points_have_no_area(kind: Kind) -> PolarsError {
+    polars_err!(SchemaMismatch: "area does not accept a `{}` column", kind.name())
+}
+
+/// An `f64` per geometry, or a list of them (one per part) for a multipolygon.
+fn area_dtype(field: &Field) -> PolarsResult<Field> {
+    let dtype = match describe(field.dtype())?.kind {
+        kind @ (Kind::Point | Kind::MultiPoint) => return Err(points_have_no_area(kind)),
         Kind::MultiPolygon => DataType::List(Box::new(DataType::Float64)),
         _ => DataType::Float64,
     };
-    Ok(Field::new(input_fields[0].name().clone(), dtype))
+    Ok(Field::new(field.name().clone(), dtype))
+}
+
+/// `output_type_func` for [`area_planar`]: in the unit of the coordinates squared.
+fn areas_planar(input_fields: &[Field]) -> PolarsResult<Field> {
+    area_dtype(&input_fields[0])
+}
+
+/// `output_type_func` for [`area_geodesic`]: in the unit of the CRS squared.
+fn areas(input_fields: &[Field]) -> PolarsResult<Field> {
+    // Check if the CRS can be used by PROJ. If not, raise error at plan time rather than at runtime.
+    GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
+    area_dtype(&input_fields[0])
+}
+
+/// The planar area of every polygon.
+fn polygons_planar(storage: &Series) -> PolarsResult<Float64Chunked> {
+    let mut out = Vec::with_capacity(storage.len());
+    for chunk in storage.chunks() {
+        for_each_geometry(chunk.as_ref(), Kind::Polygon, |geometry| {
+            out.push(match geometry {
+                Some(Geometry::Polygon(polygon)) => Some(planar_area(&polygon)),
+                _ => None,
+            });
+            Ok(())
+        })?;
+    }
+    Ok(Float64Chunked::from_iter_options(
+        storage.name().clone(),
+        out.into_iter(),
+    ))
+}
+
+/// The planar area of each part of every multipolygon, in order.
+fn multipolygons_planar(storage: &Series) -> PolarsResult<ListChunked> {
+    let mut builder = ListPrimitiveChunkedBuilder::<Float64Type>::new(
+        storage.name().clone(),
+        storage.len(),
+        storage.len(),
+        DataType::Float64,
+    );
+    for chunk in storage.chunks() {
+        for_each_geometry(chunk.as_ref(), Kind::MultiPolygon, |geometry| {
+            match geometry {
+                Some(Geometry::MultiPolygon(multipolygon)) => {
+                    let parts: Vec<f64> = multipolygon
+                        .polygons()
+                        .map(|polygon| planar_area(&polygon))
+                        .collect();
+                    builder.append_slice(&parts);
+                }
+                _ => builder.append_null(),
+            }
+            Ok(())
+        })?;
+    }
+    Ok(builder.finish())
+}
+
+/// See `area_planar`.
+#[polars_expr(output_type_func=areas_planar)]
+fn area_planar(inputs: &[Series]) -> PolarsResult<Series> {
+    let storage = inputs[0].ext()?.storage();
+    let out = match describe(inputs[0].dtype())?.kind {
+        Kind::Polygon => polygons_planar(storage)?.into_series(),
+        Kind::MultiPolygon => multipolygons_planar(storage)?.into_series(),
+        kind @ (Kind::Point | Kind::MultiPoint) => return Err(points_have_no_area(kind)),
+        Kind::LineString | Kind::MultiLineString => nothing_enclosed(storage).into_series(),
+    };
+    Ok(out.with_name(inputs[0].name().clone()))
 }
 
 /// View over polygons
@@ -171,8 +242,9 @@ fn area_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let out = match describe(inputs[0].dtype())?.kind {
         Kind::Polygon => polygons(storage, &*GeodesicMetric::of(&crs)?)?.into_series(),
         Kind::MultiPolygon => multipolygons(storage, &*GeodesicMetric::of(&crs)?)?.into_series(),
+        kind @ (Kind::Point | Kind::MultiPoint) => return Err(points_have_no_area(kind)),
         // Still refuses a CRS that has no ellipsoid, as a polygon in it would be.
-        Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString => {
+        Kind::LineString | Kind::MultiLineString => {
             GeodesicMetric::of(&crs)?;
             nothing_enclosed(storage).into_series()
         }

@@ -172,7 +172,9 @@ the comment says when one without a CRS takes a different tier.
 
 | Operation | Point | | LineString | | Polygon | | MultiPoint | | MultiLineString | | MultiPolygon | |
 | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| `area` | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | PROJ + ggl; no CRS: 1 (shoelace) | 2 | `0.0`; no CRS: 1 | 2 | `0.0`; no CRS: 1 | 3 | as list of Polygon |
+| `area` | - | | 2 | fwd `*_planar` `*_geodesic` | 2/3 | | - | | 2 | | 2/3 | |
+| `area_planar` | - | | 2 | `0.0` | 2 | shoelace; CRS ignored | - | | 2 | `0.0` | 2 | as list of Polygon |
+| `area_geodesic` | - | needs a CRS | 2 | `0.0` | 3 | PROJ + ggl | - | | 2 | `0.0` | 3 | as list of Polygon |
 | `length` | - | | 3 | PROJ + ggl; no CRS: 1 | - | | - | | 3 | as list of LineString | - | |
 | `distance` | 3 | PROJ + ggl; no CRS: 1 | - | | - | | - | | - | | - | |
 | `mean_coordinate` | 1 | returns the point | 1 | | 1 | skips ring's closing coord | 1 | | 1 | | 1 | skips ring's closing coord |

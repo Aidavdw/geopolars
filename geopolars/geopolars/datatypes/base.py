@@ -87,6 +87,13 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         """
         return _rust.longitude_turn(self.ext_metadata())
 
+    def _is_equal_area(self) -> bool:
+        """Whether the CRS is projected with an equal-area projection.
+        `False` without a CRS, or with one that is not projected.
+        Evaluated using PROJ, in Rust.
+        """
+        return _rust.is_equal_area(self.ext_metadata())
+
     def __repr__(self) -> str:
         return type(self).__name__
 

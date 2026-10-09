@@ -9,7 +9,7 @@ from geopolars.geo.affine import (
     skew,
     translate,
 )
-from geopolars.geo.area import area
+from geopolars.geo.area import area, area_geodesic, area_planar
 from geopolars.geo.bounds import bounds
 from geopolars.geo.centroid import centroid
 from geopolars.geo.construct import (
@@ -47,6 +47,8 @@ from geopolars.geo.wrap_longitude import wrap_longitude
 __all__ = [
     "affine_transform",
     "area",
+    "area_geodesic",
+    "area_planar",
     "bounds",
     "box",
     "centroid",
