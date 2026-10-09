@@ -5,6 +5,7 @@ Everything in the 'geo' namespace forwards to here.
 from geopolars.geo.affine import (
     affine_transform,
     rotate,
+    rotate_about_centroid,
     scale,
     skew,
     translate,
@@ -81,6 +82,7 @@ __all__ = [
     "polygon_from_columns",
     "polygon_from_rings",
     "rotate",
+    "rotate_about_centroid",
     "scale",
     "set_crs",
     "skew",

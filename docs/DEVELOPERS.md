@@ -164,6 +164,11 @@ It only pays off for simple operations, though:
 every extra node costs, and nested `list.eval` runs per row,
 which loses badly to an A-tier kernel.
 
+A C-tier operation may also be put together from other operations,
+including ones that call an A-tier or B-tier kernel.
+`rotate_about_centroid`, for example, hands `centroid` (A) as the origin to the `affine_about` kernel (A).
+It adds no kernel of its own, so it is C-tier, but its speed is that of the kernels it calls.
+
 You might want to change exactly what you want to put here using `pipe_with_dtype`
 (through `on_geometry`) to change what you wish to lower it to based on the metadata.
 For that, you can dispatch on the input's geometry through `on_geometry` in `geo/_dispatch.py`.
@@ -211,6 +216,7 @@ the comment says when one without a CRS takes a different tier.
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |
 | `rotate` | A | | A | | A | | A | | A | | A | |
+| `rotate_about_centroid` | - | | C | `centroid` + `affine_about` | C | about `x`/`y` refused | - | | - | | - | |
 | `skew` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
 | `scale` | A | impl differs for const or col | A | | A | | A | | A | | A | |
 | `affine_transform` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
@@ -427,7 +433,7 @@ affine transforms:
 - [x] rotate around coordinate from another column
 - [x] scale around coordinate from another column
 - [x] skew around a coordinate from another column
-- [ ] rotate around own centroid (can use the above)
+- [x] rotate around own centroid (can use the above)
 - [ ] scale around own centroid (can use the above)
 - [ ] skew around own centroid (can use the above)
 

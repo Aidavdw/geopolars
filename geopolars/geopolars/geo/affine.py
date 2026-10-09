@@ -10,8 +10,9 @@ import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import PointType
+from geopolars.datatypes import LineStringType, PointType, PolygonType
 from geopolars.geo._dispatch import on_geometry, on_geometry_pair
+from geopolars.geo.centroid import _centroid
 from geopolars.geo.construct import point
 
 if TYPE_CHECKING:
@@ -237,6 +238,23 @@ def _points(name: str, dtype: GeoArrowType) -> None:
         raise TypeError(msg)
 
 
+def _about_centroid(
+    name: str,
+    build_about: Callable[[pl.Expr, GeoArrowType, pl.Expr, GeoArrowType], pl.Expr],
+) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+    def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
+        # A multi-geometry has a list of centroids, one per part, not one to turn about.
+        if not isinstance(geometry, LineStringType | PolygonType):
+            msg = (
+                f"cannot {name} about its centroid: expects a linestring "
+                f"or polygon column, got: {geometry!r}"
+            )
+            raise TypeError(msg)
+        return on_geometry_pair(column, _centroid(column, geometry), build_about)
+
+    return build
+
+
 def _rotation(
     degrees: float, axis: Literal["x", "y", "z"]
 ) -> tuple[tuple[float, float, float], ...]:
@@ -261,6 +279,12 @@ def _rotation(
         ),
     }[axis]
     # fmt: on
+
+
+def _axis(axis: Literal["x", "y", "z"]) -> None:
+    if axis not in ("x", "y", "z"):
+        msg = f'`axis` has to be "x", "y" or "z", got: {axis!r}'
+        raise ValueError(msg)
 
 
 def _can_rotate(axis: Literal["x", "y", "z"], geometry: GeoArrowType) -> None:
@@ -331,14 +355,58 @@ def rotate(
     in longitude/latitude, this does not turn anything on the globe,
     and can leave positions outside of the valid range.
     """
-    if axis not in ("x", "y", "z"):
-        msg = f'`axis` has to be "x", "y" or "z", got: {axis!r}'
-        raise ValueError(msg)
+    _axis(axis)
     degrees = _degrees(amount, unit, "amount")
     # A column of points, rather than one point given as numbers.
     if isinstance(origin, str | pl.Expr | pl.Series):
         return on_geometry_pair(geometry, origin, _rotate_about(degrees, axis))
     return on_geometry(geometry, _rotate(degrees, axis, _origin(origin)))
+
+
+def rotate_about_centroid(
+    geometry: IntoExprColumn,
+    amount: float,
+    unit: Literal["deg", "pi"] = "deg",
+    axis: Literal["x", "y", "z"] = "z",
+) -> pl.Expr:
+    """Turn every geometry about an axis through its own centroid.
+
+    This is `rotate(geometry, amount, unit, axis, origin=geo.centroid(geometry))`,
+    see `rotate` for `amount`, `unit` and `axis`,
+    and `centroid` for where the centroid of a linestring or polygon is.
+
+    Only linestrings and polygons are accepted:
+    a multi-geometry has a centroid per part rather than one,
+    and a point would turn about itself.
+    A geometry without a centroid (missing, empty, a line without length,
+    or a polygon that encloses nothing) comes out missing.
+
+
+    ```python
+    df.select(geo.rotate_about_centroid("parcel", 30))
+    ```
+    """
+
+    _axis(axis)
+    about = _rotate_about(_degrees(amount, unit, "amount"), axis)
+
+    def build_about(
+        column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
+    ) -> pl.Expr:
+        if axis != "z" and "z" not in points._dimension:
+            # A linestring's centroid keeps its `z`, so it turns about any axis.
+            # A polygon's centroid has no `z`, so turning a polygon about `x` or `y`,
+            # which needs one, is refused.
+            # this can only be unblocked when a z-centroid is calculated for polygon,
+            # which is a problem on its own.
+            msg = (
+                f"cannot rotate about the {axis} axis through the centroid "
+                f"of {geometry!r}: its centroid has no z"
+            )
+            raise TypeError(msg)
+        return about(column, geometry, origin, points)
+
+    return on_geometry(geometry, _about_centroid("rotate", build_about))
 
 
 def _skew_about(

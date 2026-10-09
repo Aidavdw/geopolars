@@ -65,6 +65,14 @@ class ExprGeoNameSpace:
     ) -> pl.Expr:
         return affine.rotate(self._expr, amount, unit=unit, axis=axis, origin=origin)
 
+    def rotate_about_centroid(
+        self,
+        amount: float,
+        unit: Literal["deg", "pi"] = "deg",
+        axis: Literal["x", "y", "z"] = "z",
+    ) -> pl.Expr:
+        return affine.rotate_about_centroid(self._expr, amount, unit=unit, axis=axis)
+
     def skew(
         self,
         xs: float = 0.0,
