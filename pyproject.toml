@@ -6,6 +6,7 @@ requires-python = ">=3.10"
 dependencies = [
     "geopandas>=1.1.4",
     "geopolars",
+    "maturin>=1.12.4",
     "polars>=1.44",
     # uv ignores sources for transitive dependencies,
     # but polars pulls this in.

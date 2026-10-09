@@ -15,6 +15,11 @@ from geopolars.geo._dispatch import on_geometry, on_geometry_pair
 from geopolars.geo.centroid import _centroid
 from geopolars.geo.construct import point
 
+# TODO: maybe merge 'rotate' and 'rotate_about_centroid'?
+# also the other ones.
+# This will make the API easier to read I suppose,
+# but is not consistent with Polars.
+
 if TYPE_CHECKING:
     from typing import TypeAlias
 

@@ -138,6 +138,11 @@ class ExprGeoNameSpace:
 
         return centroid(self._expr)
 
+    def exterior(self) -> pl.Expr:
+        from geopolars.geo.exterior import exterior
+
+        return exterior(self._expr)
+
     def distance(self, other: IntoExprColumn) -> pl.Expr:
         from geopolars.geo.distance import distance
 
