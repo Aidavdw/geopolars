@@ -11,6 +11,7 @@ from geopolars.geo.affine import (
 )
 from geopolars.geo.area import area
 from geopolars.geo.bounds import bounds
+from geopolars.geo.centroid import centroid
 from geopolars.geo.construct import (
     box,
     line_string,
@@ -48,6 +49,7 @@ __all__ = [
     "area",
     "bounds",
     "box",
+    "centroid",
     "count_coordinates",
     "distance",
     "distance_squared",

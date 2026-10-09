@@ -1,6 +1,7 @@
 //! The area a geometry encloses along the ellipsoid, for geometries that declare a CRS.
 //!
-//! Planar areas are written in plain Polars expressions instead, on the Python side.
+//! Planar areas are written in plain Polars expressions instead, on the Python side;
+//! [`planar_area`] is the same in Rust, for kernels that need one.
 
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray};
@@ -8,9 +9,38 @@ use polars_arrow::datatypes::ArrowDataType;
 use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
+use geo_traits::PolygonTrait;
+
 use super::distance::GeodesicMetric;
+use crate::geoarrow::geotraits::{LineString, Polygon};
 use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
+
+/// Twice the signed area of one closed ring, positive when it runs CCW.
+/// Like `_twice_signed` in Python: relative to its first coordinate,
+/// and without the repeated last one.
+fn twice_signed(ring: &LineString) -> f64 {
+    if ring.end - ring.start < 2 {
+        return 0.0;
+    }
+    let (x, y) = (|i| ring.coords.nth(i, 0), |i| ring.coords.nth(i, 1));
+    let (x0, y0) = (x(ring.start), y(ring.start));
+    (ring.start..ring.end - 1)
+        .map(|i| (x(i) - x0) * (y(i + 1) - y0) - (x(i + 1) - x0) * (y(i) - y0))
+        .sum()
+}
+
+/// The area of a polygon on the plane: its exterior ring, less the holes inside it.
+pub(crate) fn planar_area(polygon: &Polygon) -> f64 {
+    let Some(exterior) = polygon.exterior() else {
+        return 0.0;
+    };
+    let holes: f64 = polygon
+        .interiors()
+        .map(|ring| twice_signed(&ring).abs())
+        .sum();
+    (twice_signed(&exterior).abs() - holes) / 2.0
+}
 
 /// `0.0` for every geometry that is there, for kinds that cannot enclose anything.
 fn nothing_enclosed(storage: &Series) -> Float64Chunked {

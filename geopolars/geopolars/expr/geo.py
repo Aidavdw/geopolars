@@ -113,6 +113,11 @@ class ExprGeoNameSpace:
 
         return mean_coordinate(self._expr)
 
+    def centroid(self) -> pl.Expr:
+        from geopolars.geo.centroid import centroid
+
+        return centroid(self._expr)
+
     def distance(self, other: IntoExprColumn) -> pl.Expr:
         from geopolars.geo.distance import distance
 

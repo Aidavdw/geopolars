@@ -11,6 +11,7 @@
 
 pub mod affine;
 pub mod area;
+pub mod centroid;
 pub mod construct;
 pub mod coords;
 pub mod crs;
