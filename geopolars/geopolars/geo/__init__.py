@@ -13,6 +13,7 @@ from geopolars.geo.affine import (
     translate,
 )
 from geopolars.geo.area import area, area_geodesic, area_planar
+from geopolars.geo.boundary import boundary
 from geopolars.geo.bounds import bounds
 from geopolars.geo.centroid import centroid
 from geopolars.geo.construct import (
@@ -53,6 +54,7 @@ __all__ = [
     "area",
     "area_geodesic",
     "area_planar",
+    "boundary",
     "bounds",
     "box",
     "centroid",

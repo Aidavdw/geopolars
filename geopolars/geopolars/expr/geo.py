@@ -143,6 +143,11 @@ class ExprGeoNameSpace:
 
         return exterior(self._expr)
 
+    def boundary(self) -> pl.Expr:
+        from geopolars.geo.boundary import boundary
+
+        return boundary(self._expr)
+
     def distance(self, other: IntoExprColumn) -> pl.Expr:
         from geopolars.geo.distance import distance
 
