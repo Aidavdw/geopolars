@@ -203,7 +203,9 @@ the comment says when one without a CRS takes a different tier.
 | `area` | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | A/B | fwd `*_planar` `*_geodesic` | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | A/B | as list of Polygon |
 | `area_planar` | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | A | shoelace; CRS ignored | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | A | as list of Polygon |
 | `area_geodesic` | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | B | PROJ + ggl; needs a CRS | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | B | as list of Polygon |
-| `length` | - | | B | PROJ + ggl; no CRS: C | - | | - | | B | as list of LineString | - | |
+| `length` | - | C if `allow_non_lines` | A/B | fwd `*_planar` `*_geodesic` | - | C if `allow_non_lines` | - | C if `allow_non_lines` | A/B | as list of LineString | - | C if `allow_non_lines` |
+| `length_planar` | - | C if `allow_non_lines` | A | CRS ignored | - | C if `allow_non_lines` | - | C if `allow_non_lines` | A | as list of LineString | - | C if `allow_non_lines` |
+| `length_geodesic` | - | C if `allow_non_lines` | B | PROJ + ggl; needs a CRS | - | C if `allow_non_lines` | - | C if `allow_non_lines` | B | as list of LineString | - | C if `allow_non_lines` |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |

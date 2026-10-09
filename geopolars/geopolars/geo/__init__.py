@@ -37,7 +37,7 @@ from geopolars.geo.count_coordinates import count_coordinates
 from geopolars.geo.crs import is_geographic, set_crs, to_crs
 from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.is_empty import is_empty
-from geopolars.geo.length import length
+from geopolars.geo.length import length, length_geodesic, length_planar
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.to_polygon import to_polygon
 from geopolars.geo.wkb import from_wkb, to_wkb
@@ -60,6 +60,8 @@ __all__ = [
     "is_empty",
     "is_geographic",
     "length",
+    "length_geodesic",
+    "length_planar",
     "line_string",
     "line_string_from_columns",
     "line_string_from_vertices",
