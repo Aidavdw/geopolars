@@ -143,3 +143,18 @@ def test_multipolygon_rows_line_up_across_chunks_and_slices() -> None:
     got = _interiors(df.slice(1, 4))
 
     assert got == [[[_HOLE], []], None, [[_HOLE, _OTHER_HOLE]], [[], [_HOLE]]]
+
+
+def test_polygon_rows_line_up_across_chunks_and_slices() -> None:
+    df = pl.concat(
+        [
+            _polygons([_SQUARE], [_OUTER, _HOLE]),
+            _polygons(None, [], [_OUTER, _HOLE, _OTHER_HOLE]),
+        ],
+        rechunk=False,
+    )
+    assert df.n_chunks() == 2
+
+    got = _interiors(df.slice(1, 4))
+
+    assert got == [[_HOLE], None, [], [_HOLE, _OTHER_HOLE]]

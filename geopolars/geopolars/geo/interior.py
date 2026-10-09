@@ -1,8 +1,6 @@
 """The interior rings (holes) of a polygon, as a multilinestring.
 
-A polygon's are plain Polars (C-tier).
-A multipolygon's run in a native kernel (A-tier), which gathers the rings in bulk:
-in Polars it would take a list operation inside `list.eval`, which runs per row.
+A native kernel (A-tier) copies the rings out in bulk.
 """
 
 from __future__ import annotations
@@ -12,7 +10,7 @@ from typing import TYPE_CHECKING
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import MultiLineStringType, MultiPolygonType, PolygonType
+from geopolars.datatypes import MultiPolygonType, PolygonType
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -26,18 +24,12 @@ def _interior(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     if not isinstance(geometry, (PolygonType, MultiPolygonType)):
         msg = f"interior expects a polygon or multipolygon column, got: {geometry!r}"
         raise TypeError(msg)
-    if isinstance(geometry, MultiPolygonType):
-        return register_plugin_function(
-            plugin_path=LIB,
-            args=[column],
-            function_name="interior",
-            is_elementwise=True,
-        )
-    holes_type = MultiLineStringType.of_dimension(geometry._dimension)
-    holes = holes_type._with_metadata_of(geometry)
-    storage = column.ext.storage()
-    # Every ring after the exterior.
-    return storage.list.slice(1).ext.to(holes)
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[column],
+        function_name="interior",
+        is_elementwise=True,
+    )
 
 
 def interior(geometry: IntoExprColumn) -> pl.Expr:

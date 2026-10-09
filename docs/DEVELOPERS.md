@@ -212,9 +212,9 @@ the comment says when one without a CRS takes a different tier.
 | `length_planar` | - | C if `allow_non_lines` | A | CRS ignored | - | C if `allow_non_lines` | - | C if `allow_non_lines` | A | as list of LineString | - | C if `allow_non_lines` |
 | `length_geodesic` | - | C if `allow_non_lines` | B | PROJ + ggl; needs a CRS | - | C if `allow_non_lines` | - | C if `allow_non_lines` | B | as list of LineString | - | C if `allow_non_lines` |
 | `centroid` | - | | A | length-weighted; keeps z/m | A | shoelace; XY only [^1] | - | | A | list, one per part | A | list, one per part |
-| `exterior` | - | | - | | C | ring 0 | - | | - | | A | list, one per part |
-| `interior` | - | | - | | C | rings after the first | - | | - | | A | list, one per part |
-| `boundary` | - | | C | first and last vertex; none if closed | C | every ring | - | | C | list, one per part | C | list, one per part |
+| `exterior` | - | | - | | A | ring 0 | - | | - | | A | list, one per part |
+| `interior` | - | | - | | A | rings after the first | - | | - | | A | list, one per part |
+| `boundary` | - | | C | | C | every ring | - | | C | list, one per part | C | list, one per part |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |

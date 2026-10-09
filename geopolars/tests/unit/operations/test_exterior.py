@@ -142,3 +142,16 @@ def test_multipolygon_rows_line_up_across_chunks_and_slices() -> None:
     got = _rings(df.slice(1, 4), "multi")
 
     assert got == [[_SQUARE, square], None, [square], [[], _OUTER]]
+
+
+def test_polygon_rows_line_up_across_chunks_and_slices() -> None:
+    square = _ring((10, 10), (12, 10), (12, 12), (10, 12))
+    df = pl.concat(
+        [_polygons([_OUTER, _HOLE], [_SQUARE]), _polygons(None, [], [square, _HOLE])],
+        rechunk=False,
+    )
+    assert df.n_chunks() == 2
+
+    got = _rings(df.slice(1, 4), "polygon")
+
+    assert got == [_SQUARE, None, [], square]

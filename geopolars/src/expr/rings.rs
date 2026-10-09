@@ -1,6 +1,8 @@
-//! The rings of the polygons in a multipolygon:
-//! - `exterior` keeps each polygon's first ring, as a linestring,
+//! The rings of a polygon:
+//! - `exterior` keeps its first ring, as a linestring,
 //! - `interior` keeps the rest (its holes), as a multilinestring.
+//!
+//! A multipolygon gets a list of them, one per polygon.
 //!
 //! Arrow lists cannot skip entries, so the kept rings' coordinates are copied.
 //! What one polygon keeps is contiguous in the coordinates,
@@ -21,26 +23,36 @@ use crate::geoarrow::{describe, Geo, Kind};
 /// The rings to keep of the polygons `rows`, as a part of the result per polygon.
 type Part = fn(&ListArray<i64>, Range<usize>) -> PolarsResult<Box<dyn Array>>;
 
-/// A list of `kind` per multipolygon, with the input's dimension and metadata.
-fn rings_type(dtype: &DataType, name: &str, kind: Kind) -> PolarsResult<DataType> {
+/// A `kind` per polygon, or a list of them per multipolygon,
+/// with the input's dimension and metadata.
+/// Also whether the input is a multipolygon.
+fn rings_type(dtype: &DataType, name: &str, kind: Kind) -> PolarsResult<(DataType, bool)> {
     let geo = describe(dtype)?;
-    polars_ensure!(
-        geo.kind == Kind::MultiPolygon,
-        SchemaMismatch: "{name} expects a multipolygon column, got: {}", dtype
-    );
+    let multi = match geo.kind {
+        Kind::Polygon => false,
+        Kind::MultiPolygon => true,
+        _ => polars_bail!(
+            SchemaMismatch: "{name} expects a polygon or multipolygon column, got: {}", dtype
+        ),
+    };
     let part = Geo::new(kind, geo.dim, geo.metadata.clone()).dtype();
-    Ok(DataType::List(Box::new(part)))
+    let dtype = if multi {
+        DataType::List(Box::new(part))
+    } else {
+        part
+    };
+    Ok((dtype, multi))
 }
 
 /// `output_type_func` for [`exterior`].
 fn exterior_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    let dtype = rings_type(input_fields[0].dtype(), "exterior", Kind::LineString)?;
+    let (dtype, _) = rings_type(input_fields[0].dtype(), "exterior", Kind::LineString)?;
     Ok(Field::new(input_fields[0].name().clone(), dtype))
 }
 
 /// `output_type_func` for [`interior`].
 fn interior_type(input_fields: &[Field]) -> PolarsResult<Field> {
-    let dtype = rings_type(input_fields[0].dtype(), "interior", Kind::MultiLineString)?;
+    let (dtype, _) = rings_type(input_fields[0].dtype(), "interior", Kind::MultiLineString)?;
     Ok(Field::new(input_fields[0].name().clone(), dtype))
 }
 
@@ -160,11 +172,19 @@ fn interior_part(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<
     .boxed())
 }
 
-/// Apply `part` to the polygons of every multipolygon,
-/// and put the results back into one list per multipolygon.
-fn per_polygon(inputs: &[Series], dtype: &DataType, part: Part) -> PolarsResult<Series> {
+/// Apply `part` to every polygon. For a multipolygon (`multi`),
+/// put the results back into one list per multipolygon.
+fn per_polygon(
+    inputs: &[Series],
+    dtype: &DataType,
+    multi: bool,
+    part: Part,
+) -> PolarsResult<Series> {
     let storage = inputs[0].ext()?.storage();
     let chunks = storage.list()?.downcast_iter().map(|chunk| {
+        if !multi {
+            return part(chunk, 0..chunk.len());
+        }
         let polygons = downcast::<ListArray<i64>>(chunk.values().as_ref(), "a list of polygons")?;
         // Only the polygons this chunk points at: it may be a slice of a larger one.
         let (first, last) = (
@@ -188,13 +208,13 @@ fn per_polygon(inputs: &[Series], dtype: &DataType, part: Part) -> PolarsResult<
 /// See `exterior`.
 #[polars_expr(output_type_func=exterior_type)]
 fn exterior(inputs: &[Series]) -> PolarsResult<Series> {
-    let dtype = rings_type(inputs[0].dtype(), "exterior", Kind::LineString)?;
-    per_polygon(inputs, &dtype, exterior_part)
+    let (dtype, multi) = rings_type(inputs[0].dtype(), "exterior", Kind::LineString)?;
+    per_polygon(inputs, &dtype, multi, exterior_part)
 }
 
 /// See `interior`.
 #[polars_expr(output_type_func=interior_type)]
 fn interior(inputs: &[Series]) -> PolarsResult<Series> {
-    let dtype = rings_type(inputs[0].dtype(), "interior", Kind::MultiLineString)?;
-    per_polygon(inputs, &dtype, interior_part)
+    let (dtype, multi) = rings_type(inputs[0].dtype(), "interior", Kind::MultiLineString)?;
+    per_polygon(inputs, &dtype, multi, interior_part)
 }
