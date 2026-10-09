@@ -3,11 +3,37 @@
 use std::sync::Arc;
 
 use polars::prelude::*;
+use polars_arrow::array::{Array, ListArray, StructArray};
+use polars_arrow::bitmap::Bitmap;
+use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
+use serde::Deserialize;
 
 use super::coords::same_geometry;
+use super::rings::copy_coords;
 use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
+use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
+
+/// The keyword arguments of the constructors that build polygons:
+/// [`MetadataKwargs`], plus whether to close open rings.
+/// These have to be mirrored on the python side.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct PolygonKwargs {
+    /// The CRS the coordinates are in, in any form PROJ accepts.
+    pub crs: Option<String>,
+    /// Close every open ring by repeating its first vertex at its end.
+    pub close: bool,
+}
+
+impl PolygonKwargs {
+    fn metadata(&self) -> MetadataKwargs {
+        MetadataKwargs {
+            crs: self.crs.clone(),
+        }
+    }
+}
 
 /// Used in error messages, don't care about allocation
 fn shape_of(part: Kind) -> String {
@@ -81,8 +107,13 @@ fn linestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResu
     gathered_type(input_fields, &kwargs, Kind::LineString, Kind::Point)
 }
 
-fn polygon_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    gathered_type(input_fields, &kwargs, Kind::Polygon, Kind::LineString)
+fn polygon_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<Field> {
+    gathered_type(
+        input_fields,
+        &kwargs.metadata(),
+        Kind::Polygon,
+        Kind::LineString,
+    )
 }
 
 fn multipoint_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
@@ -98,8 +129,13 @@ fn multilinestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> Polar
     )
 }
 
-fn multipolygon_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    gathered_type(input_fields, &kwargs, Kind::MultiPolygon, Kind::Polygon)
+fn multipolygon_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<Field> {
+    gathered_type(
+        input_fields,
+        &kwargs.metadata(),
+        Kind::MultiPolygon,
+        Kind::Polygon,
+    )
 }
 
 /// Elementwise check:
@@ -151,8 +187,113 @@ fn only_complete(parts: Series, nesting: u8) -> PolarsResult<Series> {
     parts.zip_with(&complete, &missing)
 }
 
+/// The validity of `lists`, also missing where any of its parts is not `ok`.
+/// `None` if none are missing.
+fn with_parts(lists: &ListArray<i64>, ok: impl Fn(usize) -> bool) -> Option<Bitmap> {
+    let valid = Bitmap::from_iter((0..lists.len()).map(|i| {
+        let (start, end) = lists.offsets().start_end(i);
+        lists.is_valid(i) && (start..end).all(&ok)
+    }));
+    (valid.unset_bits() > 0).then_some(valid)
+}
+
+/// `rings` with every open one closed by repeating its first vertex at its end,
+/// or `None` if they are all closed already. An empty ring is left empty.
+fn close_rings(rings: &ListArray<i64>) -> PolarsResult<Option<ListArray<i64>>> {
+    let coords = CoordsView::new(rings.values().as_ref())?;
+    let open: Vec<bool> = (0..rings.len())
+        .map(|ring| {
+            let (start, end) = rings.offsets().start_end(ring);
+            rings.is_valid(ring) && end > start && !coords.same_place(start, end - 1)
+        })
+        .collect();
+    if !open.contains(&true) {
+        return Ok(None);
+    }
+
+    let (mut ranges, mut lengths) = (
+        Vec::with_capacity(2 * rings.len()),
+        Vec::with_capacity(rings.len()),
+    );
+    for (ring, &open) in open.iter().enumerate() {
+        let (start, end) = rings.offsets().start_end(ring);
+        ranges.push(start..end);
+        if open {
+            ranges.push(start..start + 1);
+        }
+        lengths.push(end - start + usize::from(open));
+    }
+    let values = downcast::<StructArray>(rings.values().as_ref(), "a coordinate struct")?;
+    Ok(Some(ListArray::<i64>::new(
+        rings.dtype().clone(),
+        Offsets::try_from_lengths(lengths.into_iter())?.into(),
+        copy_coords(values, &ranges)?,
+        rings.validity().cloned(),
+    )))
+}
+
+/// `polygons`, missing where one of their rings is not a ring (see [`CoordsView::is_ring`]).
+/// With `close`, the open rings are closed first.
+fn ringed_polygons(polygons: &ListArray<i64>, close: bool) -> PolarsResult<ListArray<i64>> {
+    let rings = downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of rings")?;
+    let closed = if close { close_rings(rings)? } else { None };
+    let rings = closed.as_ref().unwrap_or(rings);
+    let coords = CoordsView::new(rings.values().as_ref())?;
+    let valid = with_parts(polygons, |ring| {
+        let (start, end) = rings.offsets().start_end(ring);
+        coords.is_ring(start..end)
+    });
+    Ok(ListArray::<i64>::new(
+        polygons.dtype().clone(),
+        polygons.offsets().clone(),
+        rings.clone().boxed(),
+        valid,
+    ))
+}
+
+/// Null out every polygon with a ring that is not a ring (see [`CoordsView::is_ring`]),
+/// and every multipolygon with such a polygon.
+/// With `close`, an open ring is closed first by repeating its first vertex at its end.
+/// Other kinds come back as they are.
+fn only_rings(storage: Series, kind: Kind, close: bool) -> PolarsResult<Series> {
+    let multi = match kind {
+        Kind::Polygon => false,
+        Kind::MultiPolygon => true,
+        Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString => {
+            return Ok(storage)
+        }
+    };
+    let chunks = storage.list()?.downcast_iter().map(|chunk| {
+        if !multi {
+            return Ok(ringed_polygons(chunk, close)?.boxed());
+        }
+        let polygons = downcast::<ListArray<i64>>(chunk.values().as_ref(), "a list of polygons")?;
+        let polygons = ringed_polygons(polygons, close)?;
+        let valid = with_parts(chunk, |polygon| polygons.is_valid(polygon));
+        Ok(ListArray::<i64>::new(
+            chunk.dtype().clone(),
+            chunk.offsets().clone(),
+            polygons.boxed(),
+            valid,
+        )
+        .boxed())
+    });
+    let chunks = chunks.collect::<PolarsResult<Vec<_>>>()?;
+    // SAFETY: only validity and ring lengths change, so every chunk is still the storage.
+    Ok(unsafe {
+        Series::from_chunks_and_dtype_unchecked(storage.name().clone(), chunks, storage.dtype())
+    })
+}
+
 /// Gather a list of `part`s into one geometry of `kind` per row.
-fn gather(parts: &Series, kwargs: &MetadataKwargs, kind: Kind, part: Kind) -> PolarsResult<Series> {
+/// `close` closes open rings, and only means something for kinds that have them.
+fn gather(
+    parts: &Series,
+    kwargs: &MetadataKwargs,
+    close: bool,
+    kind: Kind,
+    part: Kind,
+) -> PolarsResult<Series> {
     let geo = gathered(parts.dtype(), kwargs, kind, part)?;
     // This only changes dtype, nothing on the data.
     let storage = parts.list()?.apply_to_inner(&|part| {
@@ -162,38 +303,57 @@ fn gather(parts: &Series, kwargs: &MetadataKwargs, kind: Kind, part: Kind) -> Po
         })
     })?;
 
-    Ok(only_complete(storage.into_series(), kind.nesting())?.into_extension(geo.instance()))
+    let storage = only_complete(storage.into_series(), kind.nesting())?;
+    Ok(only_rings(storage, kind, close)?.into_extension(geo.instance()))
 }
 
 /// See `linestring_from_vertices`.
 #[polars_expr(output_type_func_with_kwargs=linestring_type)]
 fn linestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    gather(&inputs[0], &kwargs, Kind::LineString, Kind::Point)
+    gather(&inputs[0], &kwargs, false, Kind::LineString, Kind::Point)
 }
 
 /// See `polygon_from_rings`.
 #[polars_expr(output_type_func_with_kwargs=polygon_type)]
-fn polygon(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    gather(&inputs[0], &kwargs, Kind::Polygon, Kind::LineString)
+fn polygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
+    gather(
+        &inputs[0],
+        &kwargs.metadata(),
+        kwargs.close,
+        Kind::Polygon,
+        Kind::LineString,
+    )
 }
 
 /// See `multipoint_from_points`.
 #[polars_expr(output_type_func_with_kwargs=multipoint_type)]
 fn multipoint(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     // Note that this is basically the same as linestring, but just a different [Kind].
-    gather(&inputs[0], &kwargs, Kind::MultiPoint, Kind::Point)
+    gather(&inputs[0], &kwargs, false, Kind::MultiPoint, Kind::Point)
 }
 
 /// See `multilinestring_from_linestrings`.
 #[polars_expr(output_type_func_with_kwargs=multilinestring_type)]
 fn multilinestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    gather(&inputs[0], &kwargs, Kind::MultiLineString, Kind::LineString)
+    gather(
+        &inputs[0],
+        &kwargs,
+        false,
+        Kind::MultiLineString,
+        Kind::LineString,
+    )
 }
 
 /// See `multipolygon_from_polygons`.
 #[polars_expr(output_type_func_with_kwargs=multipolygon_type)]
-fn multipolygon(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    gather(&inputs[0], &kwargs, Kind::MultiPolygon, Kind::Polygon)
+fn multipolygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
+    gather(
+        &inputs[0],
+        &kwargs.metadata(),
+        kwargs.close,
+        Kind::MultiPolygon,
+        Kind::Polygon,
+    )
 }
 
 /// See `validate`.
@@ -252,8 +412,8 @@ fn linestring_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> Pol
     zipped_type(input_fields, &kwargs, Kind::LineString)
 }
 
-fn polygon_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    zipped_type(input_fields, &kwargs, Kind::Polygon)
+fn polygon_coords_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<Field> {
+    zipped_type(input_fields, &kwargs.metadata(), Kind::Polygon)
 }
 
 fn multipoint_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
@@ -267,8 +427,8 @@ fn multilinestring_coords_type(
     zipped_type(input_fields, &kwargs, Kind::MultiLineString)
 }
 
-fn multipolygon_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    zipped_type(input_fields, &kwargs, Kind::MultiPolygon)
+fn multipolygon_coords_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<Field> {
+    zipped_type(input_fields, &kwargs.metadata(), Kind::MultiPolygon)
 }
 
 /// Interleave columns that each nest their coordinate `nesting` `List` layers
@@ -297,7 +457,13 @@ fn interleave(columns: &[Series], nesting: u8) -> PolarsResult<Series> {
 }
 
 /// Zip one coordinate column per axis into one geometry of `kind` per row.
-fn zip(inputs: &[Series], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<Series> {
+/// `close` closes open rings, and only means something for kinds that have them.
+fn zip(
+    inputs: &[Series],
+    kwargs: &MetadataKwargs,
+    close: bool,
+    kind: Kind,
+) -> PolarsResult<Series> {
     let input_fields: Vec<Field> = inputs
         .iter()
         .map(|s| Field::new(s.name().clone(), s.dtype().clone()))
@@ -328,37 +494,38 @@ fn zip(inputs: &[Series], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<S
     }
 
     let storage = interleave(&columns, kind.nesting())?;
-    Ok(only_complete(storage, kind.nesting())?.into_extension(geo.instance()))
+    let storage = only_complete(storage, kind.nesting())?;
+    Ok(only_rings(storage, kind, close)?.into_extension(geo.instance()))
 }
 
 /// See `linestring_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=linestring_coords_type)]
 fn linestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    zip(inputs, &kwargs, Kind::LineString)
+    zip(inputs, &kwargs, false, Kind::LineString)
 }
 
 /// See `polygon_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=polygon_coords_type)]
-fn polygon_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    zip(inputs, &kwargs, Kind::Polygon)
+fn polygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
+    zip(inputs, &kwargs.metadata(), kwargs.close, Kind::Polygon)
 }
 
 /// See `multipoint_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=multipoint_coords_type)]
 fn multipoint_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    zip(inputs, &kwargs, Kind::MultiPoint)
+    zip(inputs, &kwargs, false, Kind::MultiPoint)
 }
 
 /// See `multilinestring_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=multilinestring_coords_type)]
 fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    zip(inputs, &kwargs, Kind::MultiLineString)
+    zip(inputs, &kwargs, false, Kind::MultiLineString)
 }
 
 /// See `multipolygon_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=multipolygon_coords_type)]
-fn multipolygon_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
-    zip(inputs, &kwargs, Kind::MultiPolygon)
+fn multipolygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
+    zip(inputs, &kwargs.metadata(), kwargs.close, Kind::MultiPolygon)
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import polars as pl
 from polars.plugins import register_plugin_function
@@ -51,6 +51,11 @@ def _metadata(crs: str | None) -> dict[str, str | None]:
     return {"crs": crs}
 
 
+def _polygon_kwargs(crs: str | None, close: bool) -> dict[str, str | bool | None]:
+    """Mirrors `PolygonKwargs` in `src/expr/construct.rs`."""
+    return {**_metadata(crs), "close": close}
+
+
 def _decode_kwargs(dtype: type[GeoArrowType], crs: str | None) -> dict[str, str | None]:
     """Mirrors `DecodeKwargs` in `src/geoarrow/decode.rs`:
     the concrete geometry `from_wkb` / `from_wkt` decode into.
@@ -72,7 +77,7 @@ def _from_columns(
     y: IntoExprColumn,
     z: IntoExprColumn | None,
     m: IntoExprColumn | None,
-    crs: str | None,
+    kwargs: dict[str, Any],
 ) -> pl.Expr:
     """Zip one nested coordinate column per axis into one geometry per row."""
     # A plugin call rather than expressions:
@@ -83,11 +88,13 @@ def _from_columns(
         args=[_named(value, name) for name, value in _given(x, y, z, m).items()],
         function_name=function_name,
         is_elementwise=True,
-        kwargs=_metadata(crs),
+        kwargs=kwargs,
     )
 
 
-def _gather(function_name: str, parts: IntoExprColumn, crs: str | None) -> pl.Expr:
+def _gather(
+    function_name: str, parts: IntoExprColumn, kwargs: dict[str, Any]
+) -> pl.Expr:
     """Gather a list column of a geometry's parts into one geometry per row."""
     # Unlike `point`, this is a plugin call: the output dimension is only
     # knowable from the input's dtype, which `output_type_func` gets to see and
@@ -97,7 +104,7 @@ def _gather(function_name: str, parts: IntoExprColumn, crs: str | None) -> pl.Ex
         args=[parts],
         function_name=function_name,
         is_elementwise=True,
-        kwargs=_metadata(crs),
+        kwargs=kwargs,
     )
 
 
@@ -243,7 +250,7 @@ def line_string_from_vertices(
     )
     ```
     """
-    return _gather("linestring", vertices, crs)
+    return _gather("linestring", vertices, _metadata(crs))
 
 
 def line_string_from_columns(
@@ -261,7 +268,7 @@ def line_string_from_columns(
     df.select(geo.line_string_from_columns("lon", "lat", z="elevation"))
     ```
     """
-    return _from_columns("linestring_coords", x, y, z, m, crs)
+    return _from_columns("linestring_coords", x, y, z, m, _metadata(crs))
 
 
 def line_string(
@@ -302,7 +309,7 @@ def multi_point_from_points(
     )
     ```
     """
-    return _gather("multipoint", points, crs)
+    return _gather("multipoint", points, _metadata(crs))
 
 
 def multi_point_from_columns(
@@ -320,7 +327,7 @@ def multi_point_from_columns(
     df.select(geo.multi_point_from_columns("lon", "lat", m="seen_at"))
     ```
     """
-    return _from_columns("multipoint_coords", x, y, z, m, crs)
+    return _from_columns("multipoint_coords", x, y, z, m, _metadata(crs))
 
 
 def multi_point(
@@ -371,7 +378,7 @@ def multi_line_string_from_line_strings(
     )
     ```
     """
-    return _gather("multilinestring", line_strings, crs)
+    return _gather("multilinestring", line_strings, _metadata(crs))
 
 
 def multi_line_string_from_columns(
@@ -389,7 +396,7 @@ def multi_line_string_from_columns(
     df.select(geo.multi_line_string_from_columns("lon", "lat"))
     ```
     """
-    return _from_columns("multilinestring_coords", x, y, z, m, crs)
+    return _from_columns("multilinestring_coords", x, y, z, m, _metadata(crs))
 
 
 def multi_line_string(
@@ -418,16 +425,20 @@ def multi_line_string(
     return multi_line_string_from_columns(x, y, z, m, crs=crs)
 
 
-def polygon_from_rings(rings: IntoExprColumn, *, crs: str | None = None) -> pl.Expr:
+def polygon_from_rings(
+    rings: IntoExprColumn, *, crs: str | None = None, close: bool = False
+) -> pl.Expr:
     """Build a `geoarrow.polygon` column out of lists of rings.
 
     `rings` is a list column holding one list per polygon, of either
     `geoarrow.linestring`s or the bare vertex lists a linestring wraps. The
     first ring of a polygon is its exterior ring; the rest are its holes.
 
-    A ring is a closed linestring: its last vertex has to repeat its first.
-    That is the caller's to get right this does not check it,
-    and does not close a ring for you.
+    Every ring has to be a ring (see [`is_ring`][geopolars.geo.is_ring]):
+    at least 4 vertices, the last one repeating the first.
+    A polygon with a ring that is not one is missing in the result.
+    With `close=True`, an open ring is first closed by repeating its first vertex
+    at its end. A ring that is still too short after that stays refused.
 
     Rings normally arrive grouped, one linestring at a time:
 
@@ -444,7 +455,7 @@ def polygon_from_rings(rings: IntoExprColumn, *, crs: str | None = None) -> pl.E
     )
     ```
     """
-    return _gather("polygon", rings, crs)
+    return _gather("polygon", rings, _polygon_kwargs(crs, close))
 
 
 def polygon_from_columns(
@@ -454,6 +465,7 @@ def polygon_from_columns(
     m: IntoExprColumn | None = None,
     *,
     crs: str | None = None,
+    close: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column from one coordinate column per axis.
     Each is a `List[List[Float64]]`.
@@ -464,8 +476,10 @@ def polygon_from_columns(
 
     The first ring of a polygon is its exterior ring,
     and the rest are its holes.
+    Rings are checked (and closed with `close=True`)
+    as in [`polygon_from_rings`][geopolars.geo.polygon_from_rings].
     """
-    return _from_columns("polygon_coords", x, y, z, m, crs)
+    return _from_columns("polygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
 
 
 def polygon(
@@ -475,6 +489,7 @@ def polygon(
     m: IntoExprColumn | None = None,
     *,
     crs: str | None = None,
+    close: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column, from rings or from coordinates.
     Dispatches to either:
@@ -488,13 +503,13 @@ def polygon(
                 "pass x and y as columns, or call polygon_from_rings()"
             )
             raise TypeError(msg)
-        return polygon_from_rings(x, crs=crs)
+        return polygon_from_rings(x, crs=crs, close=close)
 
-    return polygon_from_columns(x, y, z, m, crs=crs)
+    return polygon_from_columns(x, y, z, m, crs=crs, close=close)
 
 
 def multi_polygon_from_polygons(
-    polygons: IntoExprColumn, *, crs: str | None = None
+    polygons: IntoExprColumn, *, crs: str | None = None, close: bool = False
 ) -> pl.Expr:
     """Build a `geoarrow.multipolygon` column out of lists of polygons.
     Takes either a list of polygons, or bare lists of rings.
@@ -518,9 +533,10 @@ def multi_polygon_from_polygons(
     )
     ```
 
-    As for `polygon_from_rings`, every ring has to be closed already.
+    As for `polygon_from_rings`, every ring has to be a ring, or be closed with `close=True`.
+    A multipolygon with a polygon that fails this is missing in the result.
     """
-    return _gather("multipolygon", polygons, crs)
+    return _gather("multipolygon", polygons, _polygon_kwargs(crs, close))
 
 
 def multi_polygon_from_columns(
@@ -530,6 +546,7 @@ def multi_polygon_from_columns(
     m: IntoExprColumn | None = None,
     *,
     crs: str | None = None,
+    close: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.multipolygon` column from one column per axis.
     Each is a `List[List[List[Float64]]]`: polygons, then rings, then coordinates.
@@ -540,8 +557,10 @@ def multi_polygon_from_columns(
 
     The first ring of every polygon is its exterior ring,
     and the rest are its holes.
+    Rings are checked (and closed with `close=True`)
+    as in [`multi_polygon_from_polygons`][geopolars.geo.multi_polygon_from_polygons].
     """
-    return _from_columns("multipolygon_coords", x, y, z, m, crs)
+    return _from_columns("multipolygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
 
 
 def multi_polygon(
@@ -551,6 +570,7 @@ def multi_polygon(
     m: IntoExprColumn | None = None,
     *,
     crs: str | None = None,
+    close: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.multipolygon` column, from polygons or from coordinates.
     Dispatches to either:
@@ -565,6 +585,6 @@ def multi_polygon(
                 "multi_polygon_from_polygons()"
             )
             raise TypeError(msg)
-        return multi_polygon_from_polygons(x, crs=crs)
+        return multi_polygon_from_polygons(x, crs=crs, close=close)
 
-    return multi_polygon_from_columns(x, y, z, m, crs=crs)
+    return multi_polygon_from_columns(x, y, z, m, crs=crs, close=close)

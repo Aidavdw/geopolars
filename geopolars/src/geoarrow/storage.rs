@@ -6,6 +6,9 @@
 use polars::prelude::*;
 use polars_arrow::array::{Array, PrimitiveArray, StructArray};
 
+use std::ops::Range;
+
+use super::coord::is_close;
 use super::GeoDimension;
 
 /// Downcast one level of the storage to the array it has to be.
@@ -15,6 +18,9 @@ pub(crate) fn downcast<'a, T: 'static>(array: &'a dyn Array, what: &str) -> Pola
         || polars_err!(ComputeError: "expected {what} in geometry storage, got: {:?}", array.dtype()),
     )
 }
+
+/// The fewest vertices a ring can have: a triangle, plus the vertex closing it.
+pub(crate) const MIN_RING_VERTICES: usize = 4;
 
 /// View (zero-allocation) of one chunk's coordinates in the Arrow array.
 pub(crate) struct CoordsView<'a> {
@@ -47,6 +53,24 @@ impl<'a> CoordsView<'a> {
     pub(crate) fn xy(&self, i: usize) -> Option<(f64, f64)> {
         let present = self.coords.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i);
         present.then(|| (self.x.value(i), self.y.value(i)))
+    }
+
+    /// Whether coordinates `i` and `j` lie at almost the same place:
+    /// [`is_close`] in x, y and z. m is a measure rather than a position, so it is not compared.
+    /// A missing coordinate is close to nothing.
+    pub(crate) fn same_place(&self, i: usize, j: usize) -> bool {
+        let (Some((ax, ay)), Some((bx, by))) = (self.xy(i), self.xy(j)) else {
+            return false;
+        };
+        is_close(ax, bx)
+            && is_close(ay, by)
+            && self
+                .z
+                .is_none_or(|z| z.is_valid(i) && z.is_valid(j) && is_close(z.value(i), z.value(j)))
+    }
+
+    pub(crate) fn is_ring(&self, range: Range<usize>) -> bool {
+        range.len() >= MIN_RING_VERTICES && self.same_place(range.start, range.end - 1)
     }
 
     /// The dimension these coordinates carry.

@@ -11,10 +11,16 @@ from polars.testing import assert_series_equal
 import geopolars as gpl
 from geopolars import geo
 from geopolars.datatypes import (
+    GeoArrowType,
+    LineStringType,
     LineStringXY,
+    MultiLineStringType,
+    MultiPointType,
     MultiPointXY,
+    MultiPolygonType,
     MultiPolygonXY,
     PointXY,
+    PolygonType,
     PolygonXY,
 )
 from tests.unit.conftest import XY, Dimension
@@ -94,22 +100,25 @@ def test_a_nan_point_is_empty(dimension: Dimension) -> None:
 
 
 @pytest.mark.parametrize(
-    ("constructor", "layers", "rows"),
+    ("geometry", "layers", "rows"),
     [
-        (geo.line_string, 1, [[], None]),
-        (geo.multi_point, 1, [[], None]),
-        (geo.polygon, 2, [[], [[]], [[], []], None]),
-        (geo.multi_line_string, 2, [[], [[]], [[], []], None]),
-        (geo.multi_polygon, 3, [[], [[]], [[[]]], [[[]], [[], []]], None]),
+        (LineStringType, 1, [[], None]),
+        (MultiPointType, 1, [[], None]),
+        (PolygonType, 2, [[], [[]], [[], []], None]),
+        (MultiLineStringType, 2, [[], [[]], [[], []], None]),
+        (MultiPolygonType, 3, [[], [[]], [[[]]], [[[]], [[], []]], None]),
     ],
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
 def test_no_coordinates_is_empty_and_missing_is_null(
-    constructor: object, layers: int, rows: list, dimension: Dimension
+    geometry: type[GeoArrowType], layers: int, rows: list, dimension: Dimension
 ) -> None:
+    # Relabelled rather than built: a constructor refuses a ring without vertices,
+    # but one can still arrive around it (e.g. from a file).
+    dtype = geometry.of_dimension(dimension.coords)()
     df = pl.DataFrame(
         {"storage": rows}, schema={"storage": _nested(dimension, layers)}
-    ).select(constructor("storage").alias("geometry"))  # type: ignore[operator]
+    ).select(pl.col("storage").ext.to(dtype).alias("geometry"))
 
     out = df.select(geo.is_empty("geometry"))
 

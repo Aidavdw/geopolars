@@ -220,8 +220,12 @@ def test_coordinate_columns_keep_their_parts_in_order() -> None:
     """The nesting is the polygon and ring structure, read in the order given."""
     df = pl.DataFrame(
         {
-            "lon": [[[[0.0, 1.0], [2.0]], [[3.0, 4.0]]]],
-            "lat": [[[[5.0, 6.0], [7.0]], [[8.0, 9.0]]]],
+            "lon": [
+                [[[0.0, 1.0, 1.0, 0.0], [2.0, 3.0, 3.0, 2.0]], [[4.0, 5.0, 5.0, 4.0]]]
+            ],
+            "lat": [
+                [[[0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 1.0, 0.0]], [[0.0, 0.0, 1.0, 0.0]]]
+            ],
         }
     ).select(geo.multi_polygon("lon", "lat").alias("multipolygon"))
     polygons = pl.col("multipolygon").ext.storage()
@@ -234,8 +238,8 @@ def test_coordinate_columns_keep_their_parts_in_order() -> None:
         multipolygon_coordinates(df),
         pl.DataFrame(
             {
-                "x": [0.0, 1.0, 2.0, 3.0, 4.0],
-                "y": [5.0, 6.0, 7.0, 8.0, 9.0],
+                "x": [0.0, 1.0, 1.0, 0.0, 2.0, 3.0, 3.0, 2.0, 4.0, 5.0, 5.0, 4.0],
+                "y": [0.0, 0.0, 1.0, 0.0] * 3,
             }
         ),
     )
@@ -244,20 +248,23 @@ def test_coordinate_columns_keep_their_parts_in_order() -> None:
 def test_coordinate_columns_are_cast_to_f64() -> None:
     """Coordinates are doubles.
     integer columns are widened rather than refused."""
-    df = pl.DataFrame({"lon": [[[[1, 3]]]], "lat": [[[[2, 4]]]]}).select(
+    df = pl.DataFrame({"lon": [[[[0, 1, 1, 0]]]], "lat": [[[[0, 0, 1, 0]]]]}).select(
         geo.multi_polygon("lon", "lat").alias("multipolygon")
     )
 
     assert df.schema["multipolygon"] == MultiPolygonXY()
     assert_frame_equal(
         multipolygon_coordinates(df),
-        pl.DataFrame({"x": [1.0, 3.0], "y": [2.0, 4.0]}),
+        pl.DataFrame({"x": [0.0, 1.0, 1.0, 0.0], "y": [0.0, 0.0, 1.0, 0.0]}),
     )
 
 
 def test_a_missing_coordinate_invalidates_the_multipolygon_of_coords() -> None:
     df = pl.DataFrame(
-        {"lon": [[[[1.0]]], [[[1.0]]]], "lat": [[[[None]]], [[[2.0]]]]},
+        {
+            "lon": [[[[0.0, 1.0, 0.0, 0.0]]], [[[0.0, 1.0, 0.0, 0.0]]]],
+            "lat": [[[[0.0, None, 1.0, 0.0]]], [[[0.0, 0.0, 1.0, 0.0]]]],
+        },
         schema=_XY_COORDS,
     ).select(geo.multi_polygon("lon", "lat").alias("multipolygon"))
 
@@ -329,3 +336,57 @@ def test_coordinate_columns_dispatch_to_the_column_form() -> None:
         df.select(geo.multi_polygon("lon", "lat")),
         df.select(geo.multi_polygon_from_columns("lon", "lat")),
     )
+
+
+# The square's polygon, and that polygon with its ring left open.
+_SQUARE_POLYGON = _SQUARE[0]
+_OPEN_POLYGON = [_SQUARE_POLYGON[0][:-1]]
+
+
+def _from_polygons(*multis: list | None, close: bool = False) -> pl.Series:
+    return (
+        pl.DataFrame({"polygons": list(multis)}, schema={"polygons": _XY_POLYGONS})
+        .select(geo.multi_polygon("polygons", close=close).alias("multipolygon"))
+        .to_series()
+    )
+
+
+def test_one_polygon_with_a_ring_that_is_no_ring_invalidates_the_multipolygon() -> None:
+    out = _from_polygons(
+        [_SQUARE_POLYGON, _OPEN_POLYGON], [_SQUARE_POLYGON], [[]], [], None
+    )
+
+    assert out.is_null().to_list() == [True, False, False, False, True]
+
+
+def test_close_closes_the_rings_of_every_polygon() -> None:
+    out = _from_polygons([_OPEN_POLYGON, _SQUARE_POLYGON, _OPEN_POLYGON], close=True)
+
+    assert out.ext.storage().to_list() == [[_SQUARE_POLYGON] * 3]
+
+
+def test_close_does_not_reach_polygons_that_are_already_built() -> None:
+    """Built polygons were checked when they were built: an open ring made them missing,
+    which leaves the multipolygon missing a polygon."""
+    polygons = pl.DataFrame(
+        {"rings": [_OPEN_POLYGON]}, schema={"rings": _XY_RINGS}
+    ).select(geo.polygon("rings").implode().alias("polygons"))
+
+    out = polygons.select(geo.multi_polygon("polygons", close=True).alias("m"))
+
+    assert out["m"].to_list() == [None]
+
+
+def test_multipolygon_coordinate_columns_are_checked_and_closed_too() -> None:
+    df = pl.DataFrame(
+        {"lon": [[[[0.0, 1.0, 1.0, 0.0]]]], "lat": [[[[0.0, 0.0, 1.0, 1.0]]]]},
+        schema=_XY_COORDS,
+    )
+
+    checked = df.select(geo.multi_polygon("lon", "lat").alias("multipolygon"))
+    closed = df.select(
+        geo.multi_polygon("lon", "lat", close=True).alias("multipolygon")
+    )
+
+    assert checked["multipolygon"].to_list() == [None]
+    assert closed["multipolygon"].ext.storage().to_list() == [_SQUARE]

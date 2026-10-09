@@ -42,6 +42,14 @@ def _rings(rings: list[list[dict[str, float]]], crs: str | None = None) -> pl.Da
     )
 
 
+def _relabelled(rings: list[list[dict[str, float]]]) -> pl.DataFrame:
+    """As `_rings`, but relabelled rather than built,
+    for rings a constructor refuses but that can still arrive around it."""
+    return pl.DataFrame({"rings": [rings]}, schema={"rings": _XY_RINGS}).select(
+        pl.col("rings").ext.to(PolygonXY()).alias("polygon")
+    )
+
+
 Area = Callable[..., pl.Expr]
 
 
@@ -118,11 +126,11 @@ def test_a_degenerate_ring_encloses_nothing(planar_area: Area) -> None:
         {"x": 1.0, "y": 1.0},
     ]
 
-    assert _areas(planar_area, _rings([there_and_back])) == [0.0]
+    assert _areas(planar_area, _relabelled([there_and_back])) == [0.0]
 
 
 def test_an_empty_ring_takes_nothing_with_it(planar_area: Area) -> None:
-    assert _areas(planar_area, _rings([_SQUARE, []])) == [16.0]
+    assert _areas(planar_area, _relabelled([_SQUARE, []])) == [16.0]
 
 
 def test_an_empty_polygon_encloses_nothing(planar_area: Area) -> None:

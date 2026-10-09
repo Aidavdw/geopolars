@@ -64,7 +64,12 @@ def test_rings_keep_their_order() -> None:
     """Which ring is which is positional:
     the first is the exterior ring and the rest are holes,
     so reordering them is another polygon."""
-    hole = [{"x": 0.2, "y": 0.2}, {"x": 0.4, "y": 0.2}, {"x": 0.2, "y": 0.2}]
+    hole = [
+        {"x": 0.2, "y": 0.2},
+        {"x": 0.4, "y": 0.2},
+        {"x": 0.2, "y": 0.4},
+        {"x": 0.2, "y": 0.2},
+    ]
     df = pl.DataFrame(
         {"rings": [[*_TRIANGLE, hole]]}, schema={"rings": _XY_RINGS}
     ).select(geo.polygon("rings").alias("polygon"))
@@ -76,8 +81,8 @@ def test_rings_keep_their_order() -> None:
         ring_coordinates(swapped),
         pl.DataFrame(
             {
-                "x": [0.2, 0.4, 0.2, 0.0, 1.0, 0.0, 0.0],
-                "y": [0.2, 0.2, 0.2, 0.0, 0.0, 1.0, 0.0],
+                "x": [0.2, 0.4, 0.2, 0.2, 0.0, 1.0, 0.0, 0.0],
+                "y": [0.2, 0.2, 0.4, 0.2, 0.0, 0.0, 1.0, 0.0],
             }
         ),
     )
@@ -211,8 +216,8 @@ def test_coordinate_columns_keep_their_rings_in_order() -> None:
     """The nesting is the ring structure: the first list is the exterior ring."""
     df = pl.DataFrame(
         {
-            "lon": [[[0.0, 1.0, 0.0, 0.0], [0.2, 0.4, 0.2]]],
-            "lat": [[[0.0, 0.0, 1.0, 0.0], [0.2, 0.2, 0.2]]],
+            "lon": [[[0.0, 1.0, 0.0, 0.0], [0.2, 0.4, 0.2, 0.2]]],
+            "lat": [[[0.0, 0.0, 1.0, 0.0], [0.2, 0.2, 0.4, 0.2]]],
         }
     ).select(geo.polygon("lon", "lat").alias("polygon"))
 
@@ -223,8 +228,8 @@ def test_coordinate_columns_keep_their_rings_in_order() -> None:
         ring_coordinates(df),
         pl.DataFrame(
             {
-                "x": [0.0, 1.0, 0.0, 0.0, 0.2, 0.4, 0.2],
-                "y": [0.0, 0.0, 1.0, 0.0, 0.2, 0.2, 0.2],
+                "x": [0.0, 1.0, 0.0, 0.0, 0.2, 0.4, 0.2, 0.2],
+                "y": [0.0, 0.0, 1.0, 0.0, 0.2, 0.2, 0.4, 0.2],
             }
         ),
     )
@@ -234,7 +239,11 @@ def test_a_missing_coordinate_invalidates_the_whole_polygon_of_coords() -> None:
     """A vertex missing its `y` cannot stand, so neither can the ring around
     it, nor the polygon around that."""
     df = pl.DataFrame(
-        {"lon": [[[1.0]], [[1.0]]], "lat": [[[None]], [[2.0]]]}, schema=_XY_COORDS
+        {
+            "lon": [[[0.0, 1.0, 0.0, 0.0]], [[0.0, 1.0, 0.0, 0.0]]],
+            "lat": [[[0.0, None, 1.0, 0.0]], [[0.0, 0.0, 1.0, 0.0]]],
+        },
+        schema=_XY_COORDS,
     ).select(geo.polygon("lon", "lat").alias("polygon"))
 
     assert df["polygon"].is_null().to_list() == [True, False]
@@ -302,3 +311,75 @@ def test_coordinate_columns_dispatch_to_the_column_form() -> None:
         df.select(geo.polygon("lon", "lat")),
         df.select(geo.polygon_from_columns("lon", "lat")),
     )
+
+
+def _ring_xy(*xy: tuple[float, float]) -> list[dict[str, float]]:
+    return [{"x": x, "y": y} for x, y in xy]
+
+
+# The triangle again, without the vertex closing it.
+_OPEN = _ring_xy((0, 0), (1, 0), (0, 1))
+
+
+def _from_rings(*polygons: list | None, close: bool = False) -> pl.Series:
+    return (
+        pl.DataFrame({"rings": list(polygons)}, schema={"rings": _XY_RINGS})
+        .select(geo.polygon("rings", close=close).alias("polygon"))
+        .to_series()
+    )
+
+
+def test_a_ring_that_is_no_ring_invalidates_the_polygon() -> None:
+    """Open, or closed with too few vertices to enclose anything,
+    in the exterior or in a hole."""
+    there_and_back = _ring_xy((0, 0), (1, 0), (0, 0))
+    out = _from_rings(
+        _TRIANGLE, [_OPEN], [there_and_back], [*_TRIANGLE, _OPEN], [*_TRIANGLE, []], []
+    )
+
+    assert out.is_null().to_list() == [False, True, True, True, True, False]
+
+
+def test_close_closes_the_open_rings() -> None:
+    out = _from_rings([_OPEN], [*_TRIANGLE, _OPEN], close=True)
+
+    assert out.is_null().to_list() == [False, False]
+    assert out.ext.storage().to_list() == [_TRIANGLE, [*_TRIANGLE, *_TRIANGLE]]
+
+
+def test_close_leaves_a_ring_that_is_almost_closed_alone() -> None:
+    almost = _ring_xy((1e6, 0), (2e6, 0), (2e6, 1), (1e6 + 1e-4, 0))
+
+    assert _from_rings([almost], close=True).ext.storage().to_list() == [[almost]]
+
+
+def test_close_cannot_save_a_ring_that_is_too_short() -> None:
+    out = _from_rings([_ring_xy((0, 0), (1, 0))], [[]], close=True)
+
+    assert out.is_null().to_list() == [True, True]
+
+
+def test_close_on_a_sliced_column() -> None:
+    df = pl.DataFrame(
+        {"rings": [[_OPEN], [_OPEN], _TRIANGLE]}, schema={"rings": _XY_RINGS}
+    ).slice(1, 2)
+
+    out = df.select(geo.polygon("rings", close=True).alias("polygon"))
+
+    assert out["polygon"].ext.storage().to_list() == [_TRIANGLE, _TRIANGLE]
+
+
+def test_coordinate_columns_are_checked_and_closed_too() -> None:
+    df = pl.DataFrame(
+        {
+            "lon": [[[0.0, 1.0, 0.0]], [[0.0, 1.0]]],
+            "lat": [[[0.0, 0.0, 1.0]], [[0.0, 0.0]]],
+        },
+        schema=_XY_COORDS,
+    )
+
+    checked = df.select(geo.polygon("lon", "lat").alias("polygon"))
+    closed = df.select(geo.polygon("lon", "lat", close=True).alias("polygon"))
+
+    assert checked["polygon"].is_null().to_list() == [True, True]
+    assert closed["polygon"].ext.storage().to_list() == [_TRIANGLE, None]

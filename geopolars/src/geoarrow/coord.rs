@@ -48,6 +48,22 @@ pub fn dimension_of_storage(storage: &DataType, nesting: u8) -> Option<GeoDimens
     dimension_of(inner)
 }
 
+/// The relative tolerance of [`is_close`], as `pl.Expr.is_close`'s default.
+pub const REL_TOL: f64 = 1e-9;
+
+/// The absolute tolerance of [`is_close`], as `pl.Expr.is_close`'s default.
+pub const ABS_TOL: f64 = 0.0;
+
+/// Whether two coordinate values are almost the same, as `pl.Expr.is_close` with its defaults:
+/// `|a - b| <= max(REL_TOL * max(|a|, |b|), ABS_TOL)` (PEP 485).
+/// Infinities are only close to themselves, and NaN is close to nothing.
+pub fn is_close(a: f64, b: f64) -> bool {
+    if a.is_infinite() || b.is_infinite() {
+        return a == b;
+    }
+    (a - b).abs() <= (REL_TOL * a.abs().max(b.abs())).max(ABS_TOL)
+}
+
 #[cfg(test)]
 mod tests {
     //! Only what the Python suite cannot reach.

@@ -72,7 +72,10 @@ fn copy_bits(bitmap: Option<&Bitmap>, ranges: &[Range<usize>], len: usize) -> Op
 }
 
 /// The coordinates at `ranges`, in order, copied out of `coords` field by field.
-fn copy_coords(coords: &StructArray, ranges: &[Range<usize>]) -> PolarsResult<Box<dyn Array>> {
+pub(crate) fn copy_coords(
+    coords: &StructArray,
+    ranges: &[Range<usize>],
+) -> PolarsResult<Box<dyn Array>> {
     let len = ranges.iter().map(Range::len).sum();
     let fields = coords.values().iter().map(|field| {
         let field: &PrimitiveArray<f64> = downcast(field.as_ref(), "f64 coordinates")?;

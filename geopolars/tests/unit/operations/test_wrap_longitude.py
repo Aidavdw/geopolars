@@ -98,34 +98,36 @@ def test_every_ring_of_a_polygon_counts() -> None:
     """The exterior is past the antimeridian, the hole is not: crossing."""
     polygons = pl.LazyFrame(
         {
-            "x": [[[190.0, 200.0, 190.0], [170.0, 175.0, 170.0]]],
-            "y": [[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]],
+            "x": [[[190.0, 200.0, 200.0, 190.0], [170.0, 175.0, 175.0, 170.0]]],
+            "y": [[[0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 1.0, 0.0]]],
         }
     ).select(geo.polygon_from_columns("x", "y", crs=WGS84).alias("polygon"))
 
     assert _x(polygons, skip_crossing=True) == [
-        [[190.0, 200.0, 190.0], [170.0, 175.0, 170.0]]
+        [[190.0, 200.0, 200.0, 190.0], [170.0, 175.0, 175.0, 170.0]]
     ]
-    assert _x(polygons) == [[[-170.0, -160.0, -170.0], [170.0, 175.0, 170.0]]]
+    assert _x(polygons) == [
+        [[-170.0, -160.0, -160.0, -170.0], [170.0, 175.0, 175.0, 170.0]]
+    ]
 
 
 def test_every_part_of_a_multipolygon_counts() -> None:
-    ring = [0.0, 1.0, 0.0]
+    ring = [0.0, 0.0, 1.0, 0.0]
     multipolygons = pl.LazyFrame(
         {
             "x": [
                 # One part on each side: crossing.
-                [[[170.0, 175.0, 170.0]], [[190.0, 195.0, 190.0]]],
+                [[[170.0, 175.0, 175.0, 170.0]], [[190.0, 195.0, 195.0, 190.0]]],
                 # Both parts past it: moves whole.
-                [[[190.0, 195.0, 190.0]], [[200.0, 205.0, 200.0]]],
+                [[[190.0, 195.0, 195.0, 190.0]], [[200.0, 205.0, 205.0, 200.0]]],
             ],
             "y": [[[ring], [ring]], [[ring], [ring]]],
         }
     ).select(geo.multi_polygon_from_columns("x", "y", crs=WGS84).alias("parts"))
 
     assert _x(multipolygons, skip_crossing=True) == [
-        [[[170.0, 175.0, 170.0]], [[190.0, 195.0, 190.0]]],
-        [[[-170.0, -165.0, -170.0]], [[-160.0, -155.0, -160.0]]],
+        [[[170.0, 175.0, 175.0, 170.0]], [[190.0, 195.0, 195.0, 190.0]]],
+        [[[-170.0, -165.0, -165.0, -170.0]], [[-160.0, -155.0, -155.0, -160.0]]],
     ]
 
 

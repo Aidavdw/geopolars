@@ -215,6 +215,7 @@ the comment says when one without a CRS takes a different tier.
 | `exterior` | - | | - | | A | ring 0 | - | | - | | A | list, one per part |
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | list, one per part |
 | `boundary` | - | | C | | C | every ring | - | | C | list, one per part | C | list, one per part |
+| `is_ring` | - | | A | ≥ 4 vertices, ends close in x/y/z | - | | - | | A | list, one per part | - | |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |

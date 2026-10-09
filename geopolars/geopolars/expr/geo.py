@@ -153,6 +153,11 @@ class ExprGeoNameSpace:
 
         return boundary(self._expr)
 
+    def is_ring(self) -> pl.Expr:
+        from geopolars.geo.is_ring import is_ring
+
+        return is_ring(self._expr)
+
     def distance(self, other: IntoExprColumn) -> pl.Expr:
         from geopolars.geo.distance import distance
 

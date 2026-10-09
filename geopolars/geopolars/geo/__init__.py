@@ -43,6 +43,7 @@ from geopolars.geo.distance import distance, distance_squared
 from geopolars.geo.exterior import exterior
 from geopolars.geo.interior import interior
 from geopolars.geo.is_empty import is_empty
+from geopolars.geo.is_ring import is_ring
 from geopolars.geo.length import length, length_geodesic, length_planar
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.to_polygon import to_polygon
@@ -68,6 +69,7 @@ __all__ = [
     "interior",
     "is_empty",
     "is_geographic",
+    "is_ring",
     "length",
     "length_geodesic",
     "length_planar",

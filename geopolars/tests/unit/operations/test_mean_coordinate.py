@@ -13,6 +13,7 @@ from geopolars.datatypes import (
     LineStringXY,
     PointType,
     PointXY,
+    PolygonXY,
 )
 from tests.unit.conftest import XY, XYZM, Dimension, coordinates
 
@@ -104,7 +105,10 @@ def test_a_closed_linestring_keeps_every_vertex() -> None:
 def test_an_empty_ring_takes_nothing_with_it() -> None:
     df = pl.DataFrame(
         {"rings": [[_SQUARE, []], [[], _SQUARE]]}, schema={"rings": _XY_RINGS}
-    ).select(geo.polygon("rings").alias("polygon"))
+    ).select(
+        # Relabelled: a constructor refuses an empty ring, but one can arrive around it.
+        pl.col("rings").ext.to(PolygonXY()).alias("polygon")
+    )
     out = df.select(geo.mean_coordinate("polygon"))
 
     # The square's four corners, whichever side of it the empty ring is on.
