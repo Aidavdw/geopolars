@@ -35,9 +35,6 @@ class ExprGeoNameSpace:
     def multi_polygon(self, *, crs: str | None = None) -> pl.Expr:
         return construct.multi_polygon_from_polygons(self._expr, crs=crs)
 
-    def validate(self) -> pl.Expr:
-        return construct.validate(self._expr)
-
     def translate(self, offset: affine.Offset | IntoExprColumn) -> pl.Expr:
         return affine.translate(self._expr, offset)
 
@@ -157,6 +154,28 @@ class ExprGeoNameSpace:
         from geopolars.geo.is_ring import is_ring
 
         return is_ring(self._expr)
+
+    def is_valid(
+        self, *, allow_wrapped_longitude: bool = True, within_area_of_use: bool = False
+    ) -> pl.Expr:
+        from geopolars.geo.is_valid import is_valid
+
+        return is_valid(
+            self._expr,
+            allow_wrapped_longitude=allow_wrapped_longitude,
+            within_area_of_use=within_area_of_use,
+        )
+
+    def null_out_invalid(
+        self, *, allow_wrapped_longitude: bool = True, within_area_of_use: bool = False
+    ) -> pl.Expr:
+        from geopolars.geo.is_valid import null_out_invalid
+
+        return null_out_invalid(
+            self._expr,
+            allow_wrapped_longitude=allow_wrapped_longitude,
+            within_area_of_use=within_area_of_use,
+        )
 
     def distance(self, other: IntoExprColumn) -> pl.Expr:
         from geopolars.geo.distance import distance

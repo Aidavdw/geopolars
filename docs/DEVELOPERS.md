@@ -216,6 +216,8 @@ the comment says when one without a CRS takes a different tier.
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | list, one per part |
 | `boundary` | - | | C | | C | every ring | - | | C | list, one per part | C | list, one per part |
 | `is_ring` | - | | A | ≥ 4 vertices, ends close in x/y/z | - | | - | | A | list, one per part | - | |
+| `is_valid` | A | bounds from PROJ at plan time | A | | A | | A | every part valid | A | every part valid | A | every part valid |
+| `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |
@@ -420,7 +422,7 @@ Later goals:
 - [x] getters for coordinates (z/m)
 - [ ] CRS: opaque SRIDs refused for reprojection?
 - [x] is_empty for all geo
-- [ ] validity checking functions
+- [x] validity checking functions
 - [ ] Handling closing of loop consistently for polygon
 - [ ] mean coordinate
 - [ ] centroid

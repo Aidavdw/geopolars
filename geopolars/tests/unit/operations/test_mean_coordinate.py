@@ -367,12 +367,12 @@ def test_a_missing_point_has_no_mean_coordinate() -> None:
 def test_a_missing_coordinate_takes_the_whole_mean_with_it() -> None:
     """The constructors do not let a vertex go missing, so this goes around
     them. Averaging what is left would hand back the mean coordinate of a
-    geometry that is not there, which is what `validate` is there to prevent."""
+    geometry that is not there, which is what `null_out_invalid` is there to prevent."""
     df = pl.DataFrame(
         {"line": [[{"x": 0.0, "y": 0.0}, {"x": 2.0, "y": None}]]},
         schema={"line": _XY_VERTICES},
     ).select(pl.col("line").ext.to(LineStringXY()))
-    whole = df.select(geo.validate("line"))
+    whole = df.select(geo.null_out_invalid("line"))
 
     out = whole.select(geo.mean_coordinate("line"))
 

@@ -84,6 +84,11 @@ impl ExtensionMetadata {
         self.0.get("crs").is_some_and(|crs| !crs.is_null())
     }
 
+    /// Whether the CRS is an SRID, which only its producer can read.
+    pub fn is_opaque_srid(&self) -> bool {
+        Crs::deserialize(&self.0).is_ok_and(|crs| matches!(crs.crs_type(), Some(CrsType::Srid)))
+    }
+
     /// Consuming setter for CRS.
     pub fn with_crs(mut self, crs: &str) -> Self {
         self.0.insert("crs".to_owned(), crs_value(crs));

@@ -87,6 +87,19 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         """
         return _rust.longitude_turn(self.ext_metadata())
 
+    def _crs_bounds(
+        self, *, allow_wrapped_longitude: bool, within_area_of_use: bool
+    ) -> tuple[float, float, float, float] | None:
+        """Where `x` and `y` may lie in the CRS, as `(xmin, ymin, xmax, ymax)`.
+        `None` without a CRS, or when there is nothing to bound them by.
+        See `is_valid`. Asked of PROJ, in Rust.
+        """
+        return _rust.crs_bounds(
+            self.ext_metadata(),
+            allow_wrapped_longitude=allow_wrapped_longitude,
+            within_area_of_use=within_area_of_use,
+        )
+
     def _is_equal_area(self) -> bool:
         """Whether the CRS is projected with an equal-area projection.
         `False` without a CRS, or with one that is not projected.

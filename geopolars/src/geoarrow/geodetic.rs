@@ -12,12 +12,13 @@ use polars::prelude::*;
 use proj_sys::{
     proj_as_projjson, proj_context_create, proj_context_destroy, proj_context_errno,
     proj_context_errno_string, proj_coordoperation_get_method_info, proj_create,
-    proj_crs_get_coordinate_system, proj_crs_get_coordoperation, proj_crs_get_geodetic_crs,
-    proj_crs_get_sub_crs, proj_cs_get_axis_info, proj_cs_get_type, proj_destroy,
-    proj_ellipsoid_get_parameters, proj_get_ellipsoid, proj_get_type, PJ, PJ_CONTEXT,
-    PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL, PJ_TYPE_PJ_TYPE_COMPOUND_CRS,
-    PJ_TYPE_PJ_TYPE_GEOGRAPHIC_2D_CRS, PJ_TYPE_PJ_TYPE_GEOGRAPHIC_3D_CRS,
-    PJ_TYPE_PJ_TYPE_PROJECTED_CRS,
+    proj_create_crs_to_crs_from_pj, proj_crs_get_coordinate_system, proj_crs_get_coordoperation,
+    proj_crs_get_geodetic_crs, proj_crs_get_sub_crs, proj_cs_get_axis_info, proj_cs_get_type,
+    proj_destroy, proj_ellipsoid_get_parameters, proj_get_area_of_use, proj_get_ellipsoid,
+    proj_get_type, proj_normalize_for_visualization, proj_trans_bounds, PJ, PJ_CONTEXT,
+    PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL, PJ_DIRECTION_PJ_FWD,
+    PJ_TYPE_PJ_TYPE_COMPOUND_CRS, PJ_TYPE_PJ_TYPE_GEOGRAPHIC_2D_CRS,
+    PJ_TYPE_PJ_TYPE_GEOGRAPHIC_3D_CRS, PJ_TYPE_PJ_TYPE_PROJECTED_CRS,
 };
 
 /// The geographic CRS a CRS is defined on: the CRS itself if it is one already,
@@ -123,6 +124,114 @@ pub fn longitude_turn(crs: &str) -> PolarsResult<Option<f64>> {
         } else {
             turn
         }))
+    }
+}
+
+/// Gets a boundiing box of the crs provided.
+///
+/// - A geographic CRS bounds latitude to a quarter turn either side of the equator,
+///   and longitude to half a turn either side of the prime meridian.
+///   `allow_wrapped_longitude` stretches that up to a full turn east,
+///   so data in the 0 to 360 convention fits too.
+/// - `within_area_of_use` also bounds them by the area PROJ says the CRS is meant for,
+///   converted into the CRS's own `x` and `y`.
+///   Such an area that crosses the antimeridian in a geographic CRS only bounds latitude.
+///
+/// `crs` is anything PROJ accepts.
+pub fn crs_bounds(
+    crs: &str,
+    allow_wrapped_longitude: bool,
+    within_area_of_use: bool,
+) -> PolarsResult<Option<[f64; 4]>> {
+    let globe = longitude_turn(crs)?.map(|turn| {
+        let east = if allow_wrapped_longitude {
+            turn
+        } else {
+            turn / 2.0
+        };
+        [-turn / 2.0, -turn / 4.0, east, turn / 4.0]
+    });
+    if !within_area_of_use {
+        return Ok(globe);
+    }
+    let [xmin, ymin, xmax, ymax] = area_of_use(crs)?;
+    let area = if xmin > xmax {
+        // Crossing the antimeridian: only a geographic CRS gives that back.
+        [f64::NEG_INFINITY, ymin, f64::INFINITY, ymax]
+    } else {
+        [xmin, ymin, xmax, ymax]
+    };
+    Ok(Some(match globe {
+        None => area,
+        Some(globe) => [
+            globe[0].max(area[0]),
+            globe[1].max(area[1]),
+            globe[2].min(area[2]),
+            globe[3].min(area[3]),
+        ],
+    }))
+}
+
+/// The area PROJ says `crs` is meant for
+/// interpret as a bounding box
+fn area_of_use(crs: &str) -> PolarsResult<[f64; 4]> {
+    let ctx = Context::new()?;
+    let c_crs = CString::new(crs)
+        .map_err(|_| polars_err!(ComputeError: "a CRS cannot contain a NUL byte: {crs:?}"))?;
+    let lonlat = CString::new("EPSG:4326").unwrap();
+
+    // SAFETY: as in `GeodeticCrs::of`.
+    unsafe {
+        let parsed = ctx.object(proj_create(ctx.0, c_crs.as_ptr()), crs)?;
+        let (mut west, mut south, mut east, mut north) = (0.0, 0.0, 0.0, 0.0);
+        let known = proj_get_area_of_use(
+            ctx.0,
+            parsed.0,
+            &mut west,
+            &mut south,
+            &mut east,
+            &mut north,
+            ptr::null_mut(),
+        );
+        // PROJ fills in -1000 for what it does not know.
+        polars_ensure!(
+            known != 0 && west != -1000.0,
+            ComputeError: "PROJ knows no area of use for the CRS {crs}"
+        );
+
+        // Both normalised, so `x` is the longitude or easting whatever the axis order.
+        let horizontal = ctx.horizontal(&parsed, crs)?;
+        let to = ctx.object(
+            proj_normalize_for_visualization(ctx.0, horizontal.crs().0),
+            crs,
+        )?;
+        let from = ctx.object(proj_create(ctx.0, lonlat.as_ptr()), crs)?;
+        let from = ctx.object(proj_normalize_for_visualization(ctx.0, from.0), crs)?;
+        let transform = ctx.object(
+            proj_create_crs_to_crs_from_pj(ctx.0, from.0, to.0, ptr::null_mut(), ptr::null()),
+            crs,
+        )?;
+        let mut out = [0.0; 4];
+        let [xmin, ymin, xmax, ymax] = &mut out;
+        let ok = proj_trans_bounds(
+            ctx.0,
+            transform.0,
+            PJ_DIRECTION_PJ_FWD,
+            west,
+            south,
+            east,
+            north,
+            xmin,
+            ymin,
+            xmax,
+            ymax,
+            // The edges are sampled at this many points, as PROJ recommends.
+            21,
+        );
+        if ok == 0 {
+            return Err(ctx.error(crs));
+        }
+        Ok(out)
     }
 }
 

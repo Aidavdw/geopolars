@@ -34,7 +34,6 @@ from geopolars.geo.construct import (
     polygon,
     polygon_from_columns,
     polygon_from_rings,
-    validate,
 )
 from geopolars.geo.coordinates import m, x, y, z
 from geopolars.geo.count_coordinates import count_coordinates
@@ -44,6 +43,7 @@ from geopolars.geo.exterior import exterior
 from geopolars.geo.interior import interior
 from geopolars.geo.is_empty import is_empty
 from geopolars.geo.is_ring import is_ring
+from geopolars.geo.is_valid import is_valid, null_out_invalid
 from geopolars.geo.length import length, length_geodesic, length_planar
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.to_polygon import to_polygon
@@ -70,6 +70,7 @@ __all__ = [
     "is_empty",
     "is_geographic",
     "is_ring",
+    "is_valid",
     "length",
     "length_geodesic",
     "length_planar",
@@ -87,6 +88,7 @@ __all__ = [
     "multi_polygon",
     "multi_polygon_from_columns",
     "multi_polygon_from_polygons",
+    "null_out_invalid",
     "point",
     "polygon",
     "polygon_from_columns",
@@ -103,7 +105,6 @@ __all__ = [
     "to_wkb",
     "to_wkt",
     "translate",
-    "validate",
     "wrap_longitude",
     "x",
     "y",

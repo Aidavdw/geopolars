@@ -55,6 +55,29 @@ fn longitude_turn(py: Python<'_>, metadata: Option<&str>) -> PyResult<Option<f64
         .map_err(|e| polars_exception(py, e))
 }
 
+/// See `GeoArrowType._crs_bounds`.
+#[pyfunction]
+#[pyo3(signature = (metadata, *, allow_wrapped_longitude, within_area_of_use))]
+fn crs_bounds(
+    py: Python<'_>,
+    metadata: Option<&str>,
+    allow_wrapped_longitude: bool,
+    within_area_of_use: bool,
+) -> PyResult<Option<[f64; 4]>> {
+    let metadata = geoarrow::crs::ExtensionMetadata::parse(metadata)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    // Only an area of use has to be looked up; without one, nothing is lost by skipping.
+    if !metadata.declares_crs() || (metadata.is_opaque_srid() && !within_area_of_use) {
+        return Ok(None);
+    }
+    metadata
+        .crs()
+        .and_then(|crs| {
+            geoarrow::geodetic::crs_bounds(&crs, allow_wrapped_longitude, within_area_of_use)
+        })
+        .map_err(|e| polars_exception(py, e))
+}
+
 /// See `GeoArrowType._is_equal_area`.
 #[pyfunction]
 #[pyo3(signature = (metadata))]
@@ -129,6 +152,7 @@ fn geopolars(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(with_crs, m)?)?;
     m.add_function(wrap_pyfunction!(longitude_turn, m)?)?;
     m.add_function(wrap_pyfunction!(is_equal_area, m)?)?;
+    m.add_function(wrap_pyfunction!(crs_bounds, m)?)?;
     m.add_function(wrap_pyfunction!(geoparquet_dtypes, m)?)?;
     m.add_function(wrap_pyfunction!(geoparquet_metadata, m)?)?;
     geoarrow::register().map_err(|e| {

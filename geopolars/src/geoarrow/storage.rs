@@ -50,6 +50,23 @@ impl<'a> CoordsView<'a> {
         Ok(Self { coords, x, y, z, m })
     }
 
+    /// Whether coordinate `i` is there, with every one of its axes.
+    pub(crate) fn present(&self, i: usize) -> bool {
+        self.coords.is_valid(i) && self.axes().all(|axis| axis.is_valid(i))
+    }
+
+    /// Every axis of coordinate `i`, in x, y, z, m order.
+    /// Only meaningful where it is [`present`](Self::present).
+    pub(crate) fn values(&self, i: usize) -> impl Iterator<Item = f64> + '_ {
+        self.axes().map(move |axis| axis.value(i))
+    }
+
+    fn axes(&self) -> impl Iterator<Item = &'a PrimitiveArray<f64>> {
+        [Some(self.x), Some(self.y), self.z, self.m]
+            .into_iter()
+            .flatten()
+    }
+
     pub(crate) fn xy(&self, i: usize) -> Option<(f64, f64)> {
         let present = self.coords.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i);
         present.then(|| (self.x.value(i), self.y.value(i)))

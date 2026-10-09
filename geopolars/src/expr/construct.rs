@@ -9,7 +9,6 @@ use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::same_geometry;
 use super::rings::copy_coords;
 use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
 use crate::geoarrow::storage::{downcast, CoordsView};
@@ -354,15 +353,6 @@ fn multipolygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series
         Kind::MultiPolygon,
         Kind::Polygon,
     )
-}
-
-/// See `validate`.
-#[polars_expr(output_type_func=same_geometry)]
-fn validate(inputs: &[Series]) -> PolarsResult<Series> {
-    let geo = describe(inputs[0].dtype())?;
-    let storage = inputs[0].ext()?.storage().clone();
-
-    Ok(only_complete(storage, geo.kind.nesting())?.into_extension(geo.typ.clone()))
 }
 
 /// The dimension a set of separate coordinate columns spells out.

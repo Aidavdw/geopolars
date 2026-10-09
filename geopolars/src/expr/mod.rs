@@ -17,6 +17,7 @@ pub mod coords;
 pub mod crs;
 pub mod distance;
 pub mod is_ring;
+pub mod is_valid;
 pub mod length;
 pub mod rings;
 pub mod wkb;
