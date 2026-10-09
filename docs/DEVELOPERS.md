@@ -103,53 +103,37 @@ rather than internal implementation details :)
 
 Rust tests can still be necessary if a certain functionality is only reachable from rust directly.
 
-## Three-tier implementation
+## Implementation tiers
 
-### 1. Native
+Every operation is implemented at one of three tiers:
 
-Native. This functionality can be expressed directly using existing Polars nodes.
-An example: The mean coordinate.
+- **A-tier**: a plugin native Rust kernel.
+- **B-tier**: a Rust kernel that forwards to an external library.
+- **C-tier**: plain Polars expressions.
 
-We can directly access the individual coordinate columns,
-and use Polars' mean implementation on it.
-If this is possible, this is preferred because you will never re-invent the wheel.
-The main gain with operations like this is that the planner will be able to apply further optimisations.
-An operation implemented this way is preferred for simple operations that:
+Which to pick:
 
-- do not require many expressions to represent
-- do not run nested (`list.eval` eats up performance).
+- Prefer **A-tier** for complex operations.
+- Prefer **C-tier** for simple operations: ones that don't need `list.eval`,
+  or that take very few Polars nodes to express
+  (not counting the boilerplate to reach the underlying storage).
+- Fall back to **B-tier** when writing our own kernel isn't worth it, or is very complicated.
 
-For more complicated operations, it is preferable to implement a custom rust kernel.
 But don't take my word as gospel! Benchmark, benchmark, benchmark!
 
-You might want to change exactly what you want to put here using `pipe_with_dtype`
-(through `on_geometry`) to change what you wish to lower it to based on the metadata.
-For that, you can dispatch on the input's geometry through `on_geometry` in `geo/_dispatch.py`.
-This wraps `Expr.pipe_with_dtype`, so the callback runs once at plan time
-with the concrete geometry dtype and returns a plain expression for that geometry only.
-The dtype carries the column's metadata (such as the CRS).
-A callback that builds a geometry has to pass it on with `_with_metadata_of`,
-or the result silently loses its CRS (`tests/unit/operations/test_metadata.py` checks this).
-`on_geometry_pair` does the same for operations between two geometries.
-Wrong input (not a geometry, or a geometry we don't support) therefore fails while the plan is built,
-rather than partway through execution.
-The callback can return native Polars expressions or a custom kernel call into Rust,
-imported using `register_plugin_function`.
-The tiers below cover that choice.
+### A. Native kernel
 
-### 2. Plugin Expression
-
-This functionality has a dedicated Rust kernel that lives in the plugin.
+This functionality has a dedicated Rust kernel that lives in the plugin,
+working directly on our storage.
 This makes them very fast, but they cannot be subdivided at plan-time.
 These are ideally element-wise if possible.
 
-### 3. Forward to external
+### B. Forward to external
 
-A subcategory of the above:
-the Rust kernel hands our data to an external library,
+Like A-tier, but the Rust kernel hands our data to an external library,
 putting it into that library's own data type.
 This usually means at least one allocation and copy pass
-for every item processed this way, so prefer tier 2 where it is feasible.
+for every item processed this way, so prefer A-tier where it is feasible.
 In return we don't have to re-implement (and maintain) well-tested algorithms.
 
 Examples are:
@@ -167,9 +151,36 @@ Examples are:
   - no CRS-awareness on a data level (this has to be carried separately)
   - no curved geometries
 
+### C. Polars expressions
+
+This functionality can be expressed directly using existing Polars nodes.
+An example: The mean coordinate.
+
+We can directly access the individual coordinate columns,
+and use Polars' mean implementation on it.
+This way you never re-invent the wheel,
+and the planner will be able to apply further optimisations.
+It only pays off for simple operations, though:
+every extra node costs, and nested `list.eval` runs per row,
+which loses badly to an A-tier kernel.
+
+You might want to change exactly what you want to put here using `pipe_with_dtype`
+(through `on_geometry`) to change what you wish to lower it to based on the metadata.
+For that, you can dispatch on the input's geometry through `on_geometry` in `geo/_dispatch.py`.
+This wraps `Expr.pipe_with_dtype`, so the callback runs once at plan time
+with the concrete geometry dtype and returns a plain expression for that geometry only.
+The dtype carries the column's metadata (such as the CRS).
+A callback that builds a geometry has to pass it on with `_with_metadata_of`,
+or the result silently loses its CRS (`tests/unit/operations/test_metadata.py` checks this).
+`on_geometry_pair` does the same for operations between two geometries.
+Wrong input (not a geometry, or a geometry we don't support) therefore fails while the plan is built,
+rather than partway through execution.
+The callback can return Polars expressions or a kernel call into Rust,
+imported using `register_plugin_function`.
+
 ### Switch implementation depending on geometry
 
-You can use the same trick with `pipe_with_dtype` that we use with a Tier 1 implementation
+You can use the same trick with `pipe_with_dtype` that we use with a C-tier implementation
 to switch implementation based on the geometry/metadata.
 This is useful for:
 
@@ -181,7 +192,7 @@ This is useful for:
 ### Tier per operation
 
 Which tier each operation uses, per geometry type.
-`1` is native, `2` a plugin expression, `3` forwarded to an external library,
+`A` is a native kernel, `B` forwarded to an external library, `C` Polars expressions,
 and `-` means the operation refuses that geometry.
 All dimensions of a geometry share a column.
 Geometries usually carry a CRS, so the tier given is for a geometry with a CRS;
@@ -189,32 +200,32 @@ the comment says when one without a CRS takes a different tier.
 
 | Operation | Point | | LineString | | Polygon | | MultiPoint | | MultiLineString | | MultiPolygon | |
 | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| `area` | - | 1 if `allow_non_polygons` | - | 1 if `allow_non_polygons` | 2/3 | fwd `*_planar` `*_geodesic` | - | 1 if `allow_non_polygons` | - | 1 if `allow_non_polygons` | 2/3 | as list of Polygon |
-| `area_planar` | - | 1 if `allow_non_polygons` | - | 1 if `allow_non_polygons` | 2 | shoelace; CRS ignored | - | 1 if `allow_non_polygons` | - | 1 if `allow_non_polygons` | 2 | as list of Polygon |
-| `area_geodesic` | - | 1 if `allow_non_polygons` | - | 1 if `allow_non_polygons` | 3 | PROJ + ggl; needs a CRS | - | 1 if `allow_non_polygons` | - | 1 if `allow_non_polygons` | 3 | as list of Polygon |
-| `length` | - | | 3 | PROJ + ggl; no CRS: 1 | - | | - | | 3 | as list of LineString | - | |
-| `distance` | 3 | PROJ + ggl; no CRS: 1 | - | | - | | - | | - | | - | |
-| `mean_coordinate` | 1 | returns the point | 1 | | 1 | skips ring's closing coord | 1 | | 1 | | 1 | skips ring's closing coord |
-| `translate` | 2 | impl differs for const or col | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `rotate` | 2 | | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `skew` | 2 | `origin` may be a point column | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `scale` | 2 | impl differs for const or col | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `affine_transform` | 2 | `origin` may be a point column | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `bounds` | 1 | repeats its coordinate | 1 | | 1 | | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part | 1 | `list[box]`, one per part |
-| `set_crs` | 1 | relabels only | 1 | | 1 | | 1 | | 1 | | 1 | |
-| `to_crs` | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ | 3 | PROJ |
-| `is_geographic` | 1 | scalar, calls PROJ at plan | 1 | | 1 | | 1 | | 1 | | 1 | |
-| `x` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
-| `y` | 1 | `f64`, drops the CRS | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[f64]` | 1 | `list[list[f64]]` | 1 | `list[list[list[f64]]]` |
-| `z` | 1 | like `x`; only with a `z` | 1 | | 1 | | 1 | | 1 | | 1 | |
-| `m` | 1 | like `x`; only with an `m` | 1 | | 1 | | 1 | | 1 | | 1 | |
-| `count_coordinates` | 1 | `0` if empty | 1 | | 1 | skips ring's closing coord | 1 | | 1 | | 1 | skips ring's closing coord |
-| `is_empty` | 1 | NaN `x` and `y` | 1 | no verts or only empty | 1 | only empty rings | 1 | no verts, or only empty | 1 | only empty parts | 1 | only empty polygons |
-| `wrap_longitude` | 1 | needs geographic CRS | 1 | | 1 | | 1 | | 1 | | 1 | |
-| `to_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `from_wkb` | 2 | `wkb` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
-| `to_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | | 2 | | 2 | |
-| `from_wkt` | 2 | `wkt` crate | 2 | | 2 | | 2 | promotes a point | 2 | promotes a linestring | 2 | promotes a polygon |
+| `area` | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | A/B | fwd `*_planar` `*_geodesic` | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | A/B | as list of Polygon |
+| `area_planar` | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | A | shoelace; CRS ignored | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | A | as list of Polygon |
+| `area_geodesic` | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | B | PROJ + ggl; needs a CRS | - | C if `allow_non_polygons` | - | C if `allow_non_polygons` | B | as list of Polygon |
+| `length` | - | | B | PROJ + ggl; no CRS: C | - | | - | | B | as list of LineString | - | |
+| `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
+| `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
+| `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |
+| `rotate` | A | | A | | A | | A | | A | | A | |
+| `skew` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
+| `scale` | A | impl differs for const or col | A | | A | | A | | A | | A | |
+| `affine_transform` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
+| `bounds` | C | repeats its coordinate | C | | C | | C | `list[box]`, one per part | C | `list[box]`, one per part | C | `list[box]`, one per part |
+| `set_crs` | C | relabels only | C | | C | | C | | C | | C | |
+| `to_crs` | B | PROJ | B | PROJ | B | PROJ | B | PROJ | B | PROJ | B | PROJ |
+| `is_geographic` | C | scalar, calls PROJ at plan | C | | C | | C | | C | | C | |
+| `x` | C | `f64`, drops the CRS | C | `list[f64]` | C | `list[list[f64]]` | C | `list[f64]` | C | `list[list[f64]]` | C | `list[list[list[f64]]]` |
+| `y` | C | `f64`, drops the CRS | C | `list[f64]` | C | `list[list[f64]]` | C | `list[f64]` | C | `list[list[f64]]` | C | `list[list[list[f64]]]` |
+| `z` | C | like `x`; only with a `z` | C | | C | | C | | C | | C | |
+| `m` | C | like `x`; only with an `m` | C | | C | | C | | C | | C | |
+| `count_coordinates` | C | `0` if empty | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
+| `is_empty` | C | NaN `x` and `y` | C | no verts or only empty | C | only empty rings | C | no verts, or only empty | C | only empty parts | C | only empty polygons |
+| `wrap_longitude` | C | needs geographic CRS | C | | C | | C | | C | | C | |
+| `to_wkb` | A | `wkb` crate | A | | A | | A | | A | | A | |
+| `from_wkb` | A | `wkb` crate | A | | A | | A | promotes a point | A | promotes a linestring | A | promotes a polygon |
+| `to_wkt` | A | `wkt` crate | A | | A | | A | | A | | A | |
+| `from_wkt` | A | `wkt` crate | A | | A | | A | promotes a point | A | promotes a linestring | A | promotes a polygon |
 
 In this table:
 
@@ -248,14 +259,14 @@ There are two ways in:
 From there, the operation goes one of two ways,
 depending on whether it needs to be aware of type information (A3).
 The input's dtype isn't known yet, so nothing can be checked against it.
-This matters for tier 1 functions,
+This matters for C-tier functions,
 but also for some other functions which switch their approach based on the geometry or metadata.
-An example of such a function would be `area`, which is tier 3 for a polygon with a CRS
-(which is stored in metadata), but tier 1 for one without.
+An example of such a function would be `area`, which is B-tier for a polygon with a CRS
+(which is stored in metadata), but A-tier for one without.
 These need to choose at plan-time, so they can decide when this extra information is available.
 They do this with a callback, which is called in P4.
 
-For some expressions, you would always use a tier 2 or tier 3 implementation (A4).
+For some expressions, you would always use an A-tier or B-tier implementation (A4).
 These can use the simple path.
 
 #### With a plan-time callback
@@ -269,11 +280,11 @@ It picks up again at P1.
 #### The simple path
 
 These do not need to know the exact data type here.
-The rust side will do the switching inside of their tier 2 or tier 3 kernel.
+The rust side will do the switching inside of their A-tier or B-tier kernel.
 
-For tier 2, the arguments are packed into `kwargs` (A7),
+For A-tier, the arguments are packed into `kwargs` (A7),
 which the rust side can later deserialize into a struct like `AffineMatrix`.
-Tier 3 works basically the same way here, with kwargs for what the external library needs (A9),
+B-tier works basically the same way here, with kwargs for what the external library needs (A9),
 (e.g. the target CRS of `to_crs`).
 
 ( For some complex ops, a dtype the operation is asked to produce can't cross as a Python object,
@@ -292,11 +303,11 @@ Type level checking is implemented on this level as much as possible,
 so that they can raise while the plan is being built, rather than during execution.
 
 When the query is collected, Polars resolves the input's dtype and calls back into our code.
-A Tier 2 or 3 expression that was directly chosen without a `pipe_with_dtype`
+An A-tier or B-tier expression that was directly chosen without a `pipe_with_dtype`
 (from A8 or A10) does not use a callback, and goes straight to P8 or P13.
 
 The other path is one that requires a callback.
-A Tier 1 expression (or one that resolves based on metadata) from A6 starts at P1.
+A C-tier expression (or one that resolves based on metadata) from A6 starts at P1.
 
 #### Callbacks with geometry and metadata
 
@@ -317,7 +328,7 @@ We could return the entire CRS back over to Python here.
 Finally, the callback chooses the implementation (P4).
 `on_geometry` gives whatever it returns the input's name.
 
-#### Tier 1: native
+#### C-tier: Polars expressions
 
 The callback builds the result out of the storage in plain Polars expressions (P5).
 `.ext.storage()` drops the extension type,
@@ -331,7 +342,7 @@ Polars can then read the dtype off the expression as its name, storage and metad
 After this, our code is done with the expression.
 The plan only holds Polars nodes, which can be optimised like any other.
 
-#### Tier 2: plugin expression
+#### A-tier: native kernel
 
 We can get here either directly from a registered kernel that was lowered immediately (A8),
 or because a callback at planning time lowered to this (P4).
@@ -366,7 +377,7 @@ The plan now holds a node for our kernel, with a known output dtype.
 
 Ready to run!
 
-#### Tier 3: forward to external
+#### B-tier: forward to external
 
 Steps P12 to P16 are the same as P7 to P11, but now for a forwarding function.
 

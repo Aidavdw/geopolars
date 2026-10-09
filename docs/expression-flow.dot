@@ -44,14 +44,14 @@ digraph expression_flow {
         A5 [label = "A5. Normalise the input\n_to_expr"];
         A6 [label = "A6. Defer to plan time\non_geometry → pipe_with_dtype"];
 
-        subgraph cluster_adding_tier2 {
-            label = "Tier 2: plugin expression"; style = "rounded,dashed"; color = "#999999";
+        subgraph cluster_adding_tier_a {
+            label = "A-tier: native kernel"; style = "rounded,dashed"; color = "#999999";
             A7 [label = "A7. Encode the arguments\nkwargs, e.g. _decode_kwargs"];
             A8 [label = "A8. Name the kernel\nregister_plugin_function"];
         }
 
-        subgraph cluster_adding_tier3 {
-            label = "Tier 3: forward to external"; style = "rounded,dashed"; color = "#999999";
+        subgraph cluster_adding_tier_b {
+            label = "B-tier: forward to external"; style = "rounded,dashed"; color = "#999999";
             A9 [label = "A9. Encode the external input\nkwargs, e.g. {\"to\": crs}"];
             A10 [label = "A10. Name the forwarding kernel\nregister_plugin_function"];
         }
@@ -62,8 +62,8 @@ digraph expression_flow {
         A2 -> A3;
         A3 -> A5 [label = "yes"];
         A3 -> A4 [label = "no"];
-        A4 -> A7 [label = "2"];
-        A4 -> A9 [label = "3"];
+        A4 -> A7 [label = "A"];
+        A4 -> A9 [label = "B"];
         A5 -> A6;
         A7 -> A8;
         A9 -> A10;
@@ -84,16 +84,16 @@ digraph expression_flow {
         P4 [label = "P4. Choose the implementation\n(based on dtype+metadata)\nbuild(expr, geometry)", shape = diamond,
             style = "filled"];
 
-        subgraph cluster_planning_tier1 {
-            label = "Tier 1: native"; style = "rounded,dashed"; color = "#999999";
-            P5 [label = "P5. Build on the storage\n.ext.storage() + native expressions"];
+        subgraph cluster_planning_tier_c {
+            label = "C-tier: Polars expressions"; style = "rounded,dashed"; color = "#999999";
+            P5 [label = "P5. Build on the storage\n.ext.storage() + Polars expressions"];
             P6 [label = "P6. Label the result\n.ext.to(…_with_metadata_of(geometry))"];
-            end1 [label = "plan of only native nodes", shape = ellipse, style = "filled",
+            end1 [label = "plan of only Polars nodes", shape = ellipse, style = "filled",
                   fillcolor = "#eeeeee", color = "#999999"];
         }
 
-        subgraph cluster_planning_tier2 {
-            label = "Tier 2: plugin expression"; style = "rounded,dashed"; color = "#999999";
+        subgraph cluster_planning_tier_a {
+            label = "A-tier: native kernel"; style = "rounded,dashed"; color = "#999999";
             P7 [label = "P7. Return the kernel call\nregister_plugin_function"];
             P8 [label = "P8. Import the input fields\n_polars_plugin_field_<name>",
                 fillcolor = "#fde3c8", color = "#c07a30"];
@@ -106,8 +106,8 @@ digraph expression_flow {
                   fillcolor = "#eeeeee", color = "#999999"];
         }
 
-        subgraph cluster_planning_tier3 {
-            label = "Tier 3: forward to external"; style = "rounded,dashed"; color = "#999999";
+        subgraph cluster_planning_tier_b {
+            label = "B-tier: forward to external"; style = "rounded,dashed"; color = "#999999";
             P12 [label = "P12. Return the forwarding kernel call\nregister_plugin_function"];
             P13 [label = "P13. Import the input fields\n_polars_plugin_field_<name>",
                  fillcolor = "#fde3c8", color = "#c07a30"];
@@ -127,16 +127,16 @@ digraph expression_flow {
         P3 -> P4 [label = "FFI: library → Python", color = "#c0392b", fontcolor = "#c0392b",
                   penwidth = 2];
         P2 -> P4 [label = "metadata\nnot needed", style = dotted];
-        P4 -> P5 [label = "1"];
-        P4 -> P7 [label = "2"];
-        P4 -> P12 [label = "3"];
+        P4 -> P5 [label = "C"];
+        P4 -> P7 [label = "A"];
+        P4 -> P12 [label = "B"];
 
-        // tier 1
+        // C-tier
         P5 -> P6;
         P6 -> end1 [label = "FFI: Python → Polars\n(name, storage, metadata)", color = "#c0392b",
                     fontcolor = "#c0392b", penwidth = 2];
 
-        // tier 2
+        // A-tier
         P7 -> P8 [label = "FFI: Python → Polars\n→ library (C ABI)", color = "#c0392b",
                   fontcolor = "#c0392b", penwidth = 2];
         P8 -> P9;
@@ -148,7 +148,7 @@ digraph expression_flow {
         P11 -> end2 [label = "FFI: Python → Polars", color = "#c0392b", fontcolor = "#c0392b",
                      penwidth = 2];
 
-        // tier 3
+        // B-tier
         P12 -> P13 [label = "FFI: Python → Polars\n→ library (C ABI)", color = "#c0392b",
                     fontcolor = "#c0392b", penwidth = 2];
         P13 -> P14;

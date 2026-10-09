@@ -1,7 +1,7 @@
 """The centroid of a polygon: the centre of the area it encloses.
 Note that this is not the mean coordinate, which weighs every vertex the same!
 
-A kernel (tier 2) applies the shoelace formula over the planar area,
+A native kernel (A-tier) applies the shoelace formula over the planar area,
 in one pass over the storage.
 """
 
