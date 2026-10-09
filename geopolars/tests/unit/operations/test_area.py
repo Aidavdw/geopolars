@@ -14,6 +14,8 @@ from polars.testing import assert_series_equal
 from geopolars import geo
 from geopolars.datatypes import (
     GeoArrowType,
+    LineStringXY,
+    MultiLineStringXY,
     MultiPointXY,
     MultiPolygonXY,
     PointXY,
@@ -40,7 +42,7 @@ def _rings(rings: list[list[dict[str, float]]], crs: str | None = None) -> pl.Da
     )
 
 
-Area = Callable[[str | pl.Expr | pl.Series], pl.Expr]
+Area = Callable[..., pl.Expr]
 
 
 @pytest.fixture(params=[geo.area, geo.area_planar], ids=["area", "area_planar"])
@@ -134,32 +136,6 @@ def test_a_missing_polygon_has_no_area(planar_area: Area) -> None:
     df = df.select(pl.col("polygon").ext.to(PolygonXY()))
 
     assert _areas(planar_area, df) == [16.0, None]
-
-
-def test_a_linestring_has_an_area_of_zero(
-    planar_area: Area, line_coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    """A curve has no interior, however it runs."""
-    assert set(_areas(planar_area, dimension.lines(line_coords), "line")) == {0.0}
-
-
-def test_a_closed_linestring_still_has_an_area_of_zero(planar_area: Area) -> None:
-    """The square's ring, read as a curve. Nothing says a linestring that
-    closes bounds the space inside it -- only a polygon does."""
-    df = pl.DataFrame(
-        {"vertices": [_SQUARE]}, schema={"vertices": _XY_VERTICES}
-    ).select(geo.line_string("vertices").alias("line"))
-
-    assert _areas(planar_area, df, "line") == [0.0]
-
-
-def test_a_multilinestring_has_an_area_of_zero(
-    planar_area: Area, ring_coords: pl.DataFrame, dimension: Dimension
-) -> None:
-    """The same vertices a polygon of 15.5 is made of, as curves instead."""
-    df = dimension.multilinestrings(ring_coords)
-
-    assert set(_areas(planar_area, df, "multilinestring")) == {0.0}
 
 
 def test_the_area_survives_coordinates_far_from_the_origin(planar_area: Area) -> None:
@@ -505,16 +481,99 @@ def test_area_planar_lines_up_across_chunks_and_slices() -> None:
 @pytest.mark.parametrize(
     "fn", [geo.area, geo.area_planar, geo.area_geodesic], ids=lambda f: f.__name__
 )
-def test_points_are_refused_while_resolving_the_schema(
-    fn: Area, crs: str | None, coords: pl.DataFrame, line_coords: pl.DataFrame
+def test_only_polygons_are_accepted_while_resolving_the_schema(
+    fn: Area,
+    crs: str | None,
+    coords: pl.DataFrame,
+    line_coords: pl.DataFrame,
+    ring_coords: pl.DataFrame,
 ) -> None:
-    """Neither a point nor a multipoint can enclose anything."""
+    """Points and linestrings, and their multi forms, enclose nothing:
+    not even a closed linestring, which is a curve rather than a ring."""
     if fn is geo.area_geodesic and crs is None:
         pytest.skip("refused for having no CRS instead")
     point = _declaring(coords.select(XY.point()), PointXY, crs)
+    line = _declaring(XY.lines(line_coords), LineStringXY, crs)
     multipoint = _declaring(XY.multipoints(line_coords), MultiPointXY, crs)
+    multiline = _declaring(XY.multilinestrings(ring_coords), MultiLineStringXY, crs)
 
-    for df, name in ((point, "point"), (multipoint, "multipoint")):
-        lf = df.lazy().select(fn(name))
+    for df, name in (
+        (point, "point"),
+        (line, "linestring"),
+        (multipoint, "multipoint"),
+        (multiline, "multilinestring"),
+    ):
+        lf = df.lazy().select(fn(df.columns[0]))
         with pytest.raises(TypeError, match=f"does not accept a `geoarrow.{name}`"):
             lf.collect_schema()
+
+
+def _non_polygons(
+    crs: str | None,
+    coords: pl.DataFrame,
+    line_coords: pl.DataFrame,
+    ring_coords: pl.DataFrame,
+) -> list[pl.DataFrame]:
+    """A point, linestring, multipoint and multilinestring column, each with a null."""
+    columns = [
+        (coords.select(XY.point()), PointXY),
+        (XY.lines(line_coords), LineStringXY),
+        (XY.multipoints(line_coords), MultiPointXY),
+        (XY.multilinestrings(ring_coords), MultiLineStringXY),
+    ]
+    out = []
+    for df, dtype in columns:
+        declared = _declaring(df, dtype, crs)
+        out.append(pl.concat([declared, declared.clear(1)]))
+    return out
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+@pytest.mark.parametrize(
+    "fn", [geo.area, geo.area_planar, geo.area_geodesic], ids=lambda f: f.__name__
+)
+def test_with_allow_non_polygons_they_enclose_nothing(
+    fn: Area,
+    crs: str | None,
+    coords: pl.DataFrame,
+    line_coords: pl.DataFrame,
+    ring_coords: pl.DataFrame,
+) -> None:
+    if fn is geo.area_geodesic and crs is None:
+        pytest.skip("refused for having no CRS instead")
+
+    for df in _non_polygons(crs, coords, line_coords, ring_coords):
+        (name,) = df.columns
+        got = df.select(fn(name, allow_non_polygons=True)).to_series()
+
+        assert got.dtype == pl.Float64
+        assert got.to_list() == [0.0] * (len(df) - 1) + [None]
+
+
+def test_with_allow_non_polygons_area_geodesic_still_needs_a_crs(
+    line_coords: pl.DataFrame,
+) -> None:
+    lf = XY.lines(line_coords).lazy()
+
+    with pytest.raises(TypeError, match="declares none"):
+        lf.select(geo.area_geodesic("line", allow_non_polygons=True)).collect_schema()
+
+
+def test_allow_non_polygons_leaves_polygons_alone(planar_area: Area) -> None:
+    df = _rings([_SQUARE])
+
+    assert df.select(planar_area("polygon", allow_non_polygons=True)).equals(
+        df.select(planar_area("polygon"))
+    )
+
+
+@pytest.mark.parametrize("name", ["area", "area_planar"])
+def test_the_namespace_passes_allow_non_polygons_on(
+    name: str, line_coords: pl.DataFrame
+) -> None:
+    df = XY.lines(line_coords)
+    method = getattr(pl.col("line").geo, name)
+
+    assert df.select(method(allow_non_polygons=True)).equals(
+        df.select(getattr(geo, name)("line", allow_non_polygons=True))
+    )

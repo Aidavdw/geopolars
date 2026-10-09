@@ -9,30 +9,43 @@ in whatever units those are squared.
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
+import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import MultiPointType, PointType
+from geopolars.datatypes import MultiPolygonType, PolygonType
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
-    import polars as pl
-
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
 
 
-def _refuse_points(geometry: GeoArrowType) -> None:
-    """Points are refused rather than given an area of `0.0`."""
-    if isinstance(geometry, (PointType, MultiPointType)):
-        msg = f"area does not accept a `{geometry._extension_name}` column, got: {geometry!r}"
+def _encloses_nothing(
+    column: pl.Expr, geometry: GeoArrowType, *, allow_non_polygons: bool
+) -> pl.Expr | None:
+    """Only polygons and multipolygons enclose anything: `None` for those.
+    Other geometries are refused, or given `0.0` with `allow_non_polygons`."""
+    if isinstance(geometry, (PolygonType, MultiPolygonType)):
+        return None
+    if not allow_non_polygons:
+        msg = (
+            f"area does not accept a `{geometry._extension_name}` column, got: {geometry!r};"
+            " pass `allow_non_polygons=True` to give it an area of 0.0"
+        )
         raise TypeError(msg)
+    return pl.when(column.is_not_null()).then(pl.lit(0.0, dtype=pl.Float64))
 
 
-def _planar(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    _refuse_points(geometry)
+def _planar(
+    column: pl.Expr, geometry: GeoArrowType, *, allow_non_polygons: bool
+) -> pl.Expr:
+    zero = _encloses_nothing(column, geometry, allow_non_polygons=allow_non_polygons)
+    if zero is not None:
+        return zero
     return register_plugin_function(
         plugin_path=LIB,
         args=[column],
@@ -41,12 +54,16 @@ def _planar(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     )
 
 
-def _geodesic(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    _refuse_points(geometry)
+def _geodesic(
+    column: pl.Expr, geometry: GeoArrowType, *, allow_non_polygons: bool
+) -> pl.Expr:
     # Whether PROJ can use the CRS is for the kernel to check.
     if not geometry._declares_crs():
         msg = "area_geodesic needs a CRS to measure on, but the geometry declares none"
         raise TypeError(msg)
+    zero = _encloses_nothing(column, geometry, allow_non_polygons=allow_non_polygons)
+    if zero is not None:
+        return zero
     return register_plugin_function(
         plugin_path=LIB,
         args=[column],
@@ -55,7 +72,9 @@ def _geodesic(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
     )
 
 
-def area_planar(geometry: IntoExprColumn) -> pl.Expr:
+def area_planar(
+    geometry: IntoExprColumn, *, allow_non_polygons: bool = False
+) -> pl.Expr:
     """The area a geometry encloses on the plane its coordinates lie in, as an `f64`,
     or a list of them for a multipolygon.
 
@@ -70,17 +89,19 @@ def area_planar(geometry: IntoExprColumn) -> pl.Expr:
     (which assumes its polygons do not overlap, as the spec requires).
     'z' and 'm' are ignored: this is the area of the footprint.
 
-    An empty polygon, as well as linestrings and multilinestrings
-    (that do not have an 'area') return '0.0'.
-    Points and multipoints are refused while the plan is built.
+    An empty polygon encloses nothing, so it gets `0.0`.
+    Every other geometry (points, linestrings and their multi forms)
+    is refused while the plan is built,
+    unless `allow_non_polygons` is set: then each of them gets `0.0`
+    (and a null stays null).
 
     | in                     | out          |
     |------------------------|--------------|
     | `PolygonXY`            | `0.0` and up |
     | `PolygonXYM`           | `0.0` and up |
     | `MultiPolygonXY`       | `list[f64]`  |
-    | `LineStringXY`         | `0.0`        |
     | `PointXY`              | refused      |
+    | `LineStringXY`         | refused      |
     | `MultiPointXYZM`       | refused      |
 
     A self-intersecting ring is not a valid polygon, and the parts of it that
@@ -90,10 +111,14 @@ def area_planar(geometry: IntoExprColumn) -> pl.Expr:
     df.select(geo.area_planar("parcel"))
     ```
     """
-    return on_geometry(geometry, _planar)
+    return on_geometry(
+        geometry, partial(_planar, allow_non_polygons=allow_non_polygons)
+    )
 
 
-def area_geodesic(geometry: IntoExprColumn) -> pl.Expr:
+def area_geodesic(
+    geometry: IntoExprColumn, *, allow_non_polygons: bool = False
+) -> pl.Expr:
     """The area a geometry encloses along the ellipsoid of its CRS, as an `f64`,
     or a list of them for a multipolygon.
 
@@ -111,24 +136,31 @@ def area_geodesic(geometry: IntoExprColumn) -> pl.Expr:
     A geometry without a CRS is refused while the plan is built,
     as is a CRS that is not defined on longitude/latitude.
 
-    Polygons, multipolygons, holes, 'z' and 'm', points and other types
-    are treated as in `area_planar`.
+    Polygons, multipolygons, holes, 'z' and 'm', and other geometries
+    (including `allow_non_polygons`) are treated as in `area_planar`.
 
     ```python
     df.select(geo.area_geodesic("parcel"))
     ```
     """
-    return on_geometry(geometry, _geodesic)
+    return on_geometry(
+        geometry, partial(_geodesic, allow_non_polygons=allow_non_polygons)
+    )
 
 
-def _area(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
+def _area(
+    column: pl.Expr, geometry: GeoArrowType, *, allow_non_polygons: bool
+) -> pl.Expr:
     """`area_planar` where the plane keeps areas, `area_geodesic` everywhere else."""
-    if not geometry._declares_crs() or geometry._is_equal_area():
-        return _planar(column, geometry)
-    return _geodesic(column, geometry)
+    measure = (
+        _planar
+        if not geometry._declares_crs() or geometry._is_equal_area()
+        else _geodesic
+    )
+    return measure(column, geometry, allow_non_polygons=allow_non_polygons)
 
 
-def area(geometry: IntoExprColumn) -> pl.Expr:
+def area(geometry: IntoExprColumn, *, allow_non_polygons: bool = False) -> pl.Expr:
     """The area a geometry encloses.
 
     Forwards to `area_planar` for a geometry without a CRS or with an equal-area CRS,
@@ -138,4 +170,4 @@ def area(geometry: IntoExprColumn) -> pl.Expr:
     df.select(geo.area("parcel"))
     ```
     """
-    return on_geometry(geometry, _area)
+    return on_geometry(geometry, partial(_area, allow_non_polygons=allow_non_polygons))

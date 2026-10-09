@@ -41,17 +41,6 @@ pub(crate) fn planar_area(polygon: &Polygon) -> f64 {
     (twice_signed(&exterior).abs() - holes) / 2.0
 }
 
-/// `0.0` for every geometry that is there, for kinds that cannot enclose anything.
-fn nothing_enclosed(storage: &Series) -> Float64Chunked {
-    Float64Chunked::from_iter_options(
-        storage.name().clone(),
-        storage
-            .is_not_null()
-            .iter()
-            .map(|present| (present == Some(true)).then_some(0.0)),
-    )
-}
-
 /// The CRS of a column to measure an area in. Type operation only.
 fn crs_of(field: &Field) -> PolarsResult<String> {
     let geo = describe(field.dtype())?;
@@ -62,17 +51,20 @@ fn crs_of(field: &Field) -> PolarsResult<String> {
     geo.metadata.crs()
 }
 
-/// Points are refused rather than given an area of `0.0`.
-fn points_have_no_area(kind: Kind) -> PolarsError {
+/// Only polygons and multipolygons enclose anything: other kinds are refused
+/// rather than given an area of `0.0`.
+fn encloses_nothing(kind: Kind) -> PolarsError {
     polars_err!(SchemaMismatch: "area does not accept a `{}` column", kind.name())
 }
 
 /// An `f64` per geometry, or a list of them (one per part) for a multipolygon.
 fn area_dtype(field: &Field) -> PolarsResult<Field> {
     let dtype = match describe(field.dtype())?.kind {
-        kind @ (Kind::Point | Kind::MultiPoint) => return Err(points_have_no_area(kind)),
+        Kind::Polygon => DataType::Float64,
         Kind::MultiPolygon => DataType::List(Box::new(DataType::Float64)),
-        _ => DataType::Float64,
+        kind @ (Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString) => {
+            return Err(encloses_nothing(kind))
+        }
     };
     Ok(Field::new(field.name().clone(), dtype))
 }
@@ -140,8 +132,9 @@ fn area_planar(inputs: &[Series]) -> PolarsResult<Series> {
     let out = match describe(inputs[0].dtype())?.kind {
         Kind::Polygon => polygons_planar(storage)?.into_series(),
         Kind::MultiPolygon => multipolygons_planar(storage)?.into_series(),
-        kind @ (Kind::Point | Kind::MultiPoint) => return Err(points_have_no_area(kind)),
-        Kind::LineString | Kind::MultiLineString => nothing_enclosed(storage).into_series(),
+        kind @ (Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString) => {
+            return Err(encloses_nothing(kind))
+        }
     };
     Ok(out.with_name(inputs[0].name().clone()))
 }
@@ -242,11 +235,8 @@ fn area_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let out = match describe(inputs[0].dtype())?.kind {
         Kind::Polygon => polygons(storage, &*GeodesicMetric::of(&crs)?)?.into_series(),
         Kind::MultiPolygon => multipolygons(storage, &*GeodesicMetric::of(&crs)?)?.into_series(),
-        kind @ (Kind::Point | Kind::MultiPoint) => return Err(points_have_no_area(kind)),
-        // Still refuses a CRS that has no ellipsoid, as a polygon in it would be.
-        Kind::LineString | Kind::MultiLineString => {
-            GeodesicMetric::of(&crs)?;
-            nothing_enclosed(storage).into_series()
+        kind @ (Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString) => {
+            return Err(encloses_nothing(kind))
         }
     };
     Ok(out.with_name(inputs[0].name().clone()))
