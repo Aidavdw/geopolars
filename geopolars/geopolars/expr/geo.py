@@ -86,6 +86,11 @@ class ExprGeoNameSpace:
     ) -> pl.Expr:
         return affine.skew(self._expr, xs=xs, ys=ys, unit=unit, origin=origin)
 
+    def skew_about_centroid(
+        self, xs: float = 0.0, ys: float = 0.0, unit: Literal["deg", "pi"] = "deg"
+    ) -> pl.Expr:
+        return affine.skew_about_centroid(self._expr, xs=xs, ys=ys, unit=unit)
+
     def scale(
         self,
         xfact: float = 1.0,
@@ -99,6 +104,13 @@ class ExprGeoNameSpace:
     ) -> pl.Expr:
         return affine.scale(
             self._expr, xfact=xfact, yfact=yfact, zfact=zfact, origin=origin
+        )
+
+    def scale_about_centroid(
+        self, xfact: float = 1.0, yfact: float = 1.0, zfact: float = 1.0
+    ) -> pl.Expr:
+        return affine.scale_about_centroid(
+            self._expr, xfact=xfact, yfact=yfact, zfact=zfact
         )
 
     def set_crs(self, crs: str, *, force: bool = False) -> pl.Expr:

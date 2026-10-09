@@ -7,7 +7,9 @@ from geopolars.geo.affine import (
     rotate,
     rotate_about_centroid,
     scale,
+    scale_about_centroid,
     skew,
+    skew_about_centroid,
     translate,
 )
 from geopolars.geo.area import area, area_geodesic, area_planar
@@ -84,8 +86,10 @@ __all__ = [
     "rotate",
     "rotate_about_centroid",
     "scale",
+    "scale_about_centroid",
     "set_crs",
     "skew",
+    "skew_about_centroid",
     "to_crs",
     "to_polygon",
     "to_wkb",

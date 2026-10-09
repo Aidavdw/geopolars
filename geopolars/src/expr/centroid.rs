@@ -18,6 +18,9 @@ use crate::geoarrow::geotraits::{LineString, Polygon};
 use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Geo, GeoDimension, Kind};
 
+// TODO: right now, for multi* it returns a list of centroids.
+// We need an operation which gives a shared centroid too.
+
 /// The centroids of rows `rows` of a list of linestrings or polygons,
 /// as their coordinate struct.
 type PartCentroids = fn(&ListArray<i64>, Range<usize>) -> PolarsResult<Box<dyn Array>>;

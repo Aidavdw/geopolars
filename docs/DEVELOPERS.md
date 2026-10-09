@@ -211,14 +211,16 @@ the comment says when one without a CRS takes a different tier.
 | `length` | - | C if `allow_non_lines` | A/B | fwd `*_planar` `*_geodesic` | - | C if `allow_non_lines` | - | C if `allow_non_lines` | A/B | as list of LineString | - | C if `allow_non_lines` |
 | `length_planar` | - | C if `allow_non_lines` | A | CRS ignored | - | C if `allow_non_lines` | - | C if `allow_non_lines` | A | as list of LineString | - | C if `allow_non_lines` |
 | `length_geodesic` | - | C if `allow_non_lines` | B | PROJ + ggl; needs a CRS | - | C if `allow_non_lines` | - | C if `allow_non_lines` | B | as list of LineString | - | C if `allow_non_lines` |
-| `centroid` | - | | A | length-weighted; keeps z/m | A | shoelace; XY only | - | | A | list, one per part | A | list, one per part |
+| `centroid` | - | | A | length-weighted; keeps z/m | A | shoelace; XY only [^1] | - | | A | list, one per part | A | list, one per part |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |
 | `rotate` | A | | A | | A | | A | | A | | A | |
-| `rotate_about_centroid` | - | | C | `centroid` + `affine_about` | C | about `x`/`y` refused | - | | - | | - | |
+| `rotate_about_centroid` | - | | C | `centroid` + `affine_about` | C | about `x`/`y` refused [^1] | - | | - | | - | |
 | `skew` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
+| `skew_about_centroid` | - | | C | `centroid` + `affine_about` | C | | - | | - | | - | |
 | `scale` | A | impl differs for const or col | A | | A | | A | | A | | A | |
+| `scale_about_centroid` | - | | C | `centroid` + `affine_about` | C | `zfact` refused with z [^1] | - | | - | | - | |
 | `affine_transform` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
 | `bounds` | C | repeats its coordinate | C | | C | | C | `list[box]`, one per part | C | `list[box]`, one per part | C | `list[box]`, one per part |
 | `set_crs` | C | relabels only | C | | C | | C | | C | | C | |
@@ -434,8 +436,8 @@ affine transforms:
 - [x] scale around coordinate from another column
 - [x] skew around a coordinate from another column
 - [x] rotate around own centroid (can use the above)
-- [ ] scale around own centroid (can use the above)
-- [ ] skew around own centroid (can use the above)
+- [x] scale around own centroid (can use the above)
+- [x] skew around own centroid (can use the above)
 
 transfer transforms
 
@@ -466,3 +468,5 @@ creating new geometries
 - [ ] intersection
 - [ ] union
 - [ ] difference
+
+[^1]: limited because Z-polygon cannot calculate its xyz-centroid yet, and therefore converts to a xy centroid[Issue #277: Centroid for Z-polygon](https://github.com/pola-rs/geopolars/issues/277)

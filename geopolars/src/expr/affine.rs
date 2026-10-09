@@ -13,6 +13,9 @@ use serde::Deserialize;
 use super::coords::{coordinate_bounds, map_coords, same_geometry};
 use crate::geoarrow::{describe, GeoDimension, Kind};
 
+// TODO: (Blocked until z-centroid is implemented): allow rotation around x/y for polygon
+// TODO: (Blocked until z-centroid is implemented): allow scaling around z for polygon(?)
+
 /// An affine transformation of the coordinates that are positions (`x`, `y` and `z`),
 /// as the top three rows of its augmented matrix:
 ///

@@ -241,7 +241,30 @@ def _points(name: str, dtype: GeoArrowType) -> None:
 def _about_centroid(
     name: str,
     build_about: Callable[[pl.Expr, GeoArrowType, pl.Expr, GeoArrowType], pl.Expr],
+    uses_z: str | None = None,
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+    """An `on_geometry` callback that hands `build_about` (one of the `_*_about` builders)
+    each geometry's own centroid as its origin.
+
+    `uses_z` says what the operation does with the origin's `z`, if anything,
+    such as "rotate about the x axis".
+    """
+
+    def build_with_z(
+        column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
+    ) -> pl.Expr:
+        if uses_z and "z" in geometry._dimension and "z" not in points._dimension:
+            # A linestring's centroid keeps its `z`, but a polygon's has none,
+            # so it would be taken as 0 rather than at the polygon's height.
+            # this can only be unblocked when a z-centroid is calculated for polygon,
+            # which is a problem on its own.
+            msg = (
+                f"cannot {uses_z} through the centroid of {geometry!r}: "
+                "its centroid has no z"
+            )
+            raise TypeError(msg)
+        return build_about(column, geometry, origin, points)
+
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         # A multi-geometry has a list of centroids, one per part, not one to turn about.
         if not isinstance(geometry, LineStringType | PolygonType):
@@ -250,7 +273,7 @@ def _about_centroid(
                 f"or polygon column, got: {geometry!r}"
             )
             raise TypeError(msg)
-        return on_geometry_pair(column, _centroid(column, geometry), build_about)
+        return on_geometry_pair(column, _centroid(column, geometry), build_with_z)
 
     return build
 
@@ -389,24 +412,22 @@ def rotate_about_centroid(
 
     _axis(axis)
     about = _rotate_about(_degrees(amount, unit, "amount"), axis)
+    uses_z = f"rotate about the {axis} axis" if axis != "z" else None
+    return on_geometry(geometry, _about_centroid("rotate", about, uses_z))
 
-    def build_about(
-        column: pl.Expr, geometry: GeoArrowType, origin: pl.Expr, points: GeoArrowType
-    ) -> pl.Expr:
-        if axis != "z" and "z" not in points._dimension:
-            # A linestring's centroid keeps its `z`, so it turns about any axis.
-            # A polygon's centroid has no `z`, so turning a polygon about `x` or `y`,
-            # which needs one, is refused.
-            # this can only be unblocked when a z-centroid is calculated for polygon,
-            # which is a problem on its own.
-            msg = (
-                f"cannot rotate about the {axis} axis through the centroid "
-                f"of {geometry!r}: its centroid has no z"
-            )
-            raise TypeError(msg)
-        return about(column, geometry, origin, points)
 
-    return on_geometry(geometry, _about_centroid("rotate", build_about))
+def _shear(
+    xs: float, ys: float, unit: Literal["deg", "pi"]
+) -> tuple[tuple[float, float, float], ...]:
+    tan_x = _tan(_degrees(xs, unit, "xs"), "xs")
+    tan_y = _tan(_degrees(ys, unit, "ys"), "ys")
+    # fmt: off
+    return (
+        (1,     tan_x, 0),
+        (tan_y, 1,     0),
+        (0,     0,     1),
+    )
+    # fmt: on
 
 
 def _skew_about(
@@ -457,20 +478,38 @@ def skew(
 
     Coordinates are sheared as they are, in the units of their CRS.
     """
-    tan_x = _tan(_degrees(xs, unit, "xs"), "xs")
-    tan_y = _tan(_degrees(ys, unit, "ys"), "ys")
-    # fmt: off
-    shear = (
-        (1,     tan_x, 0),
-        (tan_y, 1,     0),
-        (0,     0,     1),
-    )
-    # fmt: on
+    shear = _shear(xs, ys, unit)
     # A column of points, rather than one point given as numbers.
     if isinstance(origin, str | pl.Expr | pl.Series):
         return on_geometry_pair(geometry, origin, _skew_about(shear))
     matrix = _about(shear, _origin(origin))
     return on_geometry(geometry, lambda column, _: _affine(column, matrix))
+
+
+def skew_about_centroid(
+    geometry: IntoExprColumn,
+    xs: float = 0.0,
+    ys: float = 0.0,
+    unit: Literal["deg", "pi"] = "deg",
+) -> pl.Expr:
+    """Shear every geometry in the plane about its own centroid.
+
+    This is `skew(geometry, xs, ys, unit, origin=geo.centroid(geometry))`,
+    see `skew` for `xs`, `ys` and `unit`,
+    and `centroid` for where the centroid of a linestring or polygon is.
+
+    Only linestrings and polygons are accepted:
+    a multi-geometry has a centroid per part rather than one,
+    and a point would stay where it is.
+    A geometry without a centroid (missing, empty, a line without length,
+    or a polygon that encloses nothing) comes out missing.
+
+    ```python
+    df.select(geo.skew_about_centroid("parcel", xs=15))
+    ```
+    """
+    about = _skew_about(_shear(xs, ys, unit))
+    return on_geometry(geometry, _about_centroid("skew", about))
 
 
 def _stretch(
@@ -483,6 +522,13 @@ def _stretch(
         (0,     0,     zfact),
     )
     # fmt: on
+
+
+def _factors(xfact: float, yfact: float, zfact: float) -> None:
+    for name, factor in (("xfact", xfact), ("yfact", yfact), ("zfact", zfact)):
+        if not math.isfinite(factor):
+            msg = f"`{name}` has to be a finite number, got: {factor!r}"
+            raise ValueError(msg)
 
 
 def _can_scale(zfact: float, geometry: GeoArrowType) -> None:
@@ -551,14 +597,42 @@ def scale(
     A `z` left out is 0.
     Coordinates are scaled as they are, in the units of their CRS.
     """
-    for name, factor in (("xfact", xfact), ("yfact", yfact), ("zfact", zfact)):
-        if not math.isfinite(factor):
-            msg = f"`{name}` has to be a finite number, got: {factor!r}"
-            raise ValueError(msg)
+    _factors(xfact, yfact, zfact)
     # A column of points, rather than one point given as numbers.
     if isinstance(origin, str | pl.Expr | pl.Series):
         return on_geometry_pair(geometry, origin, _scale_about(xfact, yfact, zfact))
     return on_geometry(geometry, _scale(xfact, yfact, zfact, _origin(origin)))
+
+
+def scale_about_centroid(
+    geometry: IntoExprColumn,
+    xfact: float = 1.0,
+    yfact: float = 1.0,
+    zfact: float = 1.0,
+) -> pl.Expr:
+    """Stretch every geometry away from (or towards) its own centroid.
+
+    This is `scale(geometry, xfact, yfact, zfact, origin=geo.centroid(geometry))`,
+    see `scale` for the factors,
+    and `centroid` for where the centroid of a linestring or polygon is.
+
+    Only linestrings and polygons are accepted:
+    a multi-geometry has a centroid per part rather than one,
+    and a point would stay where it is.
+    A geometry without a centroid (missing, empty, a line without length,
+    or a polygon that encloses nothing) comes out missing.
+
+    A polygon's centroid has no `z`, so a `zfact` other than 1 is refused
+    for a polygon with a `z`. A linestring's centroid keeps its `z`.
+
+    ```python
+    df.select(geo.scale_about_centroid("parcel", 2.0, 2.0))
+    ```
+    """
+    _factors(xfact, yfact, zfact)
+    about = _scale_about(xfact, yfact, zfact)
+    uses_z = "scale by zfact" if zfact != 1.0 else None
+    return on_geometry(geometry, _about_centroid("scale", about, uses_z))
 
 
 def _can_transform(matrix: list[float], geometry: GeoArrowType) -> None:
