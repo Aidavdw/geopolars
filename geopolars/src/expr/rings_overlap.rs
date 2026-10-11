@@ -5,12 +5,13 @@ use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
 use rsgeo::coordinate_position::CoordPos;
 use rsgeo::dimensions::Dimensions;
+use rsgeo::relate::IntersectionMatrix;
 use rsgeo::{Coord, LineString, Polygon, Relate};
 use serde::Deserialize;
 
 use super::self_intersects::same_xy;
 use crate::geoarrow::storage::{CoordsView, MIN_RING_VERTICES};
-use crate::geoarrow::{describe, Kind};
+use crate::geoarrow::{describe, ensure_same_crs, Kind};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -34,21 +35,7 @@ fn rings_overlap_type(input_fields: &[Field]) -> PolarsResult<Field> {
             Kind::LineString.name(), field.dtype()
         );
     }
-    // TODO: do this check at plan time?
-    match (geo_a.metadata.declares_crs(), geo_b.metadata.declares_crs()) {
-        (false, false) => {}
-        (true, true) => {
-            let (crs_a, crs_b) = (geo_a.metadata.crs()?, geo_b.metadata.crs()?);
-            polars_ensure!(
-                crs_a == crs_b,
-                SchemaMismatch: "the rings declare different CRSs, {crs_a} and {crs_b}; \
-                use `to_crs` to bring one onto the other first"
-            );
-        }
-        (true, false) | (false, true) => polars_bail!(
-            SchemaMismatch: "only one of the rings declares a CRS; declare the same one on both"
-        ),
-    }
+    ensure_same_crs(&geo_a, &geo_b)?;
     Ok(Field::new(a.name().clone(), DataType::Boolean))
 }
 
@@ -97,15 +84,13 @@ impl<'a> Rings<'a> {
     }
 }
 
-/// See `rings_overlap`.
-#[polars_expr(output_type_func=rings_overlap_type)]
-fn rings_overlap(inputs: &[Series], kwargs: RingsOverlapKwargs) -> PolarsResult<Series> {
-    rings_overlap_type(&[
-        inputs[0].field().into_owned(),
-        inputs[1].field().into_owned(),
-    ])?;
-    let a = inputs[0].ext()?.storage().list()?.rechunk();
-    let b = inputs[1].ext()?.storage().list()?.rechunk();
+/// Gets the [IntersectionMatrix] between two rings.
+pub(crate) fn relate_rings(
+    a: &Series,
+    b: &Series,
+) -> PolarsResult<Vec<Option<IntersectionMatrix>>> {
+    let a = a.ext()?.storage().list()?.rechunk();
+    let b = b.ext()?.storage().list()?.rechunk();
     let (a, b) = (
         Rings::new(a.downcast_as_array())?,
         Rings::new(b.downcast_as_array())?,
@@ -117,18 +102,30 @@ fn rings_overlap(inputs: &[Series], kwargs: RingsOverlapKwargs) -> PolarsResult<
         (n, m) => polars_bail!(ShapeMismatch: "cannot compare {n} rings against {m}"),
     };
 
-    let out = (0..len)
+    (0..len)
         .map(|i| {
             let (Some(a), Some(b)) = (a.get(i)?, b.get(i)?) else {
                 return Ok(None);
             };
-            let matrix = a.relate(&b);
-            Ok(Some(if kwargs.include_touching {
-                matrix.is_intersects()
-            } else {
-                matrix.get(CoordPos::Inside, CoordPos::Inside) != Dimensions::Empty
-            }))
+            Ok(Some(a.relate(&b)))
         })
-        .collect::<PolarsResult<BooleanChunked>>()?;
+        .collect()
+}
+
+/// See `rings_overlap`.
+#[polars_expr(output_type_func=rings_overlap_type)]
+fn rings_overlap(inputs: &[Series], kwargs: RingsOverlapKwargs) -> PolarsResult<Series> {
+    let out: BooleanChunked = relate_rings(&inputs[0], &inputs[1])?
+        .into_iter()
+        .map(|matrix| {
+            matrix.map(|matrix| {
+                if kwargs.include_touching {
+                    matrix.is_intersects()
+                } else {
+                    matrix.get(CoordPos::Inside, CoordPos::Inside) != Dimensions::Empty
+                }
+            })
+        })
+        .collect();
     Ok(out.with_name(inputs[0].name().clone()).into_series())
 }

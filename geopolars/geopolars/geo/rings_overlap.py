@@ -64,8 +64,16 @@ def rings_overlap(
                 f" got: {a_dtype!r} and {b_dtype!r}"
             )
             raise TypeError(msg)
-        # Whether both declare the same CRS is for the kernel to check
-        # while resolving the schema.
+        a_crs, b_crs = a_dtype._crs(), b_dtype._crs()
+        if (a_crs is None) != (b_crs is None):
+            msg = "only one of the rings declares a CRS; declare the same one on both"
+            raise ValueError(msg)
+        if a_crs != b_crs:
+            msg = (
+                f"the rings declare different CRSs, {a_crs} and {b_crs}; "
+                "use `to_crs` to bring one onto the other first"
+            )
+            raise ValueError(msg)
         return register_plugin_function(
             plugin_path=LIB,
             args=[a, b],

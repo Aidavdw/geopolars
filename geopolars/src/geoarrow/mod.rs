@@ -88,3 +88,23 @@ pub fn describe(dtype: &DataType) -> PolarsResult<GeoColumn<'_>> {
         SchemaMismatch: "`{}` is not registered with this library, got: {}", kind.name(), dtype
     )
 }
+
+/// Errors unless `a` and `b` declare the same CRS, or neither declares one.
+/// Should be used as a backup, as this is runtime, not plan time.
+pub fn ensure_same_crs(a: &GeoColumn, b: &GeoColumn) -> PolarsResult<()> {
+    match (a.metadata.declares_crs(), b.metadata.declares_crs()) {
+        (false, false) => Ok(()),
+        (true, true) => {
+            let (crs_a, crs_b) = (a.metadata.crs()?, b.metadata.crs()?);
+            polars_ensure!(
+                crs_a == crs_b,
+                SchemaMismatch: "the geometries declare different CRSs, {crs_a} and {crs_b}; \
+                use `to_crs` to bring one onto the other first"
+            );
+            Ok(())
+        }
+        (true, false) | (false, true) => polars_bail!(
+            SchemaMismatch: "only one of the geometries declares a CRS; declare the same one on both"
+        ),
+    }
+}

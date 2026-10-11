@@ -73,6 +73,10 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         """Whether the metadata names a CRS. Read in Rust, like all metadata."""
         return _rust.declares_crs(self.ext_metadata())
 
+    def _crs(self) -> str | None:
+        """The CRS the metadata names, in a form PROJ accepts. `None` without one."""
+        return _rust.crs(self.ext_metadata())
+
     def _with_crs(self, crs: str) -> GeoArrowType:
         """sets metadata's crs to  `crs`.
         Every other metadata key is kept.

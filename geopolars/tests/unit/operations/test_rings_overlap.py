@@ -180,21 +180,21 @@ def test_sliced_columns_read_only_their_own_rows() -> None:
     assert df.select(geo.rings_overlap("a", "b"))["a"].to_list() == [False, True]
 
 
-def test_rings_in_different_crss_are_refused_while_resolving_the_schema() -> None:
+def test_rings_in_different_crss_are_refused_at_plan_time() -> None:
     df = pl.DataFrame([_rings("a", [_square(0, 0)]), _rings("b", [_square(0, 0)])])
     lf = df.lazy().select(
         geo.rings_overlap(geo.set_crs("a", "EPSG:3857"), geo.set_crs("b", "EPSG:28992"))
     )
 
-    with pytest.raises(ComputeError, match="different CRSs"):
+    with pytest.raises(ValueError, match="different CRSs"):
         lf.collect_schema()
 
 
-def test_a_crs_on_only_one_ring_is_refused_while_resolving_the_schema() -> None:
+def test_a_crs_on_only_one_ring_is_refused_at_plan_time() -> None:
     df = pl.DataFrame([_rings("a", [_square(0, 0)]), _rings("b", [_square(0, 0)])])
     lf = df.lazy().select(geo.rings_overlap(geo.set_crs("a", "EPSG:3857"), "b"))
 
-    with pytest.raises(ComputeError, match="only one of the rings"):
+    with pytest.raises(ValueError, match="only one of the rings"):
         lf.collect_schema()
 
 
