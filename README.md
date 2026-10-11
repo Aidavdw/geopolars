@@ -7,9 +7,18 @@ so stay tuned!
 
 ## Features
 
-- Geo data types as first-class Polars citizens,
-  represented using the Arrow Extension format as [GeoArrow](https://geoarrow.org/),
-  enabling zero-cost conversion with native polars data types.
+GeoPolars has Geo data types as first-class Polars citizens,
+  represented using the Arrow Extension format as [GeoArrow](https://geoarrow.org/).
+  This has several advantages:
+
+- zero-cost conversion with native polars data types.
+- Allows using regular polars operations directly on these new data types
+- Full compatibility with streaming engine
+- Mismatches, illegal operations etc. can be caught at plan time or expression creation time,
+  rather than at runtime.
+
+In addition, GeoPolars aims to be a modern GeoSpatial toolset, offering:
+
 - CRS-aware by default, backed by PROJ
 - Support for 3D (z) and measured quantities (m) for most operations
 - (De)serialisation with GeoParquet
