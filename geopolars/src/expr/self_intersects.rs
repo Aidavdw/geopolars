@@ -31,7 +31,7 @@ impl Cross for Segment {
 }
 
 /// Whether `a` and `b` lie at almost the same place in x and y ([`is_close`]).
-fn same_xy(a: Coord<f64>, b: Coord<f64>) -> bool {
+pub(crate) fn same_xy(a: Coord<f64>, b: Coord<f64>) -> bool {
     is_close(a.x, b.x) && is_close(a.y, b.y)
 }
 

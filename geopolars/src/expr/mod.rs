@@ -21,6 +21,7 @@ pub mod is_standard_orientation;
 pub mod is_valid;
 pub mod length;
 pub mod rings;
+pub mod rings_overlap;
 pub mod self_intersects;
 pub mod wkb;
 pub mod wkt;

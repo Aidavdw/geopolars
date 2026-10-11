@@ -47,6 +47,7 @@ from geopolars.geo.is_standard_orientation import is_standard_orientation
 from geopolars.geo.is_valid import is_valid, null_out_invalid
 from geopolars.geo.length import length, length_geodesic, length_planar
 from geopolars.geo.mean_coordinate import mean_coordinate
+from geopolars.geo.rings_overlap import rings_overlap
 from geopolars.geo.self_intersects import self_intersects
 from geopolars.geo.to_polygon import to_polygon
 from geopolars.geo.wkb import from_wkb, to_wkb
@@ -96,6 +97,7 @@ __all__ = [
     "polygon",
     "polygon_from_columns",
     "polygon_from_rings",
+    "rings_overlap",
     "rotate",
     "rotate_about_centroid",
     "scale",

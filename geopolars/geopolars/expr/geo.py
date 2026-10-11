@@ -160,6 +160,13 @@ class ExprGeoNameSpace:
 
         return self_intersects(self._expr)
 
+    def rings_overlap(
+        self, other: IntoExprColumn, *, include_touching: bool = False
+    ) -> pl.Expr:
+        from geopolars.geo.rings_overlap import rings_overlap
+
+        return rings_overlap(self._expr, other, include_touching=include_touching)
+
     def is_standard_orientation(self, *, holes_clockwise: bool = True) -> pl.Expr:
         from geopolars.geo.is_standard_orientation import is_standard_orientation
 
