@@ -44,7 +44,6 @@ def self_intersects(geometry: IntoExprColumn) -> pl.Expr:
 
     This looks at a projected plane.
     Only x and y are looked at. z and m are ignored.
-    If two segments in a row share a vertex, the are not considerend intersecting.
     Going back and forth between two points is considered crossing.
     Any other two segments may not touch at all,
     so a line whose end lies on itself intersects itself.
