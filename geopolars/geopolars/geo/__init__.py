@@ -43,6 +43,7 @@ from geopolars.geo.exterior import exterior
 from geopolars.geo.interior import interior
 from geopolars.geo.is_empty import is_empty
 from geopolars.geo.is_ring import is_ring
+from geopolars.geo.is_standard_orientation import is_standard_orientation
 from geopolars.geo.is_valid import is_valid, null_out_invalid
 from geopolars.geo.length import length, length_geodesic, length_planar
 from geopolars.geo.mean_coordinate import mean_coordinate
@@ -70,6 +71,7 @@ __all__ = [
     "is_empty",
     "is_geographic",
     "is_ring",
+    "is_standard_orientation",
     "is_valid",
     "length",
     "length_geodesic",

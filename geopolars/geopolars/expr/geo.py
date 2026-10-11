@@ -155,6 +155,11 @@ class ExprGeoNameSpace:
 
         return is_ring(self._expr)
 
+    def is_standard_orientation(self, *, holes_clockwise: bool = True) -> pl.Expr:
+        from geopolars.geo.is_standard_orientation import is_standard_orientation
+
+        return is_standard_orientation(self._expr, holes_clockwise=holes_clockwise)
+
     def is_valid(
         self, *, allow_wrapped_longitude: bool = True, within_area_of_use: bool = False
     ) -> pl.Expr:

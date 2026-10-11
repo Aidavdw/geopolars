@@ -18,7 +18,7 @@ use crate::geoarrow::{describe, Kind};
 /// Twice the signed area of one closed ring, positive when it runs CCW.
 /// Like `_twice_signed` in Python: relative to its first coordinate,
 /// and without the repeated last one.
-fn twice_signed(ring: &LineString) -> f64 {
+pub(crate) fn twice_signed(ring: &LineString) -> f64 {
     if ring.end - ring.start < 2 {
         return 0.0;
     }
