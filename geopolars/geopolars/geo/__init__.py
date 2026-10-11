@@ -47,6 +47,7 @@ from geopolars.geo.is_standard_orientation import is_standard_orientation
 from geopolars.geo.is_valid import is_valid, null_out_invalid
 from geopolars.geo.length import length, length_geodesic, length_planar
 from geopolars.geo.mean_coordinate import mean_coordinate
+from geopolars.geo.self_intersects import self_intersects
 from geopolars.geo.to_polygon import to_polygon
 from geopolars.geo.wkb import from_wkb, to_wkb
 from geopolars.geo.wkt import from_wkt, to_wkt
@@ -99,6 +100,7 @@ __all__ = [
     "rotate_about_centroid",
     "scale",
     "scale_about_centroid",
+    "self_intersects",
     "set_crs",
     "skew",
     "skew_about_centroid",

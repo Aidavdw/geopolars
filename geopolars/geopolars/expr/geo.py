@@ -155,6 +155,11 @@ class ExprGeoNameSpace:
 
         return is_ring(self._expr)
 
+    def self_intersects(self) -> pl.Expr:
+        from geopolars.geo.self_intersects import self_intersects
+
+        return self_intersects(self._expr)
+
     def is_standard_orientation(self, *, holes_clockwise: bool = True) -> pl.Expr:
         from geopolars.geo.is_standard_orientation import is_standard_orientation
 

@@ -104,7 +104,7 @@ fn polygons(
         .collect())
 }
 
-fn per_part(
+pub(crate) fn per_part(
     chunk: &ListArray<i64>,
     parts: impl FnOnce(&ListArray<i64>, Range<usize>) -> PolarsResult<BooleanArray>,
 ) -> PolarsResult<ListArray<i64>> {
