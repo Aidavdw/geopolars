@@ -43,7 +43,7 @@ fn rings_overlap_type(input_fields: &[Field]) -> PolarsResult<Field> {
 /// The ring at `start..end` as the polygon it encloses, in x and y.
 /// `None` if one of its vertices is missing, or not finite in x or y.
 /// Errors if it is not a ring.
-fn ring(coords: &CoordsView, start: usize, end: usize) -> PolarsResult<Option<Polygon<f64>>> {
+pub(crate) fn ring(coords: &CoordsView, start: usize, end: usize) -> PolarsResult<Option<Polygon<f64>>> {
     let Some(vertices) = xy_vertices_validated(&GeoLineString { coords, start, end }) else {
         return Ok(None);
     };
@@ -107,20 +107,21 @@ pub(crate) fn relate_rings(
         .collect()
 }
 
+/// Whether two rings related as `matrix` overlap.
+pub(crate) fn overlap(matrix: &IntersectionMatrix, include_touching: bool) -> bool {
+    if include_touching {
+        matrix.is_intersects()
+    } else {
+        matrix.get(CoordPos::Inside, CoordPos::Inside) != Dimensions::Empty
+    }
+}
+
 /// See `rings_overlap`.
 #[polars_expr(output_type_func=rings_overlap_type)]
 fn rings_overlap(inputs: &[Series], kwargs: RingsOverlapKwargs) -> PolarsResult<Series> {
     let out: BooleanChunked = relate_rings(&inputs[0], &inputs[1])?
         .into_iter()
-        .map(|matrix| {
-            matrix.map(|matrix| {
-                if kwargs.include_touching {
-                    matrix.is_intersects()
-                } else {
-                    matrix.get(CoordPos::Inside, CoordPos::Inside) != Dimensions::Empty
-                }
-            })
-        })
+        .map(|matrix| matrix.map(|matrix| overlap(&matrix, kwargs.include_touching)))
         .collect();
     Ok(out.with_name(inputs[0].name().clone()).into_series())
 }

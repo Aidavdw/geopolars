@@ -1,4 +1,4 @@
-"""Whether a linestring crosses or touches itself, in x and y."""
+"""Whether a linestring or polygon crosses or touches itself, in x and y."""
 
 from __future__ import annotations
 
@@ -7,10 +7,17 @@ import random
 import polars as pl
 import pytest
 import shapely
+from polars.exceptions import ComputeError
 
 import geopolars as gpl
 from geopolars import geo
-from geopolars.datatypes import LineStringXY, LineStringXYZ, MultiLineStringXY
+from geopolars.datatypes import (
+    LineStringXY,
+    LineStringXYZ,
+    MultiLineStringXY,
+    MultiPolygonXY,
+    PolygonXY,
+)
 from tests.unit.conftest import XY, Dimension
 
 _XY_VERTICES = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
@@ -218,11 +225,118 @@ def test_the_namespace_forwards() -> None:
     assert df.select(gpl.col("line").geo.self_intersects())["line"].to_list() == [True]
 
 
-@pytest.mark.parametrize("geometry", ["point", "polygon"])
-def test_refuses_anything_but_lines(
-    geometry: str, coords: pl.DataFrame, ring_coords: pl.DataFrame
+@pytest.mark.parametrize("geometry", ["point", "multipoint"])
+def test_refuses_points(
+    geometry: str, coords: pl.DataFrame, line_coords: pl.DataFrame
 ) -> None:
-    df = coords.select(XY.point()) if geometry == "point" else XY.polygons(ring_coords)
+    df = (
+        coords.select(XY.point())
+        if geometry == "point"
+        else XY.multipoints(line_coords)
+    )
 
     with pytest.raises(TypeError, match="self_intersects expects a linestring"):
         df.select(geo.self_intersects(geometry))
+
+
+# Polygons: a ring crossing itself, or two holes overlapping.
+
+_XY_RINGS = pl.List(_XY_VERTICES)
+
+
+def _square(x0: float, y0: float, x1: float, y1: float) -> Line:
+    return _line((x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0))
+
+
+_OUTER = _square(0, 0, 10, 10)
+_CLOSED_BOWTIE = [*_BOWTIE, _BOWTIE[0]]
+
+
+def _polygons_self_intersect(*polygons: list[Line | None] | None) -> list[bool | None]:
+    storage = pl.Series("polygon", list(polygons), dtype=_XY_RINGS)
+    df = pl.DataFrame(storage.ext.to(PolygonXY()))
+    out = df.select(geo.self_intersects("polygon"))
+    assert out.schema["polygon"] == pl.Boolean
+    return out["polygon"].to_list()
+
+
+def test_a_simple_polygon_does_not() -> None:
+    holes = [_OUTER, _square(1, 1, 2, 2), _square(3, 3, 4, 4)]
+    assert _polygons_self_intersect([_SQUARE], holes) == [False, False]
+
+
+def test_a_polygon_with_a_crossing_ring_does() -> None:
+    assert _polygons_self_intersect([_CLOSED_BOWTIE], [_OUTER, _CLOSED_BOWTIE]) == [
+        True,
+        True,
+    ]
+
+
+def test_overlapping_holes_do() -> None:
+    overlapping = [_OUTER, _square(1, 1, 3, 3), _square(2, 2, 4, 4)]
+    nested = [_OUTER, _square(1, 1, 4, 4), _square(2, 2, 3, 3)]
+    assert _polygons_self_intersect(overlapping, nested) == [True, True]
+
+
+def test_holes_that_only_touch_do_not() -> None:
+    at_a_vertex = [_OUTER, _square(1, 1, 2, 2), _square(2, 2, 3, 3)]
+    along_an_edge = [_OUTER, _square(1, 1, 2, 2), _square(2, 1, 3, 2)]
+    assert _polygons_self_intersect(at_a_vertex, along_an_edge) == [False, False]
+
+
+def test_the_exterior_is_not_compared_against_its_holes() -> None:
+    """Whether a hole lies inside the exterior is up to `is_valid`."""
+    outside = [_SQUARE, _square(5, 5, 6, 6)]
+    assert _polygons_self_intersect(outside) == [False]
+
+
+def test_a_missing_polygon_or_ring_is_missing() -> None:
+    nan = _line((0, 0), (1, 0), (float("nan"), 1), (0, 0))
+    assert _polygons_self_intersect(None, [_OUTER, None], [nan], [], [_SQUARE]) == [
+        None,
+        None,
+        None,
+        False,
+        False,
+    ]
+
+
+def test_a_ring_that_is_not_one_raises() -> None:
+    with pytest.raises(ComputeError, match="expects rings"):
+        _polygons_self_intersect([_line((0, 0), (1, 0), (1, 1))])
+
+
+def test_a_multipolygon_gives_one_per_part() -> None:
+    """Parts overlapping each other do not count."""
+    overlapping = [_OUTER, _square(1, 1, 3, 3), _square(2, 2, 4, 4)]
+    storage = pl.Series(
+        "multi",
+        [[[_OUTER], overlapping], [], [None, [_SQUARE]], None, [[_OUTER], [_OUTER]]],
+        dtype=pl.List(_XY_RINGS),
+    )
+    df = pl.DataFrame(storage.ext.to(MultiPolygonXY()))
+
+    out = df.select(geo.self_intersects("multi"))
+
+    assert out.schema["multi"] == pl.List(pl.Boolean)
+    assert out["multi"].to_list() == [
+        [False, True],
+        [],
+        [None, False],
+        None,
+        [False, False],
+    ]
+
+
+def test_a_sliced_multipolygon_reads_only_its_own_parts() -> None:
+    storage = pl.Series(
+        "multi",
+        [[[_CLOSED_BOWTIE]], [[_SQUARE], [_CLOSED_BOWTIE]], [[_SQUARE]]],
+        dtype=pl.List(_XY_RINGS),
+    )
+    df = pl.DataFrame(storage.ext.to(MultiPolygonXY())).slice(1, 2)
+
+    assert df.select(geo.self_intersects("multi"))["multi"].to_list() == [
+        [False, True],
+        [False],
+    ]

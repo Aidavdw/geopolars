@@ -216,10 +216,10 @@ the comment says when one without a CRS takes a different tier.
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | list, one per part |
 | `boundary` | - | | C | | C | every ring | - | | C | list, one per part | C | list, one per part |
 | `is_ring` | - | | A | ≥ 4 vertices, ends ≈  x/y/z | - | | - | | A | list, one per part | - | |
-| `self_intersects` | - | | B | rsgeo sweep; x/y only | - | | - | | B | list, one per part | - | |
+| `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes fwd `rings_overlap` | - | | B | list, one per part | B | list, one per part |
 | `rings_overlap` | - | | B | hacked as polygon rsgeo relate | - | | - | | - | | - | |
 | `is_standard_orientation` | - | | A | CCW | A | | - | | A | list, one per part | A | list, one per part |
-| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings relate via rsgeo; each part optional | A | every part valid | A | every part valid | A/B | every part valid |
+| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings via rsgeo relate | A | every part valid | A | every part valid | A/B | every part valid |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
