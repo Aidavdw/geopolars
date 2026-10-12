@@ -213,20 +213,6 @@ def test_a_multilinestring_without_parts_is_zero_long(crs: str | None) -> None:
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_a_multilinestring_with_a_missing_part_has_no_length(crs: str | None) -> None:
-    df = _multilines(
-        [[[(0.0, 0.0), (3.0, 4.0)], None], [[(0.0, 0.0), (3.0, 4.0)]]], crs=crs
-    )
-
-    got = _lengths(df)
-
-    assert got[0] is None
-    assert got[1] == pytest.approx(
-        _lengths(_lines([[(0.0, 0.0), (3.0, 4.0)]], crs=crs))[0]
-    )
-
-
-@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
 def test_a_sliced_multilinestring_keeps_its_own_parts(crs: str | None) -> None:
     df = _multilines(
         [[[(0.0, 0.0), (3.0, 4.0)]], [[(0.0, 0.0), (0.0, 1.0)], [(0.0, 0.0)]]],
@@ -423,20 +409,6 @@ def test_length_geodesic_refuses_a_geometry_without_a_crs_at_plan_time() -> None
 
     with pytest.raises(TypeError, match="declares none"):
         lf.collect_schema()
-
-
-@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_a_missing_coordinate_leaves_the_line_without_a_length(
-    crs: str | None,
-) -> None:
-    storage = pl.Series(
-        "line",
-        [[{"x": 0.0, "y": 0.0}, None, {"x": 3.0, "y": 4.0}], [{"x": 0.0, "y": 0.0}]],
-        dtype=pl.List(_XY),
-    )
-    df = pl.DataFrame(storage.ext.to(LineStringXY(crs=crs)))
-
-    assert _lengths(df) == [None, 0.0]
 
 
 def test_length_planar_lines_up_across_chunks_and_slices() -> None:

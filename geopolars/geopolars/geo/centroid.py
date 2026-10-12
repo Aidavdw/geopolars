@@ -58,7 +58,7 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     Fully three-dimensional if 'z'.
     If the line has an 'm', it is averaged.
     The result keeps the line's dimension.
-    A null linestring, an empty one, one with a missing coordinate,
+    A null linestring, an empty one,
     and one without length (a single vertex, or all on one spot) have no centroid.
 
     A null geometry, an empty polygon, and a polygon that encloses nothing
@@ -68,7 +68,7 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     that of each part (measured as for a lone linestring or polygon),
     weighted by its length or area.
     A part without length or area adds nothing.
-    A null geometry, an empty one, one with a null part (or a part with a missing coordinate),
+    A null geometry, an empty one,
     and one whose parts have no length or area at all have no centroid.
 
     A point is its own centroid.

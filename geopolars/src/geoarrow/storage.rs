@@ -28,6 +28,38 @@ pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
     is_close(a[0], b[0]) && is_close(a[1], b[1]) && is_close(a[2], b[2])
 }
 
+/// The axes of one chunk of coordinates, as plain values:
+/// valid storage has no missing coordinates, so their validity is never read.
+pub(crate) struct Axes<'a> {
+    pub(crate) x: &'a [f64],
+    pub(crate) y: &'a [f64],
+    /// Empty for a dimension without a `z`.
+    pub(crate) z: &'a [f64],
+}
+
+impl<'a> Axes<'a> {
+    /// The axes, and whether there is a `z`.
+    pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, bool)> {
+        let coords: &StructArray = downcast(coords, "a coordinate struct")?;
+        let axis = |i: usize| -> PolarsResult<&'a [f64]> {
+            let values: &PrimitiveArray<f64> =
+                downcast(coords.values()[i].as_ref(), "f64 coordinates")?;
+            Ok(values.values().as_slice())
+        };
+        // `coord::dimension_of` fixes the field order, so x and y always come first.
+        let z = coords
+            .fields()
+            .iter()
+            .position(|field| field.name.as_str() == "z");
+        let axes = Self {
+            x: axis(0)?,
+            y: axis(1)?,
+            z: z.map(axis).transpose()?.unwrap_or_default(),
+        };
+        Ok((axes, z.is_some()))
+    }
+}
+
 /// View (zero-allocation) of one chunk's coordinates in the Arrow array.
 pub(crate) struct CoordsView<'a> {
     coords: &'a StructArray,

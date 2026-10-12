@@ -9,6 +9,27 @@
 //! either does not care (see [`coords::map_coords`]) or matches on the
 //! [`Kind`](crate::geoarrow::Kind) exhaustively.
 
+/// Dispatches runtime `bool` flags into generic implementations,
+/// so that the hot path never branches on them.
+/// `with_const_flags!(f(args); a, b)` calls `f::<A, B>(args)`,
+/// with each runtime flag turned into a const `bool`, in order.
+macro_rules! with_const_flags {
+    // `done` holds the flags already turned into consts.
+    (@ $f:ident [$($done:tt)*] ($($arg:expr),*)) => {
+        $f::<$($done)*>($($arg),*)
+    };
+    (@ $f:ident [$($done:tt)*] ($($arg:expr),*) $flag:expr $(, $rest:expr)*) => {
+        if $flag {
+            with_const_flags!(@ $f [$($done)* true,] ($($arg),*) $($rest),*)
+        } else {
+            with_const_flags!(@ $f [$($done)* false,] ($($arg),*) $($rest),*)
+        }
+    };
+    ($f:ident($($arg:expr),*); $($flag:expr),+) => {
+        with_const_flags!(@ $f [] ($($arg),*) $($flag),+)
+    };
+}
+
 pub mod affine;
 pub mod area;
 pub mod centroid;

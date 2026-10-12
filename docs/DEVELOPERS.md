@@ -111,7 +111,7 @@ Therefore, in a kernel, you can always assume that the input data is valid
 according to the GeoArrow spec.
 Only the outer level is allowed to have nulls, and all other levels
 (including the inner level with the actual coordinate values) should not contain any nulls.
-There is no need to branch on what to do if something is invalid.
+This means that there is no need to branch on what to do if something is invalid.
 
 ## Implementation tiers
 

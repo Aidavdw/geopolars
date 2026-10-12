@@ -227,17 +227,6 @@ def test_a_line_without_length_has_no_centroid() -> None:
     ]
 
 
-def test_a_line_with_a_missing_coordinate_has_no_centroid() -> None:
-    storage = pl.Series(
-        "line",
-        [[{"x": 0.0, "y": 0.0}, {"x": None, "y": 1.0}], [{"x": 0.0, "y": 0.0}, None]],
-        dtype=pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})),
-    )
-    df = pl.DataFrame(storage.ext.to(LineStringXY()))
-
-    assert _line_centroids(df) == [None, None]
-
-
 def test_the_namespace_matches_the_function_for_lines() -> None:
     df = _lines(_HOOK, [(0, 0), (2, 4)])
 
@@ -261,15 +250,12 @@ def test_line_rows_line_up_across_chunks_and_slices() -> None:
 # Multi-geometries: one centroid, of the parts weighted by their length or area
 
 
-def _multilines(*multis: list[Line] | None) -> pl.DataFrame:
+def _multilines(*multis: list[list[tuple[float, float]]] | None) -> pl.DataFrame:
     """A `multi` column of `MultiLineStringXY`, one row per list of parts."""
     rows = [
         None
         if multi is None
-        else [
-            None if line is None else [{"x": x, "y": y} for x, y in line]
-            for line in multi
-        ]
+        else [[{"x": x, "y": y} for x, y in line] for line in multi]
         for multi in multis
     ]
     storage = pl.Series("multi", rows, dtype=pl.List(_XY_VERTICES))
@@ -277,7 +263,7 @@ def _multilines(*multis: list[Line] | None) -> pl.DataFrame:
 
 
 def _multipolygons(
-    *multis: list[list[Ring] | None] | None, crs: str | None = None
+    *multis: list[list[Ring]] | None, crs: str | None = None
 ) -> pl.DataFrame:
     """A `multi` column of `MultiPolygonXY`, one row per list of polygons."""
     storage = pl.Series("multi", list(multis), dtype=pl.List(_XY_RINGS))
@@ -324,26 +310,15 @@ def test_a_part_without_area_adds_nothing() -> None:
 
 
 def test_a_multilinestring_without_length_has_no_centroid() -> None:
-    df = _multilines(None, [], [[(1, 1)], []], [[(0, 0), (2, 4)], None])
+    df = _multilines(None, [], [[(1, 1)], []])
 
-    assert _multi_centroids(df) == [None, None, None, None]
+    assert _multi_centroids(df) == [None, None, None]
 
 
 def test_a_multipolygon_without_area_has_no_centroid() -> None:
-    df = _multipolygons(None, [], [[]], [[_SQUARE], None])
+    df = _multipolygons(None, [], [[]])
 
-    assert _multi_centroids(df) == [None, None, None, None]
-
-
-def test_a_part_with_a_missing_coordinate_leaves_no_centroid() -> None:
-    storage = pl.Series(
-        "multi",
-        [[[{"x": 0.0, "y": 0.0}, {"x": 2.0, "y": 4.0}], [{"x": 0.0, "y": 0.0}, None]]],
-        dtype=pl.List(_XY_VERTICES),
-    )
-    df = pl.DataFrame(storage.ext.to(MultiLineStringXY()))
-
-    assert _multi_centroids(df) == [None]
+    assert _multi_centroids(df) == [None, None, None]
 
 
 def _weighted_mean_of_parts(
@@ -368,7 +343,10 @@ def _weighted_mean_of_parts(
     fields = [c for c in centroids.columns if c not in ("row", "weight")]
     return (
         centroids.group_by("row", maintain_order=True)
-        .agg((pl.col(f) * pl.col("weight")).sum() / pl.col("weight").sum() for f in fields)
+        .agg(
+            (pl.col(f) * pl.col("weight")).sum() / pl.col("weight").sum()
+            for f in fields
+        )
         .drop("row")
     )
 

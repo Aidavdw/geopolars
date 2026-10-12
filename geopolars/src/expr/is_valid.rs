@@ -65,36 +65,6 @@ impl Default for IsValidKwargs {
     }
 }
 
-/// Macro to help dispatching bool flags into generic implementations.
-/// `with_const_flags!(f(args); a, b)` calls `f::<A, B>(args)`,
-/// with each runtime flag turned into a const `bool`, in order.
-///
-/// The flags every kernel takes first, in this order:
-/// - `NULLS`: whether the chunk has a missing coordinate or axis at all ([`CoordsView::has_missing_values`]).
-/// - `MISSING`: whether a missing coordinate is invalid (only read with `NULLS`).
-/// - `FINITE`: whether every axis has to be finite.
-/// - `BOUNDS`: whether x and y have to lie inside [`Coords::bounds`].
-///
-/// Then, where the geometry has them,
-/// `ZERO` (no two vertices in a row at the same place), `RING` (no ring crosses itself),
-/// `OVERLAP` (a polygon's rings fit) and `MULTI` (a multipolygon's parts fit).
-macro_rules! with_const_flags {
-    // `done` holds the flags already turned into consts.
-    (@ $f:ident [$($done:tt)*] ($($arg:expr),*)) => {
-        $f::<$($done)*>($($arg),*)
-    };
-    (@ $f:ident [$($done:tt)*] ($($arg:expr),*) $flag:expr $(, $rest:expr)*) => {
-        if $flag {
-            with_const_flags!(@ $f [$($done)* true,] ($($arg),*) $($rest),*)
-        } else {
-            with_const_flags!(@ $f [$($done)* false,] ($($arg),*) $($rest),*)
-        }
-    };
-    ($f:ident($($arg:expr),*); $($flag:expr),+) => {
-        with_const_flags!(@ $f [] ($($arg),*) $($flag),+)
-    };
-}
-
 /// The coordinates of one chunk, and the bounds they have to lie in.
 struct Coords<'a> {
     view: CoordsView<'a>,
@@ -537,6 +507,16 @@ fn multi_polygons_are_valid<
 }
 
 /// [`are_valid`] for one chunk of the storage of a `kind`.
+///
+/// The flags every kernel takes first (through [`with_const_flags!`]), in this order:
+/// - `NULLS`: whether the chunk has a missing coordinate or axis at all ([`CoordsView::has_missing_values`]).
+/// - `MISSING`: whether a missing coordinate is invalid (only read with `NULLS`).
+/// - `FINITE`: whether every axis has to be finite.
+/// - `BOUNDS`: whether x and y have to lie inside [`Coords::bounds`].
+///
+/// Then, where the geometry has them,
+/// `ZERO` (no two vertices in a row at the same place), `RING` (no ring crosses itself),
+/// `OVERLAP` (a polygon's rings fit) and `MULTI` (a multipolygon's parts fit).
 fn chunk_is_valid(
     chunk: &dyn Array,
     kind: Kind,
