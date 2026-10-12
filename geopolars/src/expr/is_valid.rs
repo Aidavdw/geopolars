@@ -1,5 +1,6 @@
 //! Whether a geometry is valid
 //! See `is_valid` in Python for the rules.
+//! A polygon's rings are also checked against each other, in x and y, through rsgeo's `Relate`.
 //!
 //! [are_valid] can also be used by other modules
 
@@ -8,9 +9,15 @@ use std::ops::Range;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
 use pyo3_polars::derive::polars_expr;
+use rsgeo::coordinate_position::CoordPos;
+use rsgeo::dimensions::Dimensions;
+use rsgeo::relate::IntersectionMatrix;
+use rsgeo::{Coord, LineString, Polygon, PreparedGeometry, Relate};
 use serde::Deserialize;
 
 use super::coords::same_geometry;
+use super::self_intersects::{vertices_self_intersect, xy_vertices_validated};
+use crate::geoarrow::geotraits::LineString as GeoLineString;
 use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
 
@@ -68,17 +75,57 @@ impl<'a> Checker<'a> {
     }
 
     /// Check every ring
-    /// either all of them empty, or all of them valid rings.
+    /// either all of them empty, or all of them valid rings that do not cross themselves,
+    /// and that [fit](rings_fit) together.
     fn polygon(&self, rings: &ListArray<i64>, polygon: Range<usize>) -> bool {
-        let mut rings_of = polygon.map(|ring| part(rings, ring));
+        let rings_of = polygon.map(|ring| part(rings, ring));
         if rings_of
             .clone()
             .all(|ring| ring.is_some_and(|ring| ring.is_empty()))
         {
             return true;
         }
-        rings_of.all(|ring| ring.is_some_and(|ring| self.ring(ring)))
+        rings_of
+            .map(|ring| {
+                let ring = ring.filter(|ring| self.ring(ring.clone()))?;
+                let vertices = xy_vertices_validated(&GeoLineString {
+                    coords: &self.coords,
+                    start: ring.start,
+                    end: ring.end,
+                })?;
+                (!vertices_self_intersect(&vertices)).then_some(vertices)
+            })
+            .collect::<Option<Vec<_>>>()
+            .is_some_and(rings_fit)
     }
+}
+
+/// Validate for polygon's rings.
+/// First is exterior, others is holes.
+/// See python for rules.
+fn rings_fit(rings: Vec<Vec<Coord<f64>>>) -> bool {
+    // Re-use matrix, as getting that is the expensive part.
+    if rings.len() < 2 {
+        return true;
+    }
+    let mut prepared = rings
+        .into_iter()
+        .map(|ring| PreparedGeometry::from(Polygon::new(LineString::new(ring), vec![])));
+    let exterior = prepared.next().expect("at least two rings");
+    let holes: Vec<_> = prepared.collect();
+    let touch_at_points = |matrix: &IntersectionMatrix| {
+        matrix.get(CoordPos::OnBoundary, CoordPos::OnBoundary) != Dimensions::OneDimensional
+    };
+    holes.iter().enumerate().all(|(i, hole)| {
+        let matrix = exterior.relate(hole);
+        matrix.is_contains()
+            && touch_at_points(&matrix)
+            && holes[i + 1..].iter().all(|other| {
+                let matrix = hole.relate(other);
+                matrix.get(CoordPos::Inside, CoordPos::Inside) == Dimensions::Empty
+                    && touch_at_points(&matrix)
+            })
+    })
 }
 
 fn part(list: &ListArray<i64>, i: usize) -> Option<Range<usize>> {

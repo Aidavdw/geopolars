@@ -1,6 +1,7 @@
 """Whether a geometry is valid, and nulling out the ones that are not.
 
 A native kernel (A-tier) checks every coordinate and part in place.
+A polygon's rings are related to each other through rsgeo's `Relate` (B-tier).
 The CRS bounds are looked up once, while the plan is built.
 """
 
@@ -49,9 +50,6 @@ def is_valid(
     """Whether each geometry is valid: one `bool` per row, a multi-geometry included.
     A missing geometry gives a missing result.
 
-    This checks structure and coordinates, not topology:
-    a self-intersecting polygon can still be valid here.
-
     Every coordinate has to be:
 
     - there, with every axis: GeoArrow allows nulls only at the outermost level
@@ -65,12 +63,22 @@ def is_valid(
     |-------------------|------------------------------------------------------------------|
     | point             | a valid coordinate, or NaN on every axis (the empty point)       |
     | linestring        | no vertices, or at least 2; no two in a row at the same place    |
-    | polygon           | no missing rings; all rings empty, or every ring a valid ring    |
+    | polygon           | no missing rings; all empty, or valid rings that fit (see below) |
     | multi-geometries  | no missing parts, and every part valid as the geometry above     |
 
     A ring is a valid linestring that is also a ring (see `is_ring`):
     at least 4 vertices, the last at the same place as the first.
     "At the same place" is within the default margin of `pl.Expr.is_close`, in x, y and z.
+
+    A polygon's rings also have to fit together, in x and y:
+
+    - no ring crosses or touches itself (see `self_intersects`);
+    - every hole lies inside the exterior;
+    - no two holes share any area, nor does one lie inside another;
+    - rings may touch each other only at points, never along a line.
+      Whether the interior stays in one piece is not checked.
+
+    A linestring may still cross itself.
 
     CRS bounds only apply to a column that declares a CRS PROJ can read.
     An opaque SRID is skipped, unless `within_area_of_use` is asked for, which then raises.

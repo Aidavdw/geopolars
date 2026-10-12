@@ -6,10 +6,11 @@ use pyo3_polars::derive::polars_expr;
 use rsgeo::coordinate_position::CoordPos;
 use rsgeo::dimensions::Dimensions;
 use rsgeo::relate::IntersectionMatrix;
-use rsgeo::{Coord, LineString, Polygon, Relate};
+use rsgeo::{LineString, Polygon, Relate};
 use serde::Deserialize;
 
-use super::self_intersects::same_xy;
+use super::self_intersects::{same_xy, xy_vertices_validated};
+use crate::geoarrow::geotraits::LineString as GeoLineString;
 use crate::geoarrow::storage::{CoordsView, MIN_RING_VERTICES};
 use crate::geoarrow::{describe, ensure_same_crs, Kind};
 
@@ -43,13 +44,7 @@ fn rings_overlap_type(input_fields: &[Field]) -> PolarsResult<Field> {
 /// `None` if one of its vertices is missing, or not finite in x or y.
 /// Errors if it is not a ring.
 fn ring(coords: &CoordsView, start: usize, end: usize) -> PolarsResult<Option<Polygon<f64>>> {
-    let Some(vertices) = (start..end)
-        .map(|i| {
-            let (x, y) = coords.xy(i)?;
-            (x.is_finite() && y.is_finite()).then_some(Coord { x, y })
-        })
-        .collect::<Option<Vec<_>>>()
-    else {
+    let Some(vertices) = xy_vertices_validated(&GeoLineString { coords, start, end }) else {
         return Ok(None);
     };
     polars_ensure!(

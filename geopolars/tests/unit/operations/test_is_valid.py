@@ -166,6 +166,74 @@ def test_a_missing_ring_is_invalid() -> None:
     assert _is_valid(PolygonXY(), [_SQUARE, None]) == [False]
 
 
+# Polygons: how the rings fit together.
+
+
+def _square(x0: float, y0: float, x1: float, y1: float) -> Line:
+    return _line((x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0))
+
+
+def test_a_self_crossing_exterior_is_invalid() -> None:
+    bowtie = _line((0, 0), (4, 4), (4, 0), (0, 4), (0, 0))
+
+    assert _is_valid(PolygonXY(), [bowtie]) == [False]
+
+
+def test_a_self_crossing_hole_is_invalid() -> None:
+    bowtie = _line((1, 1), (3, 3), (3, 1), (1, 3), (1, 1))
+
+    assert _is_valid(PolygonXY(), [_SQUARE, bowtie]) == [False]
+
+
+@pytest.mark.parametrize(
+    "hole",
+    [_line((0, 0), (2, 1), (1, 2), (0, 0)), _line((2, 0), (3, 1), (1, 1), (2, 0))],
+    ids=["at-a-corner", "on-an-edge"],
+)
+def test_a_hole_may_touch_the_exterior_at_a_point(hole: Line) -> None:
+    assert _is_valid(PolygonXY(), [_SQUARE, hole]) == [True]
+
+
+def test_a_hole_touching_the_exterior_along_a_line_is_invalid() -> None:
+    hole = _line((0, 0), (2, 0), (1, 1), (0, 0))
+
+    assert _is_valid(PolygonXY(), [_SQUARE, hole]) == [False]
+
+
+@pytest.mark.parametrize(
+    "hole",
+    [_square(3, 3, 5, 5), _square(5, 5, 6, 6), _SQUARE],
+    ids=["partly-outside", "outside", "the-exterior"],
+)
+def test_a_hole_not_inside_the_exterior_is_invalid(hole: Line) -> None:
+    assert _is_valid(PolygonXY(), [_SQUARE, hole]) == [False]
+
+
+def test_holes_may_touch_each_other_at_a_point() -> None:
+    holes = [_square(1, 1, 2, 2), _square(2, 2, 3, 3)]
+
+    assert _is_valid(PolygonXY(), [_SQUARE, *holes]) == [True]
+
+
+def test_holes_touching_each_other_along_a_line_are_invalid() -> None:
+    holes = [_square(1, 1, 2, 2), _square(2, 1, 3, 2)]
+
+    assert _is_valid(PolygonXY(), [_SQUARE, *holes]) == [False]
+
+
+@pytest.mark.parametrize(
+    "holes",
+    [
+        [_square(1, 1, 2, 2), _square(1.5, 1.5, 3, 3)],
+        [_square(1, 1, 3, 3), _square(1.5, 1.5, 2, 2)],
+        [_square(1, 1, 2, 2), _square(1, 1, 2, 2)],
+    ],
+    ids=["overlapping", "nested", "equal"],
+)
+def test_holes_sharing_area_are_invalid(holes: list[Line]) -> None:
+    assert _is_valid(PolygonXY(), [_SQUARE, *holes]) == [False]
+
+
 # Multi-geometries: valid when every part is.
 
 
@@ -190,6 +258,13 @@ def test_a_multilinestring_with_one_invalid_line_is_invalid() -> None:
 
 def test_a_multipolygon_with_one_invalid_polygon_is_invalid() -> None:
     good, bad = [_SQUARE, _HOLE], [_SQUARE[:-1]]
+
+    assert _is_valid(MultiPolygonXY(), [good, good], [good, bad]) == [True, False]
+
+
+def test_a_multipolygon_checks_how_the_rings_of_each_part_fit() -> None:
+    good = [_SQUARE, _HOLE]
+    bad = [_SQUARE, _square(1, 1, 3, 3), _square(1.5, 1.5, 2, 2)]
 
     assert _is_valid(MultiPolygonXY(), [good, good], [good, bad]) == [True, False]
 

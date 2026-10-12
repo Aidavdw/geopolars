@@ -35,19 +35,28 @@ pub(crate) fn same_xy(a: Coord<f64>, b: Coord<f64>) -> bool {
     is_close(a.x, b.x) && is_close(a.y, b.y)
 }
 
-/// Whether `line` crosses or touches itself, in x and y.
-/// `None` if one of its vertices is missing, or not finite in x or y.
-///
-/// A segment whose ends lie at the same place is skipped.
-/// Two segments in a row (and the last and the first, when the line closes)
-/// may share their vertex, but not overlap; any other two may not touch at all.
-pub(crate) fn line_self_intersects(line: &LineString) -> Option<bool> {
-    let vertices = (line.start..line.end)
+pub(crate) fn xy_vertices_validated(line: &LineString) -> Option<Vec<Coord<f64>>> {
+    (line.start..line.end)
         .map(|i| {
             let (x, y) = line.coords.xy(i)?;
             (x.is_finite() && y.is_finite()).then_some(Coord { x, y })
         })
-        .collect::<Option<Vec<_>>>()?;
+        .collect()
+}
+
+/// Whether `line` crosses or touches itself, in x and y.
+/// `None` if one of its vertices is missing, or not finite in x or y.
+/// See [`vertices_self_intersect`].
+pub(crate) fn line_self_intersects(line: &LineString) -> Option<bool> {
+    xy_vertices_validated(line).map(|vertices| vertices_self_intersect(&vertices))
+}
+
+/// Whether the line through `vertices` crosses or touches itself.
+///
+/// A segment whose ends lie at the same place is skipped.
+/// Two segments in a row (and the last and the first, when the line closes)
+/// may share their vertex, but not overlap; any other two may not touch at all.
+pub(crate) fn vertices_self_intersect(vertices: &[Coord<f64>]) -> bool {
     let segments: Vec<Segment> = vertices
         .windows(2)
         .filter(|ends| !same_xy(ends[0], ends[1]))
@@ -59,18 +68,15 @@ pub(crate) fn line_self_intersects(line: &LineString) -> Option<bool> {
         .collect();
     let n = segments.len();
     if n < 2 {
-        return Some(false);
+        return false;
     }
     let closed = same_xy(vertices[0], vertices[vertices.len() - 1]);
     let adjacent = |a: &Segment, b: &Segment| {
         let (low, high) = (a.index.min(b.index), a.index.max(b.index));
         high - low == 1 || (closed && low == 0 && high == n - 1)
     };
-    Some(
-        Intersections::from_iter(segments).any(|(a, b, hit)| {
-            !adjacent(&a, &b) || matches!(hit, LineIntersection::Collinear { .. })
-        }),
-    )
+    Intersections::from_iter(segments)
+        .any(|(a, b, hit)| !adjacent(&a, &b) || matches!(hit, LineIntersection::Collinear { .. }))
 }
 
 /// `output_type_func` for [`self_intersects`]:
