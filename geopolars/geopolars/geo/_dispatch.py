@@ -64,6 +64,14 @@ def _to_expr(value: IntoExprColumn) -> pl.Expr:
     return value
 
 
+def _named_after(built: pl.Expr, source: pl.Expr) -> pl.Expr:
+    """With this, we can pass a List[T] where we would otherwise use a T,
+    and get a List[result] back.
+    """
+    name = source.meta.output_name(raise_if_undetermined=False)
+    return built if name is None else built.alias(name)
+
+
 def on_geometry(
     value: IntoExprColumn,
     build: Callable[[pl.Expr, GeoArrowType], pl.Expr],
@@ -77,9 +85,7 @@ def on_geometry(
     expr = _to_expr(value)
 
     def resolved(expr: pl.Expr, dtype: pl.DataType) -> pl.Expr:
-        # Whatever `build` returns is named after what it was built from last,
-        # so put the input's name back on.
-        return build(expr, _geometry_of(dtype)).alias(expr.meta.output_name())
+        return _named_after(build(expr, _geometry_of(dtype)), expr)
 
     return expr.pipe_with_dtype(resolved)
 
@@ -98,7 +104,7 @@ def on_geometry_pair(
 
         def resolved_second(second: pl.Expr, second_dtype: pl.DataType) -> pl.Expr:
             built = build(first, first_geometry, second, _geometry_of(second_dtype))
-            return built.alias(first.meta.output_name())
+            return _named_after(built, first)
 
         return _to_expr(second).pipe_with_dtype(resolved_second)
 
@@ -115,6 +121,6 @@ def on_box(
     expr = _to_expr(value)
 
     def resolved(expr: pl.Expr, dtype: pl.DataType) -> pl.Expr:
-        return build(expr, _box_of(dtype)).alias(expr.meta.output_name())
+        return _named_after(build(expr, _box_of(dtype)), expr)
 
     return expr.pipe_with_dtype(resolved)

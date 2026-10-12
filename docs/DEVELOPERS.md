@@ -165,8 +165,8 @@ every extra node costs, and nested `list.eval` runs per row,
 which loses badly to an A-tier kernel.
 
 A C-tier operation may also be put together from other operations,
-including ones that call an A-tier or B-tier kernel.
-`rotate_about_centroid`, for example, hands `centroid` (A) as the origin to the `affine_about` kernel (A).
+including ones that call an A-tier or B-tier kernel. `rotate_about_centroid`, for example,
+hands `centroid` (A) as the origin to the `affine_about` kernel (A).
 It adds no kernel of its own, so it is C-tier, but its speed is that of the kernels it calls.
 
 You might want to change exactly what you want to put here using `pipe_with_dtype`
@@ -180,6 +180,7 @@ or the result silently loses its CRS (`tests/unit/operations/test_metadata.py` c
 `on_geometry_pair` does the same for operations between two geometries.
 Wrong input (not a geometry, or a geometry we don't support) therefore fails while the plan is built,
 rather than partway through execution.
+The dispatch also makes it so that you can pass a `List[T]`, and you get a `List[Res]` back.
 The callback can return Polars expressions or a kernel call into Rust,
 imported using `register_plugin_function`.
 
