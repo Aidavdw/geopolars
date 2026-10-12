@@ -77,16 +77,14 @@ def _geodesic(
 def length_planar(
     geometry: IntoExprColumn, *, allow_non_lines: bool = False
 ) -> pl.Expr:
-    """How long a linestring is in the space its coordinates lie in, as an `f64`,
-    or a list of them for a multilinestring.
+    """How long a linestring is in the space its coordinates lie in, as an `f64`.
 
     A CRS is ignored: for longitude/latitude that gives degrees,
     which is rarely what you want (see `length_geodesic`).
 
     Every segment is measured by Pythagoras, as `distance` measures two points
     without a CRS, and added up, in the unit of the coordinates.
-    A multilinestring gets the length of each of its parts, in order, as a list;
-    sum it with `.list.sum()` for the length of the whole.
+    A multilinestring gets the sum of the lengths of its parts.
     For a line with a `z`, every segment counts its difference in height too.
     `m` is ignored.
 
@@ -101,7 +99,7 @@ def length_planar(
     |------------------------|--------------|
     | `LineStringXY`         | `0.0` and up |
     | `LineStringXYZ`        | `0.0` and up |
-    | `MultiLineStringXY`    | `list[f64]`  |
+    | `MultiLineStringXY`    | `0.0` and up |
     | `PointXY`              | refused      |
     | `PolygonXY`            | refused      |
     | `MultiPointXYZM`       | refused      |
@@ -116,8 +114,7 @@ def length_planar(
 def length_geodesic(
     geometry: IntoExprColumn, *, allow_non_lines: bool = False
 ) -> pl.Expr:
-    """How long a linestring is along the ellipsoid of its CRS, as an `f64`,
-    or a list of them for a multilinestring.
+    """How long a linestring is along the ellipsoid of its CRS, as an `f64`.
 
     Every segment is measured as `distance` measures two points with a CRS:
     along the ellipsoid, in the unit of the CRS's `x` and `y`

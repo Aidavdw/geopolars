@@ -219,9 +219,9 @@ the comment says when one without a CRS takes a different tier.
 | `area` | - | ANP | - | ANP | A/B | fwd `*_planar` `*_geodesic` | - | ANP | - | ANP | A/B | sum of parts |
 | `area_planar` | - | ANP | - | ANP | A | shoelace; CRS ignored | - | ANP | - | ANP | A | sum of parts |
 | `area_geodesic` | - | ANP | - | ANP | B | PROJ + GGL; needs a CRS | - | ANP | - | ANP | B | sum of parts |
-| `length` | - | ANL | A/B | fwd `*_planar` `*_geodesic` | - | ANL | - | ANL | A/B | LPP | - | ANL |
-| `length_planar` | - | ANL | A | CRS ignored | - | ANL | - | ANL | A | LPP | - | ANL |
-| `length_geodesic` | - | ANL | B | PROJ + GGL; needs a CRS | - | ANL | - | ANL | B | LPP | - | ANL |
+| `length` | - | ANL | A/B | fwd `*_planar` `*_geodesic` | - | ANL | - | ANL | A/B | sum of parts | - | ANL |
+| `length_planar` | - | ANL | A | CRS ignored | - | ANL | - | ANL | A | sum of parts | - | ANL |
+| `length_geodesic` | - | ANL | B | PROJ + GGL; needs a CRS | - | ANL | - | ANL | B | sum of parts | - | ANL |
 | `centroid` | C | returns the point | A | length-weighted; keeps z/m | A | shoelace; XY only [^1] | C | fwd `mean_coordinate` | A | LPP | A | LPP |
 | `exterior` | - | | - | | A | ring 0 | - | | - | | A | LPP |
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | LPP |

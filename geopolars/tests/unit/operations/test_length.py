@@ -191,7 +191,7 @@ def test_a_projected_crs_is_measured_on_its_own_ellipsoid() -> None:
 
 
 @pytest.mark.parametrize("crs", [None, UNIT_SPHERE], ids=["planar", "geodesic"])
-def test_a_multilinestring_lists_the_length_of_each_part(crs: str | None) -> None:
+def test_a_multilinestring_is_the_sum_of_its_parts(crs: str | None) -> None:
     parts: list[Line] = [
         [(0.0, 0.0), (30.0, 0.0)],
         [(0.0, 10.0), (0.0, 20.0), (0.0, 50.0)],
@@ -202,14 +202,28 @@ def test_a_multilinestring_lists_the_length_of_each_part(crs: str | None) -> Non
 
     got = _lengths(multi)
 
-    assert got == [pytest.approx(separate), pytest.approx(separate[1:])]
+    assert got == [pytest.approx(sum(separate)), pytest.approx(sum(separate[1:]))]
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_a_multilinestring_without_parts_has_no_lengths(crs: str | None) -> None:
+def test_a_multilinestring_without_parts_is_zero_long(crs: str | None) -> None:
     df = _multilines([[], [[]], None], crs=crs)
 
-    assert _lengths(df) == [[], [0.0], None]
+    assert _lengths(df) == [0.0, 0.0, None]
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_a_multilinestring_with_a_missing_part_has_no_length(crs: str | None) -> None:
+    df = _multilines(
+        [[[(0.0, 0.0), (3.0, 4.0)], None], [[(0.0, 0.0), (3.0, 4.0)]]], crs=crs
+    )
+
+    got = _lengths(df)
+
+    assert got[0] is None
+    assert got[1] == pytest.approx(
+        _lengths(_lines([[(0.0, 0.0), (3.0, 4.0)]], crs=crs))[0]
+    )
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
@@ -238,9 +252,7 @@ def test_every_dimension_of_multilinestring_is_measured(
         + math.hypot(2.0, 2.0, climb)
         + math.hypot(2.0, 2.0 * climb)
     )
-    got = _lengths(df)
-    assert got[0] == pytest.approx([16.0, 2.0 + math.sqrt(2.0)])
-    assert got[1] == pytest.approx([last_ring])
+    assert _lengths(df) == pytest.approx([16.0 + 2.0 + math.sqrt(2.0), last_ring])
 
 
 def test_metadata_without_a_crs_is_still_planar() -> None:
@@ -449,7 +461,7 @@ def test_length_planar_lines_up_across_chunks_and_slices() -> None:
         return df.select(geo.length_planar(name)).to_series().to_list()
 
     assert planar(lines.slice(1)) == [10.0, None, 2.0]
-    assert planar(multis.slice(1)) == [None, [2.0, 10.0]]
+    assert planar(multis.slice(1)) == [None, 12.0]
 
 
 def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:

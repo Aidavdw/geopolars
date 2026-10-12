@@ -4,8 +4,6 @@
 
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
-use polars_arrow::datatypes::ArrowDataType;
-use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
 use super::distance::GeodesicMetric;
@@ -31,16 +29,16 @@ fn has_no_length(kind: Kind) -> PolarsError {
     )
 }
 
-/// An `f64` per geometry, or a list of them (one per part) for a multilinestring.
+/// An `f64` per geometry: for a multilinestring, the sum of its parts.
 fn length_dtype(field: &Field) -> PolarsResult<Field> {
-    let dtype = match describe(field.dtype())?.kind {
-        Kind::LineString => DataType::Float64,
-        Kind::MultiLineString => DataType::List(Box::new(DataType::Float64)),
-        kind @ (Kind::Point | Kind::Polygon | Kind::MultiPoint | Kind::MultiPolygon) => {
-            return Err(has_no_length(kind))
+    match describe(field.dtype())?.kind {
+        Kind::LineString | Kind::MultiLineString => {
+            Ok(Field::new(field.name().clone(), DataType::Float64))
         }
-    };
-    Ok(Field::new(field.name().clone(), dtype))
+        kind @ (Kind::Point | Kind::Polygon | Kind::MultiPoint | Kind::MultiPolygon) => {
+            Err(has_no_length(kind))
+        }
+    }
 }
 
 /// `output_type_func` for [`length_planar`]: in the unit of the coordinates.
@@ -161,36 +159,32 @@ fn linestrings(
     ))
 }
 
-/// The length of each part of every multilinestring.
-/// A missing part (or one with a missing coordinate) gets a missing length,
-/// without taking its siblings with it.
+/// The length of every multilinestring: the sum of its parts.
+/// A missing part (or one with a missing coordinate)
+/// renders the entire multilinestring as missing.
 fn multilinestrings(
     storage: &Series,
     measure: impl Fn(&Lines, usize) -> PolarsResult<Option<f64>>,
-) -> PolarsResult<ListChunked> {
-    let name = storage.name().clone();
-    let chunks = storage
-        .list()?
-        .downcast_iter()
-        .map(|chunk| -> PolarsResult<_> {
-            let lines = Lines::new(downcast(chunk.values().as_ref(), "a list of linestrings")?)?;
-            // Only the parts this chunk points at: it may be a slice of a larger one.
-            let (first, last) = (
-                *chunk.offsets().first() as usize,
-                *chunk.offsets().last() as usize,
-            );
-            let parts = (first..last)
+) -> PolarsResult<Float64Chunked> {
+    let mut out = Vec::with_capacity(storage.len());
+    for chunk in storage.list()?.downcast_iter() {
+        let lines = Lines::new(downcast(chunk.values().as_ref(), "a list of linestrings")?)?;
+        for i in 0..chunk.len() {
+            if chunk.is_null(i) {
+                out.push(None);
+                continue;
+            }
+            let (start, end) = chunk.offsets().start_end(i);
+            let parts: Option<Vec<f64>> = (start..end)
                 .map(|line| measure(&lines, line))
-                .collect::<PolarsResult<PrimitiveArray<f64>>>()?;
-            let offsets = Offsets::try_from_lengths(chunk.offsets().lengths())?;
-            Ok(ListArray::<i64>::new(
-                ListArray::<i64>::default_datatype(ArrowDataType::Float64),
-                offsets.into(),
-                parts.boxed(),
-                chunk.validity().cloned(),
-            ))
-        });
-    ListChunked::try_from_chunk_iter(name, chunks)
+                .collect::<PolarsResult<_>>()?;
+            out.push(parts.map(|parts| parts.iter().sum()));
+        }
+    }
+    Ok(Float64Chunked::from_iter_options(
+        storage.name().clone(),
+        out.into_iter(),
+    ))
 }
 
 /// See `length_planar`.
