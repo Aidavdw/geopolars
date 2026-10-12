@@ -113,6 +113,15 @@ Only the outer level is allowed to have nulls, and all other levels
 (including the inner level with the actual coordinate values) should not contain any nulls.
 This means that there is no need to branch on what to do if something is invalid.
 
+## Branching inside a loop
+
+Try to keep branching outside of kernel loops. If you can already do it outside, do it outside.
+If you conditionally need to do something extra (e.g. in the validation loops, also check for overlaps),
+you can move the branching outside of the loop by writing these as generic functions,
+and dispatching to specific versions.
+Something like the `with_const_flags!` macro is very useful here.
+Be careful you don't blow it up with combinatorics though.
+
 ## Implementation tiers
 
 Every operation is implemented at one of three tiers:

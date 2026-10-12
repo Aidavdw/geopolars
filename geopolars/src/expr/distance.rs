@@ -87,7 +87,7 @@ impl GeodesicMetric {
     /// in the unit of the CRS's `x` and `y` (metres if those are degrees),
     /// which is the unit [`GeodeticCrs::semi_major`] gives the ellipsoid in.
     pub fn between(&self, (lon_a, lat_a): (f64, f64), (lon_b, lat_b): (f64, f64)) -> f64 {
-        // CHECK: is this squared? if so, then change name.
+        // This is distance, not squared.
         self.ellipsoid.inverse(lat_a, lon_a, lat_b, lon_b)
     }
 
@@ -238,6 +238,7 @@ fn pairwise<const Z: bool>(
             let there = metric.vertex::<Z>(&axes_b, i)?;
             Ok(metric.segment::<Z>(here, there).powi(2))
         })
+        // FIXME: this is not pre-sized
         .collect::<PolarsResult<Vec<f64>>>()?;
     Ok(PrimitiveArray::from_vec(values).with_validity(validity))
 }

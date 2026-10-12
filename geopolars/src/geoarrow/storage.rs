@@ -28,8 +28,9 @@ pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
     is_close(a[0], b[0]) && is_close(a[1], b[1]) && is_close(a[2], b[2])
 }
 
-/// The axes of one chunk of coordinates, as plain values:
-/// valid storage has no missing coordinates, so their validity is never read.
+/// The axes of one chunk of coordinates.
+/// Nulls live at outer level, so valid storage has no missing coordinates,
+/// so their validity is never read.
 pub(crate) struct Axes<'a> {
     pub(crate) x: &'a [f64],
     pub(crate) y: &'a [f64],

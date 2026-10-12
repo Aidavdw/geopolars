@@ -65,11 +65,16 @@ impl Default for IsValidKwargs {
     }
 }
 
-/// The coordinates of one chunk, and the bounds they have to lie in.
+/// The coordinates of one chunk, and the checks they get.
+///
+/// Only what is read for every vertex is a const flag (see [`chunk_is_valid`]).
+/// What is read once per ring or polygon, or only for a missing coordinate,
+/// is read from `kwargs` instead: there, branching costs next to nothing.
 struct Coords<'a> {
     view: CoordsView<'a>,
     /// Only read with `BOUNDS`.
     bounds: Bounds,
+    kwargs: &'a IsValidKwargs,
 }
 
 /// Room for the rings of a polygon, kept between rows so that they are allocated once.
@@ -83,39 +88,33 @@ struct Scratch {
 }
 
 impl<'a> Coords<'a> {
-    fn new(coords: &'a dyn Array, kwargs: &IsValidKwargs) -> PolarsResult<Self> {
+    fn new(coords: &'a dyn Array, kwargs: &'a IsValidKwargs) -> PolarsResult<Self> {
         Ok(Self {
             view: CoordsView::new(coords)?,
             bounds: kwargs.bounds.unwrap_or_default(),
+            kwargs,
         })
     }
 
     /// The runtime flags, in order:
-    /// `NULLS`, `MISSING`, `FINITE`, and `BOUNDS`.
-    fn coordinate_check_flags(&self, kwargs: &IsValidKwargs) -> (bool, bool, bool, bool) {
-        let nulls = self.view.has_missing_values();
+    /// `NULLS`, `FINITE`, and `BOUNDS`.
+    fn coordinate_check_flags(&self) -> (bool, bool, bool) {
         (
-            nulls,
-            nulls && kwargs.check_missing_coordinates,
-            kwargs.check_finite_coordinates,
-            kwargs.bounds.is_some(),
+            self.view.has_missing_values(),
+            self.kwargs.check_finite_coordinates,
+            self.kwargs.bounds.is_some(),
         )
     }
 
     /// Whether coordinate `i` passes the coordinate checks.
     /// A missing coordinate has no values to check.
     #[inline(always)]
-    fn coordinate_is_valid<
-        const NULLS: bool,
-        const MISSING: bool,
-        const FINITE: bool,
-        const BOUNDS: bool,
-    >(
+    fn coordinate_is_valid<const NULLS: bool, const FINITE: bool, const BOUNDS: bool>(
         &self,
         i: usize,
     ) -> bool {
         if NULLS && !self.view.present(i) {
-            return !MISSING;
+            return !self.kwargs.check_missing_coordinates;
         }
         (!FINITE || self.view.values(i).all(f64::is_finite))
             && (!BOUNDS || {
@@ -125,16 +124,11 @@ impl<'a> Coords<'a> {
             })
     }
 
-    fn is_valid_or_empty_point<
-        const NULLS: bool,
-        const MISSING: bool,
-        const FINITE: bool,
-        const BOUNDS: bool,
-    >(
+    fn is_valid_or_empty_point<const NULLS: bool, const FINITE: bool, const BOUNDS: bool>(
         &self,
         i: usize,
     ) -> bool {
-        self.coordinate_is_valid::<NULLS, MISSING, FINITE, BOUNDS>(i)
+        self.coordinate_is_valid::<NULLS, FINITE, BOUNDS>(i)
             || ((!NULLS || self.view.present(i)) && self.view.values(i).all(f64::is_nan))
     }
 
@@ -145,7 +139,6 @@ impl<'a> Coords<'a> {
     #[inline(always)]
     fn vertices_are_valid<
         const NULLS: bool,
-        const MISSING: bool,
         const FINITE: bool,
         const BOUNDS: bool,
         const ZERO: bool,
@@ -158,7 +151,7 @@ impl<'a> Coords<'a> {
         // Where the vertex before lies, `None` if it is missing (which is close to nothing).
         let mut before = None;
         for i in vertices {
-            if !self.coordinate_is_valid::<NULLS, MISSING, FINITE, BOUNDS>(i) {
+            if !self.coordinate_is_valid::<NULLS, FINITE, BOUNDS>(i) {
                 return false;
             }
             if ZERO {
@@ -174,7 +167,8 @@ impl<'a> Coords<'a> {
                 // `coordinate_is_valid` already found it finite, unless it let it through as missing.
                 match self.view.xy_checking_nulls::<NULLS>(i) {
                     Some((x, y))
-                        if (FINITE && (!NULLS || MISSING)) || (x.is_finite() && y.is_finite()) =>
+                        if (FINITE && (!NULLS || self.kwargs.check_missing_coordinates))
+                            || (x.is_finite() && y.is_finite()) =>
                     {
                         xy.push(Coord { x, y });
                     }
@@ -189,7 +183,6 @@ impl<'a> Coords<'a> {
     /// no vertices, or at least two valid ones.
     fn line_string_is_valid<
         const NULLS: bool,
-        const MISSING: bool,
         const FINITE: bool,
         const BOUNDS: bool,
         const ZERO: bool,
@@ -198,30 +191,26 @@ impl<'a> Coords<'a> {
         vertices: Range<usize>,
     ) -> bool {
         vertices.len() != 1
-            && self.vertices_are_valid::<NULLS, MISSING, FINITE, BOUNDS, ZERO, false>(
-                vertices,
-                &mut Vec::new(),
-            )
+            && self
+                .vertices_are_valid::<NULLS, FINITE, BOUNDS, ZERO, false>(vertices, &mut Vec::new())
     }
 
     /// Whether the rings `polygon` (indices into `rings`) make a valid polygon:
     /// all rings empty OR
-    /// - all rings valid linestrings (if `RING`)
-    /// - all rings don't overlap (if `OVERLAP`)
-    /// With `KEEP`, its rings are left in `scratch.rings` (none for the empty polygon).
+    /// - all rings valid linestrings (if `check_ring_self_intersect`)
+    /// - all rings don't overlap (if `check_polygon_self_overlap`)
+    ///
+    /// With `keep`, its rings are left in `scratch.rings` (none for the empty polygon).
     fn polygon_is_valid<
         const NULLS: bool,
-        const MISSING: bool,
         const FINITE: bool,
         const BOUNDS: bool,
         const ZERO: bool,
-        const RING: bool,
-        const OVERLAP: bool,
-        const KEEP: bool,
     >(
         &self,
         rings: &ListArray<i64>,
         polygon: Range<usize>,
+        keep: bool,
         scratch: &mut Scratch,
     ) -> bool {
         scratch.rings.clear();
@@ -236,11 +225,9 @@ impl<'a> Coords<'a> {
         }
         of_polygon.all(|ring| {
             ring.is_some_and(|ring| {
-                self.ring_is_valid::<NULLS, MISSING, FINITE, BOUNDS, ZERO, RING, OVERLAP, KEEP>(
-                    ring, scratch,
-                )
+                self.ring_is_valid::<NULLS, FINITE, BOUNDS, ZERO>(ring, keep, scratch)
             })
-        }) && (!OVERLAP || polygon_rings_fit(&scratch.rings))
+        }) && (!self.kwargs.check_polygon_self_overlap || polygon_rings_fit(&scratch.rings))
     }
 
     /// Whether `vertices` make a valid ring
@@ -249,41 +236,38 @@ impl<'a> Coords<'a> {
     #[inline(always)]
     fn ring_is_valid<
         const NULLS: bool,
-        const MISSING: bool,
         const FINITE: bool,
         const BOUNDS: bool,
         const ZERO: bool,
-        const RING: bool,
-        const OVERLAP: bool,
-        const KEEP: bool,
     >(
         &self,
         vertices: Range<usize>,
+        keep: bool,
         scratch: &mut Scratch,
     ) -> bool {
         if !self.view.is_ring(vertices.clone()) {
             return false;
         }
+        let ring = self.kwargs.check_ring_self_intersect;
+        let keep = keep || self.kwargs.check_polygon_self_overlap;
         // Without topology, the ring need not be read into vertices at all.
-        if !(RING || OVERLAP || KEEP) {
-            return self.vertices_are_valid::<NULLS, MISSING, FINITE, BOUNDS, ZERO, false>(
+        if !(ring || keep) {
+            return self.vertices_are_valid::<NULLS, FINITE, BOUNDS, ZERO, false>(
                 vertices,
                 &mut scratch.xy,
             );
         }
         scratch.xy.clear();
         scratch.xy.reserve(vertices.len());
-        if !self.vertices_are_valid::<NULLS, MISSING, FINITE, BOUNDS, ZERO, true>(
-            vertices,
-            &mut scratch.xy,
-        ) {
+        if !self.vertices_are_valid::<NULLS, FINITE, BOUNDS, ZERO, true>(vertices, &mut scratch.xy)
+        {
             return false;
         }
-        if RING && vertices_self_intersect(&scratch.xy) {
+        if ring && vertices_self_intersect(&scratch.xy) {
             return false;
         }
         // Handed to rsgeo, which needs them owned: the only copy made of the vertices.
-        if OVERLAP || KEEP {
+        if keep {
             let ring = LineString::new(mem::take(&mut scratch.xy));
             scratch.rings.push(Polygon::new(ring, vec![]));
         }
@@ -376,37 +360,26 @@ fn is_valid_per_list_row(
     })
 }
 
-fn points_are_valid<
-    const NULLS: bool,
-    const MISSING: bool,
-    const FINITE: bool,
-    const BOUNDS: bool,
->(
+fn points_are_valid<const NULLS: bool, const FINITE: bool, const BOUNDS: bool>(
     rows: &dyn Array,
     coords: &Coords,
 ) -> BooleanArray {
     is_valid_per_row(rows.len(), rows.validity(), |i| {
-        coords.is_valid_or_empty_point::<NULLS, MISSING, FINITE, BOUNDS>(i)
+        coords.is_valid_or_empty_point::<NULLS, FINITE, BOUNDS>(i)
     })
 }
 
-fn multi_points_are_valid<
-    const NULLS: bool,
-    const MISSING: bool,
-    const FINITE: bool,
-    const BOUNDS: bool,
->(
+fn multi_points_are_valid<const NULLS: bool, const FINITE: bool, const BOUNDS: bool>(
     rows: &ListArray<i64>,
     coords: &Coords,
 ) -> BooleanArray {
     is_valid_per_list_row(rows, |mut points| {
-        points.all(|i| coords.is_valid_or_empty_point::<NULLS, MISSING, FINITE, BOUNDS>(i))
+        points.all(|i| coords.is_valid_or_empty_point::<NULLS, FINITE, BOUNDS>(i))
     })
 }
 
 fn line_strings_are_valid<
     const NULLS: bool,
-    const MISSING: bool,
     const FINITE: bool,
     const BOUNDS: bool,
     const ZERO: bool,
@@ -415,13 +388,12 @@ fn line_strings_are_valid<
     coords: &Coords,
 ) -> BooleanArray {
     is_valid_per_list_row(rows, |line| {
-        coords.line_string_is_valid::<NULLS, MISSING, FINITE, BOUNDS, ZERO>(line)
+        coords.line_string_is_valid::<NULLS, FINITE, BOUNDS, ZERO>(line)
     })
 }
 
 fn multi_line_strings_are_valid<
     const NULLS: bool,
-    const MISSING: bool,
     const FINITE: bool,
     const BOUNDS: bool,
     const ZERO: bool,
@@ -433,7 +405,7 @@ fn multi_line_strings_are_valid<
     is_valid_per_list_row(rows, |mut of_row| {
         of_row.all(|line| {
             list_item_range(lines, line).is_some_and(|line| {
-                coords.line_string_is_valid::<NULLS, MISSING, FINITE, BOUNDS, ZERO>(line)
+                coords.line_string_is_valid::<NULLS, FINITE, BOUNDS, ZERO>(line)
             })
         })
     })
@@ -441,12 +413,9 @@ fn multi_line_strings_are_valid<
 
 fn polygons_are_valid<
     const NULLS: bool,
-    const MISSING: bool,
     const FINITE: bool,
     const BOUNDS: bool,
     const ZERO: bool,
-    const RING: bool,
-    const OVERLAP: bool,
 >(
     rows: &ListArray<i64>,
     rings: &ListArray<i64>,
@@ -454,33 +423,25 @@ fn polygons_are_valid<
 ) -> BooleanArray {
     let mut scratch = Scratch::default();
     is_valid_per_list_row(rows, |polygon| {
-        coords.polygon_is_valid::<NULLS, MISSING, FINITE, BOUNDS, ZERO, RING, OVERLAP, false>(
-            rings,
-            polygon,
-            &mut scratch,
-        )
+        coords.polygon_is_valid::<NULLS, FINITE, BOUNDS, ZERO>(rings, polygon, false, &mut scratch)
     })
 }
 
 /// Requires:
 /// - Every part a valid polygon,
-/// - [multi_polygon_parts_fit] for all parts if `MULTI=true`
-#[allow(clippy::too_many_arguments)]
+/// - [multi_polygon_parts_fit] for all parts if `check_multi_polygon_self_overlap`
 fn multi_polygons_are_valid<
     const NULLS: bool,
-    const MISSING: bool,
     const FINITE: bool,
     const BOUNDS: bool,
     const ZERO: bool,
-    const RING: bool,
-    const OVERLAP: bool,
-    const MULTI: bool,
 >(
     rows: &ListArray<i64>,
     polygons: &ListArray<i64>,
     rings: &ListArray<i64>,
     coords: &Coords,
 ) -> BooleanArray {
+    let multi = coords.kwargs.check_multi_polygon_self_overlap;
     let mut scratch = Scratch::default();
     // The parts of the row being checked, kept between rows so that they are allocated once.
     let mut parts = Vec::new();
@@ -488,21 +449,21 @@ fn multi_polygons_are_valid<
         parts.clear();
         for polygon in of_row {
             let valid = list_item_range(polygons, polygon).is_some_and(|polygon| {
-                coords
-                    .polygon_is_valid::<NULLS, MISSING, FINITE, BOUNDS, ZERO, RING, OVERLAP, MULTI>(
-                        rings,
-                        polygon,
-                        &mut scratch,
-                    )
+                coords.polygon_is_valid::<NULLS, FINITE, BOUNDS, ZERO>(
+                    rings,
+                    polygon,
+                    multi,
+                    &mut scratch,
+                )
             });
             if !valid {
                 return false;
             }
-            if MULTI {
+            if multi {
                 parts.extend(rings_into_polygon(&mut scratch.rings));
             }
         }
-        !MULTI || multi_polygon_parts_fit(&parts)
+        !multi || multi_polygon_parts_fit(&parts)
     })
 }
 
@@ -510,31 +471,25 @@ fn multi_polygons_are_valid<
 ///
 /// The flags every kernel takes first (through [`with_const_flags!`]), in this order:
 /// - `NULLS`: whether the chunk has a missing coordinate or axis at all ([`CoordsView::has_missing_values`]).
-/// - `MISSING`: whether a missing coordinate is invalid (only read with `NULLS`).
 /// - `FINITE`: whether every axis has to be finite.
 /// - `BOUNDS`: whether x and y have to lie inside [`Coords::bounds`].
 ///
 /// Then, where the geometry has them,
-/// `ZERO` (no two vertices in a row at the same place), `RING` (no ring crosses itself),
-/// `OVERLAP` (a polygon's rings fit) and `MULTI` (a multipolygon's parts fit).
+/// `ZERO` (no two vertices in a row at the same place).
+///
+/// These are read for every vertex. The other checks are not const flags (see [`Coords`]).
 fn chunk_is_valid(
     chunk: &dyn Array,
     kind: Kind,
     kwargs: &IsValidKwargs,
 ) -> PolarsResult<BooleanArray> {
-    let IsValidKwargs {
-        check_line_string_zero_length_sections: zero,
-        check_ring_self_intersect: ring,
-        check_polygon_self_overlap: overlap,
-        check_multi_polygon_self_overlap: multi,
-        ..
-    } = *kwargs;
+    let zero = kwargs.check_line_string_zero_length_sections;
     if kind == Kind::Point {
         let coords = Coords::new(chunk, kwargs)?;
-        let (nulls, missing, finite, bounds) = coords.coordinate_check_flags(kwargs);
+        let (nulls, finite, bounds) = coords.coordinate_check_flags();
         return Ok(with_const_flags!(
             points_are_valid(chunk, &coords);
-            nulls, missing, finite, bounds
+            nulls, finite, bounds
         ));
     }
     let rows: &ListArray<i64> = downcast(chunk, "a list of parts")?;
@@ -543,46 +498,46 @@ fn chunk_is_valid(
         Kind::Point => unreachable!("handled above"),
         Kind::LineString => {
             let coords = Coords::new(parts, kwargs)?;
-            let (nulls, missing, finite, bounds) = coords.coordinate_check_flags(kwargs);
+            let (nulls, finite, bounds) = coords.coordinate_check_flags();
             with_const_flags!(
                 line_strings_are_valid(rows, &coords);
-                nulls, missing, finite, bounds, zero
+                nulls, finite, bounds, zero
             )
         }
         Kind::MultiPoint => {
             let coords = Coords::new(parts, kwargs)?;
-            let (nulls, missing, finite, bounds) = coords.coordinate_check_flags(kwargs);
+            let (nulls, finite, bounds) = coords.coordinate_check_flags();
             with_const_flags!(
                 multi_points_are_valid(rows, &coords);
-                nulls, missing, finite, bounds
+                nulls, finite, bounds
             )
         }
         Kind::Polygon => {
             let rings: &ListArray<i64> = downcast(parts, "a list of rings")?;
             let coords = Coords::new(rings.values().as_ref(), kwargs)?;
-            let (nulls, missing, finite, bounds) = coords.coordinate_check_flags(kwargs);
+            let (nulls, finite, bounds) = coords.coordinate_check_flags();
             with_const_flags!(
                 polygons_are_valid(rows, rings, &coords);
-                nulls, missing, finite, bounds, zero, ring, overlap
+                nulls, finite, bounds, zero
             )
         }
         Kind::MultiLineString => {
             let lines: &ListArray<i64> = downcast(parts, "a list of linestrings")?;
             let coords = Coords::new(lines.values().as_ref(), kwargs)?;
-            let (nulls, missing, finite, bounds) = coords.coordinate_check_flags(kwargs);
+            let (nulls, finite, bounds) = coords.coordinate_check_flags();
             with_const_flags!(
                 multi_line_strings_are_valid(rows, lines, &coords);
-                nulls, missing, finite, bounds, zero
+                nulls, finite, bounds, zero
             )
         }
         Kind::MultiPolygon => {
             let polygons: &ListArray<i64> = downcast(parts, "a list of polygons")?;
             let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
             let coords = Coords::new(rings.values().as_ref(), kwargs)?;
-            let (nulls, missing, finite, bounds) = coords.coordinate_check_flags(kwargs);
+            let (nulls, finite, bounds) = coords.coordinate_check_flags();
             with_const_flags!(
                 multi_polygons_are_valid(rows, polygons, rings, &coords);
-                nulls, missing, finite, bounds, zero, ring, overlap, multi
+                nulls, finite, bounds, zero
             )
         }
     })
