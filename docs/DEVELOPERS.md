@@ -103,6 +103,14 @@ rather than internal implementation details :)
 
 Rust tests can still be necessary if a certain functionality is only reachable from rust directly.
 
+## Validity checking
+
+We check for validity when importing or constructing,
+and every operation is expected to give a valid output.
+Therefore, in a kernel, you can always assume that the input data is valid
+according to the GeoArrow spec.
+There is no need to branch on what to do if something is invalid.
+
 ## Implementation tiers
 
 Every operation is implemented at one of three tiers:
