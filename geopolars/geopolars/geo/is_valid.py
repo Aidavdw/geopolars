@@ -27,18 +27,21 @@ def _kernel(
     *,
     allow_wrapped_longitude: bool,
     within_area_of_use: bool,
-    check_vertex_validity: bool,
+    check_missing_coordinates: bool,
+    check_finite_coordinates: bool,
+    check_crs_bounds: bool,
+    check_line_string_zero_length_sections: bool,
     check_ring_self_intersect: bool,
     check_polygon_self_overlap: bool,
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-        # The bounds are only for the vertex check, so PROJ is not asked without it.
+        # The bounds are only for the bounds check, so PROJ is not asked without it.
         bounds = (
             geometry._crs_bounds(
                 allow_wrapped_longitude=allow_wrapped_longitude,
                 within_area_of_use=within_area_of_use,
             )
-            if check_vertex_validity
+            if check_crs_bounds
             else None
         )
         return register_plugin_function(
@@ -48,7 +51,12 @@ def _kernel(
             is_elementwise=True,
             kwargs={
                 "bounds": bounds,
-                "check_vertex_validity": check_vertex_validity,
+                "check_missing_coordinates": check_missing_coordinates,
+                "check_finite_coordinates": check_finite_coordinates,
+                "check_crs_bounds": check_crs_bounds,
+                "check_line_string_zero_length_sections": (
+                    check_line_string_zero_length_sections
+                ),
                 "check_ring_self_intersect": check_ring_self_intersect,
                 "check_polygon_self_overlap": check_polygon_self_overlap,
             },
@@ -62,7 +70,10 @@ def is_valid(
     *,
     allow_wrapped_longitude: bool = True,
     within_area_of_use: bool = False,
-    check_vertex_validity: bool = True,
+    check_missing_coordinates: bool = True,
+    check_finite_coordinates: bool = True,
+    check_crs_bounds: bool = True,
+    check_line_string_zero_length_sections: bool = True,
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
@@ -113,15 +124,22 @@ def is_valid(
     Parts of the check can be individually turned off.
     This can be used to reduce computation time when you know for sure that
     your data is valid in some way.
-    The shape rules in the table (vertex counts, repeats, closed rings) always apply.
+    The other shape rules in the table (vertex counts, closed rings) always apply.
 
-    - `check_vertex_validity=False` drops the rules for every coordinate above,
-      CRS bounds included (`allow_wrapped_longitude` and `within_area_of_use` then do nothing).
-      The fit of a polygon's rings is still only known for finite x and y,
-      so such a ring stays invalid while either check below is on.
+    - `check_missing_coordinates=False` lets a coordinate, or one of its axes, be missing.
+    - `check_finite_coordinates=False` lets coordinates use NaN (partial missing) or infinite.
+    - `check_crs_bounds=False` means it is not checked if the coordinates are
+      within the range of validity of the CRS. If this flag is set,
+      `allow_wrapped_longitude` and `within_area_of_use` do nothing.
+    - `check_line_string_zero_length_sections=False` lets two vertices in a row
+      lie at the same place, in a linestring as well as in a ring.
     - `check_ring_self_intersect=False` skips checking for a polygon's ring crossing itself.
     - `check_polygon_self_overlap=False` drops the rules on how the rings sit together
-      (inside the exterior, not overlapping, touching only at points). This has the biggest performance impact out of all of the checks for polygons.
+      (inside the exterior, not overlapping, touching only at points).
+      This has the biggest performance impact out of all of the checks for polygons.
+
+    How a polygon's rings cross or fit is only known for valid points,
+    so a ring without them stays invalid while either of the last two checks is on.
 
     ```python
     df.filter(geo.is_valid("parcel"))
@@ -133,7 +151,10 @@ def is_valid(
             "is_valid",
             allow_wrapped_longitude=allow_wrapped_longitude,
             within_area_of_use=within_area_of_use,
-            check_vertex_validity=check_vertex_validity,
+            check_missing_coordinates=check_missing_coordinates,
+            check_finite_coordinates=check_finite_coordinates,
+            check_crs_bounds=check_crs_bounds,
+            check_line_string_zero_length_sections=check_line_string_zero_length_sections,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
         ),
@@ -145,7 +166,10 @@ def null_out_invalid(
     *,
     allow_wrapped_longitude: bool = True,
     within_area_of_use: bool = False,
-    check_vertex_validity: bool = True,
+    check_missing_coordinates: bool = True,
+    check_finite_coordinates: bool = True,
+    check_crs_bounds: bool = True,
+    check_line_string_zero_length_sections: bool = True,
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
@@ -168,7 +192,10 @@ def null_out_invalid(
             "null_out_invalid",
             allow_wrapped_longitude=allow_wrapped_longitude,
             within_area_of_use=within_area_of_use,
-            check_vertex_validity=check_vertex_validity,
+            check_missing_coordinates=check_missing_coordinates,
+            check_finite_coordinates=check_finite_coordinates,
+            check_crs_bounds=check_crs_bounds,
+            check_line_string_zero_length_sections=check_line_string_zero_length_sections,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
         ),

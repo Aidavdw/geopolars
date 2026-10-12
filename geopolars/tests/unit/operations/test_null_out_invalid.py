@@ -137,6 +137,19 @@ def test_without_the_overlap_check_a_hole_outside_is_kept() -> None:
     assert out["polygon"].is_null().to_list() == [False]
 
 
+def test_without_the_zero_length_check_a_repeated_vertex_is_kept() -> None:
+    line = [{"x": 0.0, "y": 0.0}, {"x": 1.0, "y": 1.0}, {"x": 1.0, "y": 1.0}]
+    df = pl.DataFrame({"line": [line]}, schema={"line": _XY_VERTICES}).select(
+        pl.col("line").ext.to(LineStringXY())
+    )
+
+    out = df.select(
+        geo.null_out_invalid("line", check_line_string_zero_length_sections=False)
+    )
+
+    assert out["line"].is_null().to_list() == [False]
+
+
 def test_a_point_outside_its_crs_is_nulled_and_the_crs_kept() -> None:
     df = pl.DataFrame(
         {"point": [{"x": 0.0, "y": 95.0}, {"x": 190.0, "y": 0.0}]},

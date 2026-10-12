@@ -28,8 +28,14 @@ type Bounds = [f64; 4];
 #[serde(default, deny_unknown_fields)]
 pub struct IsValidKwargs {
     bounds: Option<Bounds>,
-    /// Whether every coordinate has to be there, finite, and inside `bounds`.
-    check_vertex_validity: bool,
+    /// Whether every coordinate has to be there, with every axis.
+    check_missing_coordinates: bool,
+    /// Whether every axis of a coordinate that is there has to be finite.
+    check_finite_coordinates: bool,
+    /// Whether every coordinate that is there has to lie inside `bounds`.
+    check_crs_bounds: bool,
+    /// Whether no two vertices in a row of a line or ring may lie at the same place.
+    check_line_string_zero_length_sections: bool,
     /// Whether a polygon's rings may not cross themselves.
     check_ring_self_intersect: bool,
     /// Whether a polygon's rings have to [fit](rings_fit) together.
@@ -40,7 +46,10 @@ impl Default for IsValidKwargs {
     fn default() -> Self {
         Self {
             bounds: None,
-            check_vertex_validity: true,
+            check_missing_coordinates: true,
+            check_finite_coordinates: true,
+            check_crs_bounds: true,
+            check_line_string_zero_length_sections: true,
             check_ring_self_intersect: true,
             check_polygon_self_overlap: true,
         }
@@ -63,15 +72,17 @@ impl<'a> Checker<'a> {
     }
 
     fn coord(&self, i: usize) -> bool {
-        if !self.kwargs.check_vertex_validity {
-            return true;
+        let kwargs = self.kwargs;
+        // A missing coordinate has no values to check.
+        if !self.coords.present(i) {
+            return !kwargs.check_missing_coordinates;
         }
-        self.coords.present(i)
-            && self.coords.values(i).all(f64::is_finite)
-            && self.kwargs.bounds.is_none_or(|[xmin, ymin, xmax, ymax]| {
-                let (x, y) = (self.coords.nth(i, 0), self.coords.nth(i, 1));
-                (xmin..=xmax).contains(&x) && (ymin..=ymax).contains(&y)
-            })
+        (!kwargs.check_finite_coordinates || self.coords.values(i).all(f64::is_finite))
+            && (!kwargs.check_crs_bounds
+                || kwargs.bounds.is_none_or(|[xmin, ymin, xmax, ymax]| {
+                    let (x, y) = (self.coords.nth(i, 0), self.coords.nth(i, 1));
+                    (xmin..=xmax).contains(&x) && (ymin..=ymax).contains(&y)
+                }))
     }
 
     /// A valid coordinate, or the empty point
@@ -79,14 +90,16 @@ impl<'a> Checker<'a> {
         (self.coords.present(i) && self.coords.values(i).all(f64::is_nan)) || self.coord(i)
     }
 
-    /// No vertices, or at least two valid ones, no two in a row at the same place.
+    /// No vertices, or at least two valid ones, no two in a row at the same place
+    /// (the latter only when the kwargs ask for it).
     fn line(&self, vertices: Range<usize>) -> bool {
         vertices.len() != 1
             && vertices.clone().all(|i| self.coord(i))
-            && vertices
-                .clone()
-                .zip(vertices.skip(1))
-                .all(|(a, b)| !self.coords.same_place(a, b))
+            && (!self.kwargs.check_line_string_zero_length_sections
+                || vertices
+                    .clone()
+                    .zip(vertices.skip(1))
+                    .all(|(a, b)| !self.coords.same_place(a, b)))
     }
 
     /// A valid line that closes, around at least a triangle.

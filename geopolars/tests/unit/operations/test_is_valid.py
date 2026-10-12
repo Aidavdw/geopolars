@@ -371,25 +371,78 @@ def test_an_opaque_srid_has_no_area_of_use() -> None:
 _BOWTIE = _line((0, 0), (4, 4), (4, 0), (0, 4), (0, 0))
 
 
+_NO_COORDINATE_CHECKS = {
+    "check_missing_coordinates": False,
+    "check_finite_coordinates": False,
+    "check_crs_bounds": False,
+    "check_line_string_zero_length_sections": False,
+}
+_NO_TOPOLOGY_CHECKS = {
+    "check_ring_self_intersect": False,
+    "check_polygon_self_overlap": False,
+}
+
+
 @pytest.mark.parametrize(
     "line",
-    [_line((0, 0), (NAN, 1)), _line((0, 0), (INF, 1)), [_point(0, 0), {"x": 1.0}]],
-    ids=["nan", "infinite", "missing-axis"],
+    [[_point(0, 0), {"x": 1.0}], [_point(0, 0), None]],
+    ids=["missing-axis", "missing-vertex"],
 )
-def test_without_the_vertex_check_any_coordinate_will_do(line: Line) -> None:
-    assert _is_valid(LineStringXY(), line, check_vertex_validity=False) == [True]
+def test_without_the_missing_check_a_coordinate_may_be_missing(line: Line) -> None:
+    assert _is_valid(LineStringXY(), line, check_missing_coordinates=False) == [True]
 
 
-def test_without_the_vertex_check_there_are_no_crs_bounds() -> None:
-    out = _is_valid(PointXY(crs=WGS84), _point(0, 91), check_vertex_validity=False)
+def test_without_the_missing_check_a_coordinate_still_has_to_be_finite() -> None:
+    line = _line((0, 0), (NAN, 1))
+
+    assert _is_valid(LineStringXY(), line, check_missing_coordinates=False) == [False]
+
+
+@pytest.mark.parametrize("value", [NAN, INF, -INF])
+def test_without_the_finite_check_an_axis_may_be_non_finite(value: float) -> None:
+    line = _line((0, 0), (value, 1))
+
+    assert _is_valid(LineStringXY(), line, check_finite_coordinates=False) == [True]
+
+
+def test_without_the_finite_check_a_coordinate_still_has_to_be_there() -> None:
+    line = [_point(0, 0), {"x": 1.0}]
+
+    assert _is_valid(LineStringXY(), line, check_finite_coordinates=False) == [False]
+
+
+def test_without_the_bounds_check_there_are_no_crs_bounds() -> None:
+    out = _is_valid(PointXY(crs=WGS84), _point(0, 91), check_crs_bounds=False)
 
     assert out == [True]
 
 
-def test_without_the_vertex_check_proj_is_not_asked_for_an_area_of_use() -> None:
+def test_without_the_bounds_check_proj_is_not_asked_for_an_area_of_use() -> None:
     out = _is_valid(
-        _srid(), _point(0, 0), within_area_of_use=True, check_vertex_validity=False
+        _srid(), _point(0, 0), within_area_of_use=True, check_crs_bounds=False
     )
+
+    assert out == [True]
+
+
+def test_without_the_bounds_check_a_coordinate_still_has_to_be_finite() -> None:
+    out = _is_valid(PointXY(crs=WGS84), {"x": INF, "y": 0.0}, check_crs_bounds=False)
+
+    assert out == [False]
+
+
+@pytest.mark.parametrize(
+    ("dtype", "row"),
+    [
+        (LineStringXY(), _line((0, 0), (1, 1), (1, 1), (2, 0))),
+        (PolygonXY(), [_line((0, 0), (4, 0), (4, 0), (4, 4), (0, 4), (0, 0))]),
+    ],
+    ids=["line", "ring"],
+)
+def test_without_the_zero_length_check_a_vertex_may_repeat_in_a_row(
+    dtype: GeoArrowType, row: object
+) -> None:
+    out = _is_valid(dtype, row, check_line_string_zero_length_sections=False)
 
     assert out == [True]
 
@@ -399,22 +452,25 @@ def test_without_the_vertex_check_proj_is_not_asked_for_an_area_of_use() -> None
     [(LineStringXY(), _line((0, 0))), (PolygonXY(), [_SQUARE[:-1]])],
     ids=["one-vertex-line", "open-ring"],
 )
-def test_without_the_vertex_check_the_shape_still_counts(
+def test_without_the_coordinate_checks_the_shape_still_counts(
     dtype: GeoArrowType, row: object
 ) -> None:
-    assert _is_valid(dtype, row, check_vertex_validity=False) == [False]
+    assert _is_valid(dtype, row, **_NO_COORDINATE_CHECKS) == [False]
 
 
-def test_a_ring_with_a_nan_vertex_cannot_be_checked_for_how_it_fits() -> None:
-    ring = _line((0, 0), (4, 0), (NAN, 4), (0, 4), (0, 0))
-    no_vertices = {"check_vertex_validity": False}
-    no_topology = {
-        "check_ring_self_intersect": False,
-        "check_polygon_self_overlap": False,
-    }
+@pytest.mark.parametrize(
+    "vertex",
+    [{"x": NAN, "y": 4.0}, {"x": 4.0}, None],
+    ids=["nan", "missing-axis", "missing"],
+)
+def test_a_ring_without_finite_xy_cannot_be_checked_for_how_it_fits(
+    vertex: Coord | None,
+) -> None:
+    ring = [_point(0, 0), _point(4, 0), vertex, _point(0, 4), _point(0, 0)]
+    no_topology = _NO_COORDINATE_CHECKS | _NO_TOPOLOGY_CHECKS
 
-    assert _is_valid(PolygonXY(), [ring], **no_vertices) == [False]
-    assert _is_valid(PolygonXY(), [ring], **no_vertices, **no_topology) == [True]
+    assert _is_valid(PolygonXY(), [ring], **_NO_COORDINATE_CHECKS) == [False]
+    assert _is_valid(PolygonXY(), [ring], **no_topology) == [True]
 
 
 def test_without_the_ring_check_a_ring_may_cross_itself() -> None:
@@ -477,11 +533,7 @@ def test_namespace_passes_the_checks_on() -> None:
     df = pl.DataFrame(
         pl.Series("g", rows, dtype=_storage(PolygonXY())).ext.to(PolygonXY())
     )
-    checks = {
-        "check_vertex_validity": False,
-        "check_ring_self_intersect": False,
-        "check_polygon_self_overlap": False,
-    }
+    checks = _NO_COORDINATE_CHECKS | _NO_TOPOLOGY_CHECKS
 
     out = df.select(gpl.col("g").geo.is_valid(**checks))
 

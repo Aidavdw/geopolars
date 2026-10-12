@@ -43,7 +43,11 @@ fn rings_overlap_type(input_fields: &[Field]) -> PolarsResult<Field> {
 /// The ring at `start..end` as the polygon it encloses, in x and y.
 /// `None` if one of its vertices is missing, or not finite in x or y.
 /// Errors if it is not a ring.
-pub(crate) fn ring(coords: &CoordsView, start: usize, end: usize) -> PolarsResult<Option<Polygon<f64>>> {
+pub(crate) fn ring(
+    coords: &CoordsView,
+    start: usize,
+    end: usize,
+) -> PolarsResult<Option<Polygon<f64>>> {
     let Some(vertices) = xy_vertices_validated(&GeoLineString { coords, start, end }) else {
         return Ok(None);
     };
