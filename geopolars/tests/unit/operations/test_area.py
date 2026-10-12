@@ -363,14 +363,14 @@ def _multipolygons(
     return pl.DataFrame(storage.ext.to(MultiPolygonXY(crs=crs)))
 
 
-def test_a_multipolygon_lists_the_area_of_each_polygon(
+def test_a_multipolygon_is_the_sum_of_its_polygons(
     planar_area: Area, multipolygon_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     """`p` is the 15.5 square with its hole and the triangle of 2.0;
     `q` is a 3x3 square."""
     df = dimension.multipolygons(multipolygon_coords)
 
-    assert _areas(planar_area, df, "multipolygon") == [[15.5, 2.0], [9.0]]
+    assert _areas(planar_area, df, "multipolygon") == [17.5, 9.0]
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
@@ -384,17 +384,17 @@ def test_a_multipolygon_measures_each_polygon_as_a_polygon(
 
     got = _areas(area, multis, "multipolygon")
 
-    assert got == [pytest.approx(separate[:2]), pytest.approx(separate[2:])]
+    assert got == [pytest.approx(sum(separate[:2])), pytest.approx(sum(separate[2:]))]
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_a_multipolygon_without_polygons_has_no_areas(
+def test_a_multipolygon_without_polygons_encloses_nothing(
     area: Area, crs: str | None
 ) -> None:
     """An empty polygon inside one still encloses nothing, like on its own."""
     df = _multipolygons([[], [[]], None], crs=crs)
 
-    assert _areas(area, df, "multipolygon") == [[], [0.0], None]
+    assert _areas(area, df, "multipolygon") == [0.0, 0.0, None]
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
@@ -411,13 +411,13 @@ def test_a_sliced_multipolygon_keeps_its_own_polygons(
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_a_multipolygon_gives_a_list_named_after_the_geometry(
+def test_a_multipolygon_gives_an_f64_named_after_the_geometry(
     area: Area, crs: str | None
 ) -> None:
     df = _multipolygons([[[_DEGREE_SQUARE]]], crs=crs)
 
     assert df.select(area("multipolygon")).schema == pl.Schema(
-        {"multipolygon": pl.List(pl.Float64)}
+        {"multipolygon": pl.Float64}
     )
 
 
@@ -479,10 +479,7 @@ def test_area_planar_lines_up_across_chunks_and_slices() -> None:
     )
 
     assert _areas(geo.area_planar, polygons.slice(1)) == [15.5, 1.0]
-    assert _areas(geo.area_planar, multis.slice(1), "multipolygon") == [
-        None,
-        [1.0, 15.5],
-    ]
+    assert _areas(geo.area_planar, multis.slice(1), "multipolygon") == [None, 16.5]
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])

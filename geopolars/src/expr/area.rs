@@ -3,9 +3,7 @@
 //! - along the ellipsoid of its CRS ([`area_geodesic`]).
 
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray, PrimitiveArray};
-use polars_arrow::datatypes::ArrowDataType;
-use polars_arrow::offset::Offsets;
+use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
 
 use geo_traits::{MultiPolygonTrait, PolygonTrait};
@@ -57,16 +55,16 @@ fn encloses_nothing(kind: Kind) -> PolarsError {
     polars_err!(SchemaMismatch: "area does not accept a `{}` column", kind.name())
 }
 
-/// An `f64` per geometry, or a list of them (one per part) for a multipolygon.
+/// An `f64` per geometry: for a multipolygon, the sum of its parts.
 fn area_dtype(field: &Field) -> PolarsResult<Field> {
-    let dtype = match describe(field.dtype())?.kind {
-        Kind::Polygon => DataType::Float64,
-        Kind::MultiPolygon => DataType::List(Box::new(DataType::Float64)),
-        kind @ (Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString) => {
-            return Err(encloses_nothing(kind))
+    match describe(field.dtype())?.kind {
+        Kind::Polygon | Kind::MultiPolygon => {
+            Ok(Field::new(field.name().clone(), DataType::Float64))
         }
-    };
-    Ok(Field::new(field.name().clone(), dtype))
+        kind @ (Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString) => {
+            Err(encloses_nothing(kind))
+        }
+    }
 }
 
 /// `output_type_func` for [`area_planar`]: in the unit of the coordinates squared.
@@ -81,13 +79,19 @@ fn areas(input_fields: &[Field]) -> PolarsResult<Field> {
     area_dtype(&input_fields[0])
 }
 
-/// The planar area of every polygon.
-fn polygons_planar(storage: &Series) -> PolarsResult<Float64Chunked> {
+/// The planar area of every polygon, or of every multipolygon as the sum of its parts.
+fn planar(storage: &Series, kind: Kind) -> PolarsResult<Float64Chunked> {
     let mut out = Vec::with_capacity(storage.len());
     for chunk in storage.chunks() {
-        for_each_geometry(chunk.as_ref(), Kind::Polygon, |geometry| {
+        for_each_geometry(chunk.as_ref(), kind, |geometry| {
             out.push(match geometry {
                 Some(Geometry::Polygon(polygon)) => Some(planar_area(&polygon)),
+                Some(Geometry::MultiPolygon(multipolygon)) => Some(
+                    multipolygon
+                        .polygons()
+                        .map(|polygon| planar_area(&polygon))
+                        .sum(),
+                ),
                 _ => None,
             });
             Ok(())
@@ -99,44 +103,17 @@ fn polygons_planar(storage: &Series) -> PolarsResult<Float64Chunked> {
     ))
 }
 
-/// The planar area of each part of every multipolygon, in order.
-fn multipolygons_planar(storage: &Series) -> PolarsResult<ListChunked> {
-    let mut builder = ListPrimitiveChunkedBuilder::<Float64Type>::new(
-        storage.name().clone(),
-        storage.len(),
-        storage.len(),
-        DataType::Float64,
-    );
-    for chunk in storage.chunks() {
-        for_each_geometry(chunk.as_ref(), Kind::MultiPolygon, |geometry| {
-            match geometry {
-                Some(Geometry::MultiPolygon(multipolygon)) => {
-                    let parts: Vec<f64> = multipolygon
-                        .polygons()
-                        .map(|polygon| planar_area(&polygon))
-                        .collect();
-                    builder.append_slice(&parts);
-                }
-                _ => builder.append_null(),
-            }
-            Ok(())
-        })?;
-    }
-    Ok(builder.finish())
-}
-
 /// See `area_planar`.
 #[polars_expr(output_type_func=areas_planar)]
 fn area_planar(inputs: &[Series]) -> PolarsResult<Series> {
     let storage = inputs[0].ext()?.storage();
     let out = match describe(inputs[0].dtype())?.kind {
-        Kind::Polygon => polygons_planar(storage)?.into_series(),
-        Kind::MultiPolygon => multipolygons_planar(storage)?.into_series(),
+        kind @ (Kind::Polygon | Kind::MultiPolygon) => planar(storage, kind)?,
         kind @ (Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString) => {
             return Err(encloses_nothing(kind))
         }
     };
-    Ok(out.with_name(inputs[0].name().clone()))
+    Ok(out.into_series().with_name(inputs[0].name().clone()))
 }
 
 /// View over polygons
@@ -198,32 +175,28 @@ fn polygons(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float64Ch
     ))
 }
 
-/// The area of each part of every multipolygon, in order.
-/// A missing part renders the entire operation as missing.
-fn multipolygons(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<ListChunked> {
-    let name = storage.name().clone();
-    let chunks = storage
-        .list()?
-        .downcast_iter()
-        .map(|chunk| -> PolarsResult<_> {
-            let polygons = Polygons::new(downcast(chunk.values().as_ref(), "a list of polygons")?)?;
-            // Only the parts this chunk points at: it may be a slice of a larger one.
-            let (first, last) = (
-                *chunk.offsets().first() as usize,
-                *chunk.offsets().last() as usize,
-            );
-            let parts = (first..last)
+/// The area of every multipolygon: the sum of its parts.
+/// A missing part renders the entire multipolygon as missing.
+fn multipolygons(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Float64Chunked> {
+    let mut out = Vec::with_capacity(storage.len());
+    for chunk in storage.list()?.downcast_iter() {
+        let polygons = Polygons::new(downcast(chunk.values().as_ref(), "a list of polygons")?)?;
+        for i in 0..chunk.len() {
+            if chunk.is_null(i) {
+                out.push(None);
+                continue;
+            }
+            let (start, end) = chunk.offsets().start_end(i);
+            let parts: Option<Vec<f64>> = (start..end)
                 .map(|polygon| polygons.area(polygon, metric))
-                .collect::<PolarsResult<PrimitiveArray<f64>>>()?;
-            let offsets = Offsets::try_from_lengths(chunk.offsets().lengths())?;
-            Ok(ListArray::<i64>::new(
-                ListArray::<i64>::default_datatype(ArrowDataType::Float64),
-                offsets.into(),
-                parts.boxed(),
-                chunk.validity().cloned(),
-            ))
-        });
-    ListChunked::try_from_chunk_iter(name, chunks)
+                .collect::<PolarsResult<_>>()?;
+            out.push(parts.map(|parts| parts.iter().sum()));
+        }
+    }
+    Ok(Float64Chunked::from_iter_options(
+        storage.name().clone(),
+        out.into_iter(),
+    ))
 }
 
 /// See `area`.

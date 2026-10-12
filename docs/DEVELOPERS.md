@@ -208,9 +208,9 @@ the comment says when one without a CRS takes a different tier.
 
 | Operation | Point | | LineString | | Polygon | | MultiPoint | | MultiLineString | | MultiPolygon | |
 | - | - | - | - | - | - | - | - | - | - | - | - | - |
-| `area` | - | ANP | - | ANP | A/B | fwd `*_planar` `*_geodesic` | - | ANP | - | ANP | A/B | LPP |
-| `area_planar` | - | ANP | - | ANP | A | shoelace; CRS ignored | - | ANP | - | ANP | A | LPP |
-| `area_geodesic` | - | ANP | - | ANP | B | PROJ + GGL; needs a CRS | - | ANP | - | ANP | B | LPP |
+| `area` | - | ANP | - | ANP | A/B | fwd `*_planar` `*_geodesic` | - | ANP | - | ANP | A/B | sum of parts |
+| `area_planar` | - | ANP | - | ANP | A | shoelace; CRS ignored | - | ANP | - | ANP | A | sum of parts |
+| `area_geodesic` | - | ANP | - | ANP | B | PROJ + GGL; needs a CRS | - | ANP | - | ANP | B | sum of parts |
 | `length` | - | ANL | A/B | fwd `*_planar` `*_geodesic` | - | ANL | - | ANL | A/B | LPP | - | ANL |
 | `length_planar` | - | ANL | A | CRS ignored | - | ANL | - | ANL | A | LPP | - | ANL |
 | `length_geodesic` | - | ANL | B | PROJ + GGL; needs a CRS | - | ANL | - | ANL | B | LPP | - | ANL |

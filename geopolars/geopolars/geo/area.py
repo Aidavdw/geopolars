@@ -75,8 +75,7 @@ def _geodesic(
 def area_planar(
     geometry: IntoExprColumn, *, allow_non_polygons: bool = False
 ) -> pl.Expr:
-    """The area a geometry encloses on the plane its coordinates lie in, as an `f64`,
-    or a list of them for a multipolygon.
+    """The area a geometry encloses on the plane its coordinates lie in, as an `f64`.
 
     A CRS is ignored: for longitude/latitude that gives square degrees,
     which is rarely what you want (see `area_geodesic`).
@@ -84,9 +83,7 @@ def area_planar(
     The area is computed with the shoelace formula, in the unit of the coordinates squared.
     Only a polygon actually encloses something.
     This also considers its holes.
-    A multipolygon gets the area of each of its polygons, in order, as a list;
-    sum it with `.list.sum()` for the area of the whole
-    (which assumes its polygons do not overlap, as the spec requires).
+    A multipolygon gets the sum of the areas of its polygons.
     Only the two-dimensional part is considered: 'z' and 'm' are ignored.
     For a 3D polygon that gives the area of its footprint
     (its shadow on the x/y plane), not the area of its surface in 3D:
@@ -102,7 +99,7 @@ def area_planar(
     |------------------------|--------------|
     | `PolygonXY`            | `0.0` and up |
     | `PolygonXYM`           | `0.0` and up |
-    | `MultiPolygonXY`       | `list[f64]`  |
+    | `MultiPolygonXY`       | `0.0` and up |
     | `PointXY`              | refused      |
     | `LineStringXY`         | refused      |
     | `MultiPointXYZM`       | refused      |
@@ -122,8 +119,7 @@ def area_planar(
 def area_geodesic(
     geometry: IntoExprColumn, *, allow_non_polygons: bool = False
 ) -> pl.Expr:
-    """The area a geometry encloses along the ellipsoid of its CRS, as an `f64`,
-    or a list of them for a multipolygon.
+    """The area a geometry encloses along the ellipsoid of its CRS, as an `f64`.
 
     The coordinates are taken to the longitude/latitude
     the CRS is defined on (for a projected CRS, the one it projects from;
