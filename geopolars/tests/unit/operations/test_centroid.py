@@ -1,9 +1,10 @@
-"""The centroid of a (multi)linestring or (multi)polygon: the centre of its length or area."""
+"""The centroid of a geometry: the centre of its length or area."""
 
 from __future__ import annotations
 
 import polars as pl
 import pytest
+from polars.testing import assert_frame_equal
 
 from geopolars import geo
 from geopolars.datatypes import (
@@ -15,7 +16,7 @@ from geopolars.datatypes import (
     MultiPolygonXY,
     PointXY,
 )
-from tests.unit.conftest import XY, Dimension
+from tests.unit.conftest import XY, Dimension, coordinates
 
 _XY_VERTICES = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
 _XY_RINGS = pl.List(_XY_VERTICES)
@@ -100,17 +101,6 @@ def test_a_missing_or_empty_polygon_has_no_centroid() -> None:
 
 def test_a_polygon_that_encloses_nothing_has_no_centroid() -> None:
     assert _centroids(_polygons([_ring((0, 0), (2, 0), (1, 0))])) == [None]
-
-
-def test_rejects_a_multipoint_while_resolving_the_schema(
-    line_coords: pl.DataFrame,
-) -> None:
-    lf = XY.multipoints(line_coords).lazy().select(geo.centroid("multipoint"))
-
-    with pytest.raises(
-        TypeError, match=r"centroid expects a \(multi\)linestring or \(multi\)polygon"
-    ):
-        lf.collect_schema()
 
 
 def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
@@ -387,3 +377,40 @@ def test_the_namespace_matches_the_function_for_multi_geometries() -> None:
     assert df.select(pl.col("multi").geo.centroid()).equals(
         df.select(geo.centroid("multi"))
     )
+
+
+# Points: no length or area, so every point weighs the same
+
+
+def test_a_point_is_its_own_centroid(
+    coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    df = coords.select(dimension.point())
+    out = df.select(geo.centroid("point"))
+
+    assert out.schema["point"] == dimension.point_dtype()
+    assert_frame_equal(coordinates(out), coordinates(df))
+
+
+def test_a_multipoints_centroid_is_its_mean_coordinate(
+    line_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    df = dimension.multipoints(line_coords)
+    out = df.select(geo.centroid("multipoint"))
+
+    assert out.schema["multipoint"] == dimension.point_dtype()
+    assert out.equals(df.select(geo.mean_coordinate("multipoint")))
+
+
+def test_the_crs_of_a_multipoint_is_carried_over() -> None:
+    points = [{"x": 0.0, "y": 0.0}, {"x": 2.0, "y": 4.0}]
+    df = pl.DataFrame({"points": [points]}, schema={"points": _XY_VERTICES}).select(
+        geo.multi_point("points", crs="EPSG:4326").alias("multipoint")
+    )
+
+    out = df.select(geo.centroid("multipoint"))
+
+    assert out.schema["multipoint"] == PointXY._with_metadata_of(
+        df.schema["multipoint"]
+    )
+    assert coordinates(out, "multipoint").row(0) == (1.0, 2.0)

@@ -1,10 +1,12 @@
-"""The centroid of a (multi)linestring or (multi)polygon: the centre of its length or area.
+"""The centroid of a geometry: the centre of its length or area.
 Note that this is not the mean coordinate, which weighs every vertex the same!
 
 A native kernel (A-tier) does either in one pass over the storage:
 it weighs every segment of a linestring by its length,
 and applies the shoelace formula over a polygon's planar area.
-A multi-geometry gets a list of centroids, one per part.
+A multilinestring or multipolygon gets a list of centroids, one per part.
+A (multi)point has neither length nor area,
+so its centroid is its mean coordinate (C-tier).
 """
 
 from __future__ import annotations
@@ -14,13 +16,9 @@ from typing import TYPE_CHECKING
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import (
-    LineStringType,
-    MultiLineStringType,
-    MultiPolygonType,
-    PolygonType,
-)
+from geopolars.datatypes import MultiPointType, PointType
 from geopolars.geo._dispatch import on_geometry
+from geopolars.geo.mean_coordinate import _mean_coordinate
 
 if TYPE_CHECKING:
     import polars as pl
@@ -30,14 +28,10 @@ if TYPE_CHECKING:
 
 
 def _centroid(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    """The centroid of a (multi)linestring or (multi)polygon, per row."""
-    accepted = (LineStringType, PolygonType, MultiLineStringType, MultiPolygonType)
-    if not isinstance(geometry, accepted):
-        msg = (
-            "centroid expects a (multi)linestring or (multi)polygon column, "
-            f"got: {geometry!r}"
-        )
-        raise TypeError(msg)
+    """The centroid of one geometry type, per row."""
+    # Every point weighs the same, so the centroid is the mean of the points.
+    if isinstance(geometry, PointType | MultiPointType):
+        return _mean_coordinate(column, geometry)
     return register_plugin_function(
         plugin_path=LIB,
         args=[column],
@@ -48,7 +42,6 @@ def _centroid(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 
 def centroid(geometry: IntoExprColumn) -> pl.Expr:
     """The centroid of a polygon (centre of area) or linestring (centre of length).
-
 
     A polygon's centroid is measured on the plane the coordinates lie in,
     even when they carry a CRS, and the CRS is carried over to the result.
@@ -74,8 +67,15 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     each measured as for a lone linestring or polygon.
     A part without a centroid is null within the list; a null row stays null.
 
+    A point is its own centroid.
+    A multipoint gets a single centroid, which is the mean of its points
+    (see `mean_coordinate`).
+    A null or empty multipoint has no centroid.
+
     | in                     | out              |
     |------------------------|------------------|
+    | `PointXYZ`             | `PointXYZ`       |
+    | `MultiPointXYZ`        | `PointXYZ`       |
     | `LineStringXY`         | `PointXY`        |
     | `LineStringXYZ`        | `PointXYZ`       |
     | `LineStringXYM`        | `PointXYM`       |

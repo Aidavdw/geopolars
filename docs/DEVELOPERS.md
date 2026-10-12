@@ -210,21 +210,21 @@ the comment says when one without a CRS takes a different tier.
 | - | - | - | - | - | - | - | - | - | - | - | - | - |
 | `area` | - | ANP | - | ANP | A/B | fwd `*_planar` `*_geodesic` | - | ANP | - | ANP | A/B | LPP |
 | `area_planar` | - | ANP | - | ANP | A | shoelace; CRS ignored | - | ANP | - | ANP | A | LPP |
-| `area_geodesic` | - | ANP | - | ANP | B | PROJ + ggl; needs a CRS | - | ANP | - | ANP | B | LPP |
+| `area_geodesic` | - | ANP | - | ANP | B | PROJ + GGL; needs a CRS | - | ANP | - | ANP | B | LPP |
 | `length` | - | ANL | A/B | fwd `*_planar` `*_geodesic` | - | ANL | - | ANL | A/B | LPP | - | ANL |
 | `length_planar` | - | ANL | A | CRS ignored | - | ANL | - | ANL | A | LPP | - | ANL |
-| `length_geodesic` | - | ANL | B | PROJ + ggl; needs a CRS | - | ANL | - | ANL | B | LPP | - | ANL |
-| `centroid` | - | | A | length-weighted; keeps z/m | A | shoelace; XY only [^1] | - | | A | LPP | A | LPP |
+| `length_geodesic` | - | ANL | B | PROJ + GGL; needs a CRS | - | ANL | - | ANL | B | LPP | - | ANL |
+| `centroid` | C | returns the point | A | length-weighted; keeps z/m | A | shoelace; XY only [^1] | C | fwd `mean_coordinate` | A | LPP | A | LPP |
 | `exterior` | - | | - | | A | ring 0 | - | | - | | A | LPP |
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | LPP |
 | `boundary` | - | | C | | C | every ring | - | | C | LPP | C | LPP |
 | `is_ring` | - | | A | ≥ 4 vertices, ends ≈  x/y/z | - | | - | | A | LPP | - | |
 | `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes fwd `rings_overlap` | - | | B | LPP | B | LPP |
-| `rings_overlap` | - | | B | hacked as polygon rsgeo relate | - | | - | | - | | - | |
+| `rings_overlap` | - | | B | hacked as polygon's RGR | - | | - | | - | | - | |
 | `is_standard_orientation` | - | | A | CCW | A | | - | | A | LPP | A | LPP |
-| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings via rsgeo relate | A | EP | A | EP | A/B | EP; overlap via rsgeo relate |
+| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings via rsgeo relate | A | EP | A | EP | A/B | EP and RGR |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
-| `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
+| `distance` | B | PROJ + GGL; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |
 | `rotate` | A | | A | | A | | A | | A | | A | |
@@ -238,21 +238,22 @@ the comment says when one without a CRS takes a different tier.
 | `set_crs` | C | relabels only | C | | C | | C | | C | | C | |
 | `to_crs` | B | PROJ | B | PROJ | B | PROJ | B | PROJ | B | PROJ | B | PROJ |
 | `is_geographic` | C | scalar, calls PROJ at plan | C | | C | | C | | C | | C | |
-| `x` | C | `f64`, drops the CRS | C | `list[f64]` | C | `list[list[f64]]` | C | `list[f64]` | C | `list[list[f64]]` | C | `list[list[list[f64]]]` |
-| `y` | C | `f64`, drops the CRS | C | `list[f64]` | C | `list[list[f64]]` | C | `list[f64]` | C | `list[list[f64]]` | C | `list[list[list[f64]]]` |
+| `x` | C | `f64`, drops the CRS | C | `list[f64]` | C | `list²[f64]` | C | `list[f64]` | C | `list²[f64]` | C | `list³[f64]` |
+| `y` | C | `f64`, drops the CRS | C | `list[f64]` | C | `list²[f64]` | C | `list[f64]` | C | `list²[f64]` | C | `list³[f64]` |
 | `z` | C | like `x`; only with a `z` | C | | C | | C | | C | | C | |
 | `m` | C | like `x`; only with an `m` | C | | C | | C | | C | | C | |
 | `count_coordinates` | C | `0` if empty | C | | C | SCC | C | | C | | C | SCC |
 | `is_empty` | C | NaN `x` and `y` | C | no verts or only empty | C | only empty rings | C | EP | C | EP | C | EP |
 | `wrap_longitude` | C | needs geographic CRS | C | | C | | C | | C | | C | |
 | `to_wkb` | A | `wkb` crate | A | | A | | A | | A | | A | |
-| `from_wkb` | A | `wkb` crate | A | | A | | A | promotes a point | A | promotes a linestring | A | promotes a polygon |
+| `from_wkb` | A | `wkb` crate | A | | A | | A | promotes a point | A | promotes a linestring | A | promotes a poly |
 | `to_wkt` | A | `wkt` crate | A | | A | | A | | A | | A | |
-| `from_wkt` | A | `wkt` crate | A | | A | | A | promotes a point | A | promotes a linestring | A | promotes a polygon |
+| `from_wkt` | A | `wkt` crate | A | | A | | A | promotes a point | A | promotes a linestring | A | promotes a poly |
 
 In this table:
 
-- `ggl` = 'geographiclib'
+- GGL = 'geographiclib'
+- CRS = Coordinate Reference System, stored in metadata
 - EP = true when every part passes the single variant's check, one `bool` per row
   (e.g. a multipolygon is only valid if each of its polygons is)
 - ANP = refused, unless `allow_non_polygons` is set, then C returning `0.0` (null stays null)
@@ -260,6 +261,7 @@ In this table:
 - LPP = returns a list, one result per part (computed as for the single variant)
 - CAA = composed of `centroid` + `affine_about`
 - SCC = skips the closing coordinate of each ring
+- RGR = uses `rsgeo`'s `relate` to get an intersection matrix
 
 ## Typical flow
 
