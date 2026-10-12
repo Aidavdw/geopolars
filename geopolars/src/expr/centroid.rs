@@ -1,44 +1,37 @@
 //! The centroid of a geometry, in one pass over the storage:
 //! - a linestring's is the midpoint of every segment, weighted by its length,
 //! - a polygon's is the shoelace formula, over the planar area,
-//! - a multi-geometry gets a list of them, one per part.
-
-use std::ops::Range;
+//! - a multi-geometry's is that of its parts together, each weighted by its length or area.
 
 use geo_traits::PolygonTrait;
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::datatypes::ArrowDataType;
-use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
-use super::area::planar_area;
 use crate::geoarrow::geotraits::{LineString, Polygon};
 use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Geo, GeoDimension, Kind};
 
-// TODO: right now, for multi* it returns a list of centroids.
-// We need an operation which gives a shared centroid too.
-
-/// The centroids of rows `rows` of a list of linestrings or polygons,
-/// as their coordinate struct.
-type PartCentroids = fn(&ListArray<i64>, Range<usize>) -> PolarsResult<Box<dyn Array>>;
+/// The centroids of every row of a chunk of (multi)linestrings or (multi)polygons,
+/// as their coordinate struct. The flag says whether each row is a list of parts.
+type ChunkCentroids = fn(&ListArray<i64>, bool) -> PolarsResult<Box<dyn Array>>;
 
 /// How to find the centroids of a column.
 struct Centroids {
-    /// A point carrying the input's metadata, or a list of them for a multi-geometry.
+    /// A point carrying the input's metadata.
     dtype: DataType,
     /// Each row is a list of parts, rather than one.
     multi: bool,
-    part: PartCentroids,
+    chunk: ChunkCentroids,
 }
 
 /// Decided once per column: which fields there are, and so which loop runs.
 /// A (multi)linestring's centroid keeps its dimension, a (multi)polygon's is a `PointXY`.
 fn centroids_of(dtype: &DataType) -> PolarsResult<Centroids> {
     let geo = describe(dtype)?;
-    let (dim, part): (_, PartCentroids) = match (geo.kind, geo.dim) {
+    let (dim, chunk): (_, ChunkCentroids) = match (geo.kind, geo.dim) {
         (Kind::Point | Kind::MultiPoint, _) => polars_bail!(
             SchemaMismatch: "centroid expects a (multi)linestring or (multi)polygon column, got: {}",
             dtype
@@ -50,15 +43,10 @@ fn centroids_of(dtype: &DataType) -> PolarsResult<Centroids> {
         (_, dim @ GeoDimension::XYZM) => (dim, linestrings::<4, 3>),
     };
     let multi = matches!(geo.kind, Kind::MultiLineString | Kind::MultiPolygon);
-    let point = Geo::new(Kind::Point, dim, geo.metadata.clone()).dtype();
     Ok(Centroids {
-        dtype: if multi {
-            DataType::List(Box::new(point))
-        } else {
-            point
-        },
+        dtype: Geo::new(Kind::Point, dim, geo.metadata.clone()).dtype(),
         multi,
-        part,
+        chunk,
     })
 }
 
@@ -91,6 +79,56 @@ fn points<const N: usize>(
     .boxed()
 }
 
+/// Σ weight · centre and Σ weight over a geometry (its length, or area):
+/// its centroid is the one over the other, and those of its parts add up.
+type Moment<const N: usize> = ([f64; N], f64);
+
+/// The centroid of a moment. What weighs nothing has none.
+fn centre<const N: usize>((moment, weight): Moment<N>) -> Option<[f64; N]> {
+    (weight > 0.0).then(|| moment.map(|m| m / weight))
+}
+
+/// The geometries of `chunk`: the chunk itself, or a multi-geometry's parts one list down.
+fn geometries(chunk: &ListArray<i64>, multi: bool) -> PolarsResult<&ListArray<i64>> {
+    if multi {
+        downcast(chunk.values().as_ref(), "a list of parts")
+    } else {
+        Ok(chunk)
+    }
+}
+
+/// The centroid of every row of `chunk`, as a coordinate struct of `dtype`,
+/// out of the `moment` of each of its [`geometries`] (`None` where one is missing).
+/// A multi-geometry's is that of its parts together; a missing part leaves it without one.
+fn row_centroids<const N: usize>(
+    dtype: ArrowDataType,
+    chunk: &ListArray<i64>,
+    multi: bool,
+    moment: impl Fn(usize) -> Option<Moment<N>>,
+) -> Box<dyn Array> {
+    points(
+        dtype,
+        (0..chunk.len()).map(|i| {
+            if !multi {
+                return centre(moment(i)?);
+            }
+            if chunk.is_null(i) {
+                return None;
+            }
+            let (start, end) = chunk.offsets().start_end(i);
+            let (mut sum, mut total) = ([0.0; N], 0.0);
+            for part in start..end {
+                let (moment, weight) = moment(part)?;
+                for k in 0..N {
+                    sum[k] += moment[k];
+                }
+                total += weight;
+            }
+            centre((sum, total))
+        }),
+    )
+}
+
 struct Coords<'a, const N: usize> {
     coords: &'a StructArray,
     fields: [&'a PrimitiveArray<f64>; N],
@@ -114,18 +152,21 @@ impl<'a, const N: usize> Coords<'a, N> {
     }
 }
 
-/// The centroid of the coordinates `start..end`, as a line:
-/// Σ len (a + b) / 2 Σ len over its segments `ab`,
+/// The moment of the coordinates `start..end`, as a line:
+/// Σ len (a + b) / 2 and Σ len over its segments `ab`,
 /// where `len` is measured over the first `S` fields (xy, or xyz),
 /// and every field (incl. m) is averaged by it.
-/// `None` if a coordinate is missing, or the line has no length.
-fn line_centroid<const N: usize, const S: usize>(
+/// `None` if a coordinate is missing.
+fn line_moment<const N: usize, const S: usize>(
     coords: &Coords<N>,
     start: usize,
     end: usize,
-) -> Option<[f64; N]> {
+) -> Option<Moment<N>> {
     let mut line = (start..end).map(|i| coords.get(i));
-    let mut previous = line.next()??;
+    let Some(first) = line.next() else {
+        return Some(([0.0; N], 0.0));
+    };
+    let mut previous = first?;
     let (mut sum, mut total) = ([0.0; N], 0.0);
     for here in line {
         let here = here?;
@@ -139,24 +180,27 @@ fn line_centroid<const N: usize, const S: usize>(
         total += len;
         previous = here;
     }
-    (total > 0.0).then(|| sum.map(|s| s / (2.0 * total)))
+    Some((sum.map(|s| s / 2.0), total))
 }
 
-/// See [`PartCentroids`], for linestrings: their centroids have the same fields.
+/// See [`ChunkCentroids`], for linestrings: their centroids have the same fields.
 /// `N` and `S` are fixed per dimension, so the loop never asks which fields there are.
 fn linestrings<const N: usize, const S: usize>(
-    lines: &ListArray<i64>,
-    rows: Range<usize>,
+    chunk: &ListArray<i64>,
+    multi: bool,
 ) -> PolarsResult<Box<dyn Array>> {
+    let lines = geometries(chunk, multi)?;
     let coords = Coords::<N>::new(lines.values().as_ref())?;
-    Ok(points(
+    Ok(row_centroids(
         lines.values().dtype().clone(),
-        rows.map(|i| {
+        chunk,
+        multi,
+        |i| {
             let (start, end) = lines.offsets().start_end(i);
             lines
                 .is_valid(i)
-                .then(|| line_centroid::<N, S>(&coords, start, end))?
-        }),
+                .then(|| line_moment::<N, S>(&coords, start, end))?
+        },
     ))
 }
 
@@ -175,79 +219,60 @@ fn ring_moments(ring: &LineString) -> (f64, f64, f64) {
     })
 }
 
-/// A polygon's moments: its exterior ring, less the holes inside it,
-/// whichever way each of them runs.
-fn moments(polygon: &Polygon) -> (f64, f64) {
+/// A polygon's moment, weighted by its planar area:
+/// its exterior ring, less the holes inside it, whichever way each of them runs.
+/// The formula is C = M / 3a, with `a` twice the area: weighted by the area, M / 6.
+fn polygon_moment(polygon: &Polygon) -> Moment<2> {
     let Some(exterior) = polygon.exterior() else {
-        return (0.0, 0.0);
+        return ([0.0; 2], 0.0);
     };
     let oriented = |ring: &LineString| {
         let (a, mx, my) = ring_moments(ring);
-        (a.signum() * mx, a.signum() * my)
+        ([mx, my].map(|m| a.signum() * m / 6.0), a.abs() / 2.0)
     };
     polygon
         .interiors()
-        .fold(oriented(&exterior), |(mx, my), hole| {
-            let (hx, hy) = oriented(&hole);
-            (mx - hx, my - hy)
+        .fold(oriented(&exterior), |([mx, my], area), hole| {
+            let ([hx, hy], hole_area) = oriented(&hole);
+            ([mx - hx, my - hy], area - hole_area)
         })
 }
 
-/// The formula: C = M / 6A. Nothing enclosed has no centroid.
-fn polygon_centroid(polygon: &Polygon) -> Option<[f64; 2]> {
-    let ((mx, my), area) = (moments(polygon), planar_area(polygon));
-    (area > 0.0).then(|| [mx / (6.0 * area), my / (6.0 * area)])
-}
-
-/// See [`PartCentroids`], for polygons: their centroids are xy.
-fn polygons(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<Box<dyn Array>> {
+/// See [`ChunkCentroids`], for polygons: their centroids are xy.
+fn polygons(chunk: &ListArray<i64>, multi: bool) -> PolarsResult<Box<dyn Array>> {
+    let polygons = geometries(chunk, multi)?;
     let rings = downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of rings")?;
     let coords = CoordsView::new(rings.values().as_ref())?;
     let xy = GeoDimension::XY
         .coordinates()
         .to_arrow(CompatLevel::newest());
-    Ok(points(
-        xy,
-        rows.map(|i| {
-            let (start, end) = polygons.offsets().start_end(i);
-            let polygon = Polygon {
-                rings,
-                coords: &coords,
-                start,
-                end,
-            };
-            polygons.is_valid(i).then(|| polygon_centroid(&polygon))?
-        }),
-    ))
+    Ok(row_centroids(xy, chunk, multi, |i| {
+        let (start, end) = polygons.offsets().start_end(i);
+        let polygon = Polygon {
+            rings,
+            coords: &coords,
+            start,
+            end,
+        };
+        polygons.is_valid(i).then(|| polygon_moment(&polygon))
+    }))
 }
 
 /// See `centroid`.
 #[polars_expr(output_type_func=centroid_type)]
 fn centroid(inputs: &[Series]) -> PolarsResult<Series> {
-    let Centroids { dtype, multi, part } = centroids_of(inputs[0].dtype())?;
+    let Centroids {
+        dtype,
+        multi,
+        chunk: centroids,
+    } = centroids_of(inputs[0].dtype())?;
     let storage = inputs[0].ext()?.storage();
 
-    let chunks = storage.list()?.downcast_iter().map(|chunk| {
-        if !multi {
-            return part(chunk, 0..chunk.len());
-        }
-        // A multi-geometry's parts sit one list down, and so do their centroids.
-        let parts = downcast::<ListArray<i64>>(chunk.values().as_ref(), "a list of parts")?;
-        // Only the parts this chunk points at: it may be a slice of a larger one.
-        let (first, last) = (
-            *chunk.offsets().first() as usize,
-            *chunk.offsets().last() as usize,
-        );
-        let points = part(parts, first..last)?;
-        Ok(ListArray::<i64>::new(
-            ListArray::<i64>::default_datatype(points.dtype().clone()),
-            Offsets::try_from_lengths(chunk.offsets().lengths())?.into(),
-            points,
-            chunk.validity().cloned(),
-        )
-        .boxed())
-    });
-    let chunks = chunks.collect::<PolarsResult<Vec<_>>>()?;
+    let chunks = storage
+        .list()?
+        .downcast_iter()
+        .map(|chunk| centroids(chunk, multi))
+        .collect::<PolarsResult<Vec<_>>>()?;
     // SAFETY: every chunk is the storage `dtype` describes.
     Ok(
         unsafe {

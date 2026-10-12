@@ -4,7 +4,8 @@ Note that this is not the mean coordinate, which weighs every vertex the same!
 A native kernel (A-tier) does either in one pass over the storage:
 it weighs every segment of a linestring by its length,
 and applies the shoelace formula over a polygon's planar area.
-A multilinestring or multipolygon gets a list of centroids, one per part.
+A multilinestring or multipolygon gets the centroid of its parts together,
+each weighted by its length or area.
 A (multi)point has neither length nor area,
 so its centroid is its mean coordinate (C-tier).
 """
@@ -63,9 +64,12 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     A null geometry, an empty polygon, and a polygon that encloses nothing
     (all of its vertices on a line) have no centroid.
 
-    A multilinestring or multipolygon gets a list of centroids, one per part,
-    each measured as for a lone linestring or polygon.
-    A part without a centroid is null within the list; a null row stays null.
+    A multilinestring or multipolygon gets a single centroid:
+    that of each part (measured as for a lone linestring or polygon),
+    weighted by its length or area.
+    A part without length or area adds nothing.
+    A null geometry, an empty one, one with a null part (or a part with a missing coordinate),
+    and one whose parts have no length or area at all have no centroid.
 
     A point is its own centroid.
     A multipoint gets a single centroid, which is the mean of its points
@@ -82,8 +86,8 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     | `LineStringXYZM`       | `PointXYZM`      |
     | `PolygonXY`            | `PointXY`        |
     | `PolygonXYZM`          | `PointXY`        |
-    | `MultiLineStringXYZ`   | `list[PointXYZ]` |
-    | `MultiPolygonXYZM`     | `list[PointXY]`  |
+    | `MultiLineStringXYZ`   | `PointXYZ`       |
+    | `MultiPolygonXYZM`     | `PointXY`        |
 
     ```python
     df.select(geo.centroid("parcel"), geo.centroid("road"))

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import polars as pl
 import pytest
 from polars.testing import assert_frame_equal
@@ -17,6 +19,9 @@ from geopolars.datatypes import (
     PointXY,
 )
 from tests.unit.conftest import XY, Dimension, coordinates
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _XY_VERTICES = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
 _XY_RINGS = pl.List(_XY_VERTICES)
@@ -253,7 +258,7 @@ def test_line_rows_line_up_across_chunks_and_slices() -> None:
     assert got == pytest.approx([(4 / 3, 1 / 6), None, (11.0, 10.0), (4 / 3, 1 / 6)])
 
 
-# Multi-geometries: a list of centroids, one per part
+# Multi-geometries: one centroid, of the parts weighted by their length or area
 
 
 def _multilines(*multis: list[Line] | None) -> pl.DataFrame:
@@ -272,91 +277,141 @@ def _multilines(*multis: list[Line] | None) -> pl.DataFrame:
 
 
 def _multipolygons(
-    *multis: list[list[Ring]] | None, crs: str | None = None
+    *multis: list[list[Ring] | None] | None, crs: str | None = None
 ) -> pl.DataFrame:
     """A `multi` column of `MultiPolygonXY`, one row per list of polygons."""
     storage = pl.Series("multi", list(multis), dtype=pl.List(_XY_RINGS))
     return pl.DataFrame(storage.ext.to(MultiPolygonXY(crs=crs)))
 
 
-def _multi_centroids(df: pl.DataFrame) -> list[list[tuple[float, ...] | None] | None]:
+def _multi_centroids(df: pl.DataFrame) -> list[tuple[float, ...] | None]:
     out = df.select(geo.centroid("multi")).to_series().ext.storage().to_list()
-    return [
-        None
-        if parts is None
-        else [None if c is None else tuple(c.values()) for c in parts]
-        for parts in out
-    ]
+    return [None if c is None else tuple(c.values()) for c in out]
 
 
-def test_a_multilinestring_gets_a_centroid_per_part() -> None:
-    df = _multilines([[(0, 0), (2, 4)], _HOOK, None, [(1, 1)]], None, [])
-
-    got = _multi_centroids(df)
-
-    assert got == [
-        [pytest.approx((1.0, 2.0)), pytest.approx((4 / 3, 1 / 6)), None, None],
-        None,
-        [],
-    ]
+_BIG_SQUARE = _ring((10, 10), (12, 10), (12, 12), (10, 12))
 
 
-def test_a_multipolygon_gets_a_centroid_per_part() -> None:
-    df = _multipolygons([[_SQUARE], [_L], []], None, [])
+def test_a_multilinestrings_parts_are_weighted_by_length() -> None:
+    # 2 at (1, 0) and 1 at (10.5, 0)
+    df = _multilines([[(0, 0), (2, 0)], [(10, 0), (11, 0)]])
 
-    got = _multi_centroids(df)
+    (got,) = _multi_centroids(df)
 
-    assert got == [
-        [pytest.approx((0.5, 0.5)), pytest.approx((5 / 6, 5 / 6)), None],
-        None,
-        [],
-    ]
+    assert got == pytest.approx((12.5 / 3, 0.0))
 
 
-def test_each_part_of_a_multilinestring_is_measured_like_a_lone_linestring(
+def test_a_multipolygons_parts_are_weighted_by_area() -> None:
+    # 1 at (0.5, 0.5) and 4 at (11, 11)
+    df = _multipolygons([[_SQUARE], [_BIG_SQUARE]])
+
+    (got,) = _multi_centroids(df)
+
+    assert got == pytest.approx((8.9, 8.9))
+
+
+def test_a_part_without_length_adds_nothing() -> None:
+    df = _multilines([[(0, 0), (2, 4)], [(1, 1)], [], [(5, 5), (5, 5)]])
+
+    assert _multi_centroids(df) == [pytest.approx((1.0, 2.0))]
+
+
+def test_a_part_without_area_adds_nothing() -> None:
+    flat = [_ring((0, 0), (2, 0), (1, 0))]
+    df = _multipolygons([[_BIG_SQUARE], [], flat])
+
+    assert _multi_centroids(df) == [pytest.approx((11.0, 11.0))]
+
+
+def test_a_multilinestring_without_length_has_no_centroid() -> None:
+    df = _multilines(None, [], [[(1, 1)], []], [[(0, 0), (2, 4)], None])
+
+    assert _multi_centroids(df) == [None, None, None, None]
+
+
+def test_a_multipolygon_without_area_has_no_centroid() -> None:
+    df = _multipolygons(None, [], [[]], [[_SQUARE], None])
+
+    assert _multi_centroids(df) == [None, None, None, None]
+
+
+def test_a_part_with_a_missing_coordinate_leaves_no_centroid() -> None:
+    storage = pl.Series(
+        "multi",
+        [[[{"x": 0.0, "y": 0.0}, {"x": 2.0, "y": 4.0}], [{"x": 0.0, "y": 0.0}, None]]],
+        dtype=pl.List(_XY_VERTICES),
+    )
+    df = pl.DataFrame(storage.ext.to(MultiLineStringXY()))
+
+    assert _multi_centroids(df) == [None]
+
+
+def _weighted_mean_of_parts(
+    multis: pl.DataFrame,
+    name: str,
+    part: GeoArrowType,
+    weight: Callable[[str], pl.Expr],
+) -> pl.DataFrame:
+    """The centroid of each part on its own, weighted by `weight` and averaged
+    per row, as plain float columns."""
+    parts = (
+        multis.with_row_index("row")
+        .select("row", pl.col(name).ext.storage())
+        .explode(name)
+        .select("row", pl.col(name).ext.to(part))
+    )
+    centroids = parts.select(
+        "row",
+        weight(name).alias("weight"),
+        geo.centroid(name).ext.storage().struct.unnest(),
+    )
+    fields = [c for c in centroids.columns if c not in ("row", "weight")]
+    return (
+        centroids.group_by("row", maintain_order=True)
+        .agg((pl.col(f) * pl.col("weight")).sum() / pl.col("weight").sum() for f in fields)
+        .drop("row")
+    )
+
+
+def test_a_multilinestring_weighs_each_part_like_a_lone_linestring(
     ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     multis = dimension.multilinestrings(ring_coords)
     out = multis.select(geo.centroid("multilinestring"))
-    lone = (
-        multis.select(pl.col("multilinestring").ext.storage().explode())
-        .select(pl.col("multilinestring").ext.to(dimension.linestring_dtype()))
-        .select(geo.centroid("multilinestring"))
+    expected = _weighted_mean_of_parts(
+        multis, "multilinestring", dimension.linestring_dtype(), geo.length_planar
     )
 
-    assert out.schema["multilinestring"] == pl.List(dimension.point_dtype())
-    assert out.explode("multilinestring").equals(lone)
+    assert out.schema["multilinestring"] == dimension.point_dtype()
+    assert_frame_equal(coordinates(out, "multilinestring"), expected)
 
 
-def test_each_part_of_a_multipolygon_is_measured_like_a_lone_polygon(
+def test_a_multipolygon_weighs_each_part_like_a_lone_polygon(
     multipolygon_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     multis = dimension.multipolygons(multipolygon_coords)
     out = multis.select(geo.centroid("multipolygon"))
-    lone = (
-        multis.select(pl.col("multipolygon").ext.storage().explode())
-        .select(pl.col("multipolygon").ext.to(dimension.polygon_dtype()))
-        .select(geo.centroid("multipolygon"))
+    expected = _weighted_mean_of_parts(
+        multis, "multipolygon", dimension.polygon_dtype(), geo.area_planar
     )
 
-    assert out.schema["multipolygon"] == pl.List(PointXY())
-    assert out.explode("multipolygon").equals(lone)
+    assert out.schema["multipolygon"] == PointXY()
+    assert_frame_equal(coordinates(out, "multipolygon"), expected)
 
 
-def test_the_crs_of_a_multi_geometry_is_carried_into_its_list() -> None:
+def test_the_crs_of_a_multi_geometry_is_carried_over() -> None:
     df = _multipolygons([[_SQUARE]], crs="EPSG:4326")
 
     out = df.select(geo.centroid("multi"))
 
-    assert out.schema["multi"] == pl.List(PointXY._with_metadata_of(df.schema["multi"]))
+    assert out.schema["multi"] == PointXY._with_metadata_of(df.schema["multi"])
 
 
 def test_multi_rows_line_up_across_chunks_and_slices() -> None:
-    square = _ring((10, 10), (12, 10), (12, 12), (10, 12))
     df = pl.concat(
         [
             _multipolygons([[_SQUARE]], [[_L], [_SQUARE]]),
-            _multipolygons(None, [[square]]),
+            _multipolygons(None, [[_BIG_SQUARE]]),
         ],
         rechunk=False,
     )
@@ -364,11 +419,8 @@ def test_multi_rows_line_up_across_chunks_and_slices() -> None:
 
     got = _multi_centroids(df.slice(1, 3))
 
-    assert got == [
-        [pytest.approx((5 / 6, 5 / 6)), pytest.approx((0.5, 0.5))],
-        None,
-        [pytest.approx((11.0, 11.0))],
-    ]
+    # 3 at (5/6, 5/6) and 1 at (0.5, 0.5)
+    assert got == [pytest.approx((0.75, 0.75)), None, pytest.approx((11.0, 11.0))]
 
 
 def test_the_namespace_matches_the_function_for_multi_geometries() -> None:

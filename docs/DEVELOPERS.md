@@ -109,6 +109,8 @@ We check for validity when importing or constructing,
 and every operation is expected to give a valid output.
 Therefore, in a kernel, you can always assume that the input data is valid
 according to the GeoArrow spec.
+Only the outer level is allowed to have nulls, and all other levels
+(including the inner level with the actual coordinate values) should not contain any nulls.
 There is no need to branch on what to do if something is invalid.
 
 ## Implementation tiers
@@ -222,7 +224,7 @@ the comment says when one without a CRS takes a different tier.
 | `length` | - | ANL | A/B | fwd `*_planar` `*_geodesic` | - | ANL | - | ANL | A/B | sum of parts | - | ANL |
 | `length_planar` | - | ANL | A | CRS ignored | - | ANL | - | ANL | A | sum of parts | - | ANL |
 | `length_geodesic` | - | ANL | B | PROJ + GGL; needs a CRS | - | ANL | - | ANL | B | sum of parts | - | ANL |
-| `centroid` | C | returns the point | A | length-weighted; keeps z/m | A | shoelace; XY only [^1] | C | fwd `mean_coordinate` | A | LPP | A | LPP |
+| `centroid` | C | returns the point | A | length-weighted; keeps z/m | A | shoelace; XY only [^1] | C | fwd `mean_coordinate` | A | length-weighted parts | A | area-weighted parts |
 | `exterior` | - | | - | | A | ring 0 | - | | - | | A | LPP |
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | LPP |
 | `boundary` | - | | C | | C | every ring | - | | C | LPP | C | LPP |
