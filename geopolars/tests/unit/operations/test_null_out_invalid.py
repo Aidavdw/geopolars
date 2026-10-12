@@ -13,11 +13,12 @@ from polars.testing import assert_frame_equal
 
 import geopolars as gpl
 from geopolars import geo
-from geopolars.datatypes import LineStringXY, PointXY, PolygonXY
+from geopolars.datatypes import LineStringXY, MultiPolygonXY, PointXY, PolygonXY
 
 _XY = pl.Struct({"x": pl.Float64, "y": pl.Float64})
 _XY_VERTICES = pl.List(_XY)
 _XY_RINGS = pl.List(_XY_VERTICES)
+_XY_POLYGONS = pl.List(_XY_RINGS)
 
 _SQUARE = [
     {"x": 0.0, "y": 0.0},
@@ -135,6 +136,35 @@ def test_without_the_overlap_check_a_hole_outside_is_kept() -> None:
     out = df.select(geo.null_out_invalid("polygon", check_polygon_self_overlap=False))
 
     assert out["polygon"].is_null().to_list() == [False]
+
+
+def _shifted(ring: list[dict[str, float]], dx: float) -> list[dict[str, float]]:
+    return [{"x": v["x"] + dx, "y": v["y"]} for v in ring]
+
+
+def test_overlapping_parts_null_the_multipolygon() -> None:
+    overlapping = [[_SQUARE], [_shifted(_SQUARE, 1)]]
+    apart = [[_SQUARE], [_shifted(_SQUARE, 10)]]
+    df = pl.DataFrame(
+        {"parts": [overlapping, apart]}, schema={"parts": _XY_POLYGONS}
+    ).select(pl.col("parts").ext.to(MultiPolygonXY()))
+
+    out = df.select(geo.null_out_invalid("parts"))
+
+    assert out["parts"].is_null().to_list() == [True, False]
+
+
+def test_without_the_multipolygon_overlap_check_overlapping_parts_are_kept() -> None:
+    overlapping = [[_SQUARE], [_shifted(_SQUARE, 1)]]
+    df = pl.DataFrame(
+        {"parts": [overlapping]}, schema={"parts": _XY_POLYGONS}
+    ).select(pl.col("parts").ext.to(MultiPolygonXY()))
+
+    out = df.select(
+        geo.null_out_invalid("parts", check_multi_polygon_self_overlap=False)
+    )
+
+    assert out["parts"].is_null().to_list() == [False]
 
 
 def test_without_the_zero_length_check_a_repeated_vertex_is_kept() -> None:

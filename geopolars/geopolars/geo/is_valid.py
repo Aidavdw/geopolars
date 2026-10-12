@@ -1,7 +1,8 @@
 """Whether a geometry is valid, and nulling out the ones that are not.
 
 A native kernel (A-tier) checks every coordinate and part in place.
-A polygon's rings are related to each other through rsgeo's `Relate` (B-tier).
+A polygon's rings, and a multipolygon's parts,
+are related to each other through rsgeo's `Relate` (B-tier).
 The CRS bounds are looked up once, while the plan is built.
 """
 
@@ -33,6 +34,7 @@ def _kernel(
     check_line_string_zero_length_sections: bool,
     check_ring_self_intersect: bool,
     check_polygon_self_overlap: bool,
+    check_multi_polygon_self_overlap: bool,
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         # The bounds are only for the bounds check, so PROJ is not asked without it.
@@ -59,6 +61,7 @@ def _kernel(
                 ),
                 "check_ring_self_intersect": check_ring_self_intersect,
                 "check_polygon_self_overlap": check_polygon_self_overlap,
+                "check_multi_polygon_self_overlap": check_multi_polygon_self_overlap,
             },
         )
 
@@ -76,6 +79,7 @@ def is_valid(
     check_line_string_zero_length_sections: bool = True,
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
+    check_multi_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
     """Whether each geometry is valid: one `bool` per row, a multi-geometry included.
     A missing geometry gives a missing result.
@@ -95,6 +99,7 @@ def is_valid(
     | linestring        | no vertices, or at least 2; no two in a row at the same place    |
     | polygon           | no missing rings; all empty, or valid rings that fit (see below) |
     | multi-geometries  | no missing parts, and every part valid as the geometry above     |
+    | multipolygon      | also, its parts fit together (see below)                         |
 
     A ring is a valid linestring that is also a ring (see `is_ring`):
     at least 4 vertices, the last at the same place as the first.
@@ -107,6 +112,10 @@ def is_valid(
     - no two holes share any area, nor does one lie inside another;
     - rings may touch each other only at points, never along a line.
       Whether the interior stays in one piece is not checked.
+
+    A multipolygon's parts also have to fit together, in x and y:
+    no two parts share any area (one may lie inside a hole of another),
+    and they may touch each other only at points, never along a line.
 
     A linestring may still cross itself.
 
@@ -137,9 +146,12 @@ def is_valid(
     - `check_polygon_self_overlap=False` drops the rules on how the rings sit together
       (inside the exterior, not overlapping, touching only at points).
       This has the biggest performance impact out of all of the checks for polygons.
+    - `check_multi_polygon_self_overlap=False` drops the rules on how a multipolygon's
+      parts sit together (not overlapping, touching only at points).
+      This compares every pair of parts, so its cost grows quickly with their number.
 
     How a polygon's rings cross or fit is only known for valid points,
-    so a ring without them stays invalid while either of the last two checks is on.
+    so a ring without them stays invalid while any of the last three checks is on.
 
     ```python
     df.filter(geo.is_valid("parcel"))
@@ -157,6 +169,7 @@ def is_valid(
             check_line_string_zero_length_sections=check_line_string_zero_length_sections,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
+            check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         ),
     )
 
@@ -172,6 +185,7 @@ def null_out_invalid(
     check_line_string_zero_length_sections: bool = True,
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
+    check_multi_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
     """Null out every geometry that `is_valid` rejects, keeping the rest as they are.
     The arguments are those of `is_valid`.
@@ -198,5 +212,6 @@ def null_out_invalid(
             check_line_string_zero_length_sections=check_line_string_zero_length_sections,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
+            check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         ),
     )

@@ -183,6 +183,7 @@ class ExprGeoNameSpace:
         check_line_string_zero_length_sections: bool = True,
         check_ring_self_intersect: bool = True,
         check_polygon_self_overlap: bool = True,
+        check_multi_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
         from geopolars.geo.is_valid import is_valid
 
@@ -196,6 +197,7 @@ class ExprGeoNameSpace:
             check_line_string_zero_length_sections=check_line_string_zero_length_sections,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
+            check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         )
 
     def null_out_invalid(
@@ -209,6 +211,7 @@ class ExprGeoNameSpace:
         check_line_string_zero_length_sections: bool = True,
         check_ring_self_intersect: bool = True,
         check_polygon_self_overlap: bool = True,
+        check_multi_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
         from geopolars.geo.is_valid import null_out_invalid
 
@@ -222,6 +225,7 @@ class ExprGeoNameSpace:
             check_line_string_zero_length_sections=check_line_string_zero_length_sections,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
+            check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         )
 
     def distance(self, other: IntoExprColumn) -> pl.Expr:

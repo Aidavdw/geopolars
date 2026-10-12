@@ -1,6 +1,7 @@
 //! Whether a geometry is valid
 //! See `is_valid` in Python for the rules.
-//! A polygon's rings are also checked against each other, in x and y, through rsgeo's `Relate`.
+//! A polygon's rings are also checked against each other, in x and y, through rsgeo's `Relate`,
+//! and so are a multipolygon's parts.
 //!
 //! [are_valid] can also be used by other modules
 
@@ -40,6 +41,8 @@ pub struct IsValidKwargs {
     check_ring_self_intersect: bool,
     /// Whether a polygon's rings have to [fit](rings_fit) together.
     check_polygon_self_overlap: bool,
+    /// Whether a multipolygon's parts have to [fit](parts_fit) together.
+    check_multi_polygon_self_overlap: bool,
 }
 
 impl Default for IsValidKwargs {
@@ -52,6 +55,7 @@ impl Default for IsValidKwargs {
             check_line_string_zero_length_sections: true,
             check_ring_self_intersect: true,
             check_polygon_self_overlap: true,
+            check_multi_polygon_self_overlap: true,
         }
     }
 }
@@ -111,12 +115,24 @@ impl<'a> Checker<'a> {
     /// either all of them empty, or all of them valid rings that do not cross themselves,
     /// and that [fit](rings_fit) together (each of those two only when the kwargs ask for it).
     fn polygon(&self, rings: &ListArray<i64>, polygon: Range<usize>) -> bool {
+        self.polygon_rings(rings, polygon, false).is_some()
+    }
+
+    /// The rings of a [valid](Self::polygon) polygon in x and y, `None` if it is invalid.
+    /// The empty polygon has no rings,
+    /// and neither does any other when neither `xy` nor a ring check needs them read.
+    fn polygon_rings(
+        &self,
+        rings: &ListArray<i64>,
+        polygon: Range<usize>,
+        xy: bool,
+    ) -> Option<Vec<Vec<Coord<f64>>>> {
         let mut rings_of = polygon.map(|ring| part(rings, ring));
         if rings_of
             .clone()
             .all(|ring| ring.is_some_and(|ring| ring.is_empty()))
         {
-            return true;
+            return Some(vec![]);
         }
         let IsValidKwargs {
             check_ring_self_intersect,
@@ -124,10 +140,12 @@ impl<'a> Checker<'a> {
             ..
         } = *self.kwargs;
         // Without topology, the rings need not be read into vertices at all.
-        if !check_ring_self_intersect && !check_polygon_self_overlap {
-            return rings_of.all(|ring| ring.is_some_and(|ring| self.ring(ring)));
+        if !check_ring_self_intersect && !check_polygon_self_overlap && !xy {
+            return rings_of
+                .all(|ring| ring.is_some_and(|ring| self.ring(ring)))
+                .then(Vec::new);
         }
-        rings_of
+        let rings = rings_of
             .map(|ring| {
                 let ring = ring.filter(|ring| self.ring(ring.clone()))?;
                 let vertices = xy_vertices_validated(&GeoLineString {
@@ -138,27 +156,28 @@ impl<'a> Checker<'a> {
                 (!check_ring_self_intersect || !vertices_self_intersect(&vertices))
                     .then_some(vertices)
             })
-            .collect::<Option<Vec<_>>>()
-            .is_some_and(|rings| !check_polygon_self_overlap || rings_fit(rings))
+            .collect::<Option<Vec<_>>>()?;
+        (!check_polygon_self_overlap || rings_fit(&rings)).then_some(rings)
     }
+}
+
+fn touch_at_points(matrix: &IntersectionMatrix) -> bool {
+    matrix.get(CoordPos::OnBoundary, CoordPos::OnBoundary) != Dimensions::OneDimensional
 }
 
 /// Validate for polygon's rings.
 /// First is exterior, others is holes.
 /// See python for rules.
-fn rings_fit(rings: Vec<Vec<Coord<f64>>>) -> bool {
+fn rings_fit(rings: &[Vec<Coord<f64>>]) -> bool {
     // Re-use matrix, as getting that is the expensive part.
     if rings.len() < 2 {
         return true;
     }
     let mut prepared = rings
-        .into_iter()
-        .map(|ring| PreparedGeometry::from(Polygon::new(LineString::new(ring), vec![])));
+        .iter()
+        .map(|ring| PreparedGeometry::from(Polygon::new(LineString::new(ring.clone()), vec![])));
     let exterior = prepared.next().expect("at least two rings");
     let holes: Vec<_> = prepared.collect();
-    let touch_at_points = |matrix: &IntersectionMatrix| {
-        matrix.get(CoordPos::OnBoundary, CoordPos::OnBoundary) != Dimensions::OneDimensional
-    };
     holes.iter().enumerate().all(|(i, hole)| {
         let matrix = exterior.relate(hole);
         matrix.is_contains()
@@ -168,6 +187,28 @@ fn rings_fit(rings: Vec<Vec<Coord<f64>>>) -> bool {
                 matrix.get(CoordPos::Inside, CoordPos::Inside) == Dimensions::Empty
                     && touch_at_points(&matrix)
             })
+    })
+}
+
+/// Validate for a multipolygon's parts, each given as the rings of a valid polygon.
+/// No two parts may share any area, and they may touch each other only at points.
+/// See python for rules.
+fn parts_fit(parts: Vec<Vec<Vec<Coord<f64>>>>) -> bool {
+    let prepared: Vec<_> = parts
+        .into_iter()
+        .filter(|rings| !rings.is_empty())
+        .map(|rings| {
+            let mut rings = rings.into_iter().map(LineString::new);
+            let exterior = rings.next().expect("not empty");
+            PreparedGeometry::from(Polygon::new(exterior, rings.collect()))
+        })
+        .collect();
+    prepared.iter().enumerate().all(|(i, part)| {
+        prepared[i + 1..].iter().all(|other| {
+            let matrix = part.relate(other);
+            matrix.get(CoordPos::Inside, CoordPos::Inside) == Dimensions::Empty
+                && touch_at_points(&matrix)
+        })
     })
 }
 
@@ -223,10 +264,21 @@ fn chunk_is_valid(
             let polygons: &ListArray<i64> = downcast(parts, "a list of polygons")?;
             let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
             let check = Checker::new(rings.values().as_ref(), kwargs)?;
+            if !kwargs.check_multi_polygon_self_overlap {
+                return Ok(per_row(chunk, |i| {
+                    row(i).all(|polygon| {
+                        part(polygons, polygon).is_some_and(|polygon| check.polygon(rings, polygon))
+                    })
+                }));
+            }
             per_row(chunk, |i| {
-                row(i).all(|polygon| {
-                    part(polygons, polygon).is_some_and(|polygon| check.polygon(rings, polygon))
-                })
+                row(i)
+                    .map(|polygon| {
+                        part(polygons, polygon)
+                            .and_then(|polygon| check.polygon_rings(rings, polygon, true))
+                    })
+                    .collect::<Option<Vec<_>>>()
+                    .is_some_and(parts_fit)
             })
         }
     })

@@ -257,16 +257,17 @@ def test_a_multilinestring_with_one_invalid_line_is_invalid() -> None:
 
 
 def test_a_multipolygon_with_one_invalid_polygon_is_invalid() -> None:
-    good, bad = [_SQUARE, _HOLE], [_SQUARE[:-1]]
+    good, other = [_SQUARE, _HOLE], [_square(5, 5, 9, 9)]
+    bad = [_square(5, 5, 9, 9)[:-1]]
 
-    assert _is_valid(MultiPolygonXY(), [good, good], [good, bad]) == [True, False]
+    assert _is_valid(MultiPolygonXY(), [good, other], [good, bad]) == [True, False]
 
 
 def test_a_multipolygon_checks_how_the_rings_of_each_part_fit() -> None:
-    good = [_SQUARE, _HOLE]
-    bad = [_SQUARE, _square(1, 1, 3, 3), _square(1.5, 1.5, 2, 2)]
+    good, other = [_SQUARE, _HOLE], [_square(5, 5, 9, 9)]
+    bad = [_square(5, 5, 9, 9), _square(6, 6, 8, 8), _square(6.5, 6.5, 7, 7)]
 
-    assert _is_valid(MultiPolygonXY(), [good, good], [good, bad]) == [True, False]
+    assert _is_valid(MultiPolygonXY(), [good, other], [good, bad]) == [True, False]
 
 
 @pytest.mark.parametrize(
@@ -288,6 +289,53 @@ def test_a_missing_part_is_invalid(dtype: GeoArrowType) -> None:
 )
 def test_a_missing_geometry_gives_a_missing_result(dtype: GeoArrowType) -> None:
     assert _is_valid(dtype, None) == [None]
+
+
+# Multipolygons: how the parts fit together.
+
+
+def test_multipolygon_parts_apart_are_valid() -> None:
+    parts = [[_square(0, 0, 1, 1)], [_square(2, 2, 3, 3)]]
+
+    assert _is_valid(MultiPolygonXY(), parts) == [True]
+
+
+def test_multipolygon_parts_may_touch_at_a_point() -> None:
+    parts = [[_square(0, 0, 1, 1)], [_square(1, 1, 2, 2)]]
+
+    assert _is_valid(MultiPolygonXY(), parts) == [True]
+
+
+def test_multipolygon_parts_touching_along_a_line_are_invalid() -> None:
+    parts = [[_square(0, 0, 1, 1)], [_square(1, 0, 2, 1)]]
+
+    assert _is_valid(MultiPolygonXY(), parts) == [False]
+
+
+@pytest.mark.parametrize(
+    "other",
+    [_square(2, 2, 6, 6), _square(1, 1, 2, 2), _SQUARE],
+    ids=["overlapping", "nested", "equal"],
+)
+def test_multipolygon_parts_sharing_area_are_invalid(other: Line) -> None:
+    assert _is_valid(MultiPolygonXY(), [[_SQUARE], [other]]) == [False]
+
+
+def test_a_multipolygon_part_may_lie_in_a_hole_of_another() -> None:
+    parts = [[_SQUARE, _square(1, 1, 3, 3)], [_square(1.5, 1.5, 2.5, 2.5)]]
+
+    assert _is_valid(MultiPolygonXY(), parts) == [True]
+
+
+def test_a_multipolygon_part_filling_a_hole_of_another_is_invalid() -> None:
+    """It meets the hole all along its edge."""
+    parts = [[_SQUARE, _square(1, 1, 3, 3)], [_square(1, 1, 3, 3)]]
+
+    assert _is_valid(MultiPolygonXY(), parts) == [False]
+
+
+def test_an_empty_multipolygon_part_fits_with_any_other() -> None:
+    assert _is_valid(MultiPolygonXY(), [[], [_SQUARE]]) == [True]
 
 
 # CRS bounds.
@@ -380,6 +428,7 @@ _NO_COORDINATE_CHECKS = {
 _NO_TOPOLOGY_CHECKS = {
     "check_ring_self_intersect": False,
     "check_polygon_self_overlap": False,
+    "check_multi_polygon_self_overlap": False,
 }
 
 
@@ -494,6 +543,17 @@ def test_without_the_overlap_check_the_holes_may_lie_anywhere() -> None:
     )
 
     assert out == [True, True, False]
+
+
+def test_without_the_multipolygon_overlap_check_parts_may_overlap() -> None:
+    out = _is_valid(
+        MultiPolygonXY(),
+        [[_SQUARE], [_square(2, 2, 6, 6)]],
+        [[_SQUARE], [_square(5, 5, 6, 6)[:-1]]],
+        check_multi_polygon_self_overlap=False,
+    )
+
+    assert out == [True, False]
 
 
 # The expression itself.

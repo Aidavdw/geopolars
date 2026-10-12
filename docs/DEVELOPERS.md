@@ -220,7 +220,7 @@ the comment says when one without a CRS takes a different tier.
 | `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes fwd `rings_overlap` | - | | B | list, one per part | B | list, one per part |
 | `rings_overlap` | - | | B | hacked as polygon rsgeo relate | - | | - | | - | | - | |
 | `is_standard_orientation` | - | | A | CCW | A | | - | | A | list, one per part | A | list, one per part |
-| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings via rsgeo relate | A | every part valid | A | every part valid | A/B | every part valid |
+| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings via rsgeo relate | A | every part valid | A | every part valid | A/B | EP; overlap via rsgeo relate |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |
@@ -250,7 +250,9 @@ the comment says when one without a CRS takes a different tier.
 
 In this table:
 
-- `ggl` means 'geographiclib'
+- `ggl` = 'geographiclib'
+- EP = does the same check on each part as it does for the single variant
+  (e.g. self-overlap checks for every polygon contained in a multipolygon)
 
 ## Typical flow
 
