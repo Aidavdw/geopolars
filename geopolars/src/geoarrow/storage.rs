@@ -22,6 +22,12 @@ pub(crate) fn downcast<'a, T: 'static>(array: &'a dyn Array, what: &str) -> Pola
 /// The fewest vertices a ring can have: a triangle, plus the vertex closing it.
 pub(crate) const MIN_RING_VERTICES: usize = 4;
 
+/// Whether two [positions](CoordsView::position) are [`is_close`] on every axis.
+#[inline(always)]
+pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
+    is_close(a[0], b[0]) && is_close(a[1], b[1]) && is_close(a[2], b[2])
+}
+
 /// View (zero-allocation) of one chunk's coordinates in the Arrow array.
 pub(crate) struct CoordsView<'a> {
     coords: &'a StructArray,
@@ -67,23 +73,47 @@ impl<'a> CoordsView<'a> {
             .flatten()
     }
 
+    /// Whether any coordinate, or any axis of one, is missing.
+    /// Without any, the `NULLS = false` readers below can skip every validity lookup.
+    pub(crate) fn has_missing_values(&self) -> bool {
+        self.coords.null_count() > 0 || self.axes().any(|axis| axis.null_count() > 0)
+    }
+
     pub(crate) fn xy(&self, i: usize) -> Option<(f64, f64)> {
-        let present = self.coords.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i);
+        self.xy_checking_nulls::<true>(i)
+    }
+
+    /// [`xy`](Self::xy), checking whether it is missing only with `NULLS`.
+    /// Without, it assumes there are [no missing values](Self::has_missing_values).
+    #[inline(always)]
+    pub(crate) fn xy_checking_nulls<const NULLS: bool>(&self, i: usize) -> Option<(f64, f64)> {
+        let present =
+            !NULLS || (self.coords.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i));
         present.then(|| (self.x.value(i), self.y.value(i)))
+    }
+
+    /// The position of coordinate `i`: x, y, and z (0 without a z axis).
+    /// With `NULLS`, `None` if one of those is missing.
+    /// Without, it assumes there are [no missing values](Self::has_missing_values).
+    #[inline(always)]
+    pub(crate) fn position<const NULLS: bool>(&self, i: usize) -> Option<[f64; 3]> {
+        let (x, y) = self.xy_checking_nulls::<NULLS>(i)?;
+        let z = match self.z {
+            Some(z) if NULLS && !z.is_valid(i) => return None,
+            Some(z) => z.value(i),
+            None => 0.0,
+        };
+        Some([x, y, z])
     }
 
     /// Whether coordinates `i` and `j` lie at almost the same place:
     /// [`is_close`] in x, y and z. m is a measure rather than a position, so it is not compared.
     /// A missing coordinate is close to nothing.
     pub(crate) fn same_place(&self, i: usize, j: usize) -> bool {
-        let (Some((ax, ay)), Some((bx, by))) = (self.xy(i), self.xy(j)) else {
-            return false;
-        };
-        is_close(ax, bx)
-            && is_close(ay, by)
-            && self
-                .z
-                .is_none_or(|z| z.is_valid(i) && z.is_valid(j) && is_close(z.value(i), z.value(j)))
+        matches!(
+            (self.position::<true>(i), self.position::<true>(j)),
+            (Some(a), Some(b)) if same_position(a, b)
+        )
     }
 
     pub(crate) fn is_ring(&self, range: Range<usize>) -> bool {

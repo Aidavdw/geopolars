@@ -55,7 +55,6 @@ def _kernel(
                 "bounds": bounds,
                 "check_missing_coordinates": check_missing_coordinates,
                 "check_finite_coordinates": check_finite_coordinates,
-                "check_crs_bounds": check_crs_bounds,
                 "check_line_string_zero_length_sections": (
                     check_line_string_zero_length_sections
                 ),

@@ -59,16 +59,13 @@ pub(crate) fn line_self_intersects(line: &LineString) -> Option<bool> {
 /// Two segments in a row (and the last and the first, when the line closes)
 /// may share their vertex, but not overlap; any other two may not touch at all.
 pub(crate) fn vertices_self_intersect(vertices: &[Coord<f64>]) -> bool {
-    let segments: Vec<Segment> = vertices
-        .windows(2)
-        .filter(|ends| !same_xy(ends[0], ends[1]))
-        .enumerate()
-        .map(|(index, ends)| Segment {
-            index,
-            line: Line::new(ends[0], ends[1]),
-        })
-        .collect();
-    let n = segments.len();
+    let ends = || {
+        vertices
+            .windows(2)
+            .filter(|ends| !same_xy(ends[0], ends[1]))
+    };
+    // Counted rather than collected: the sweep collects the segments itself.
+    let n = ends().count();
     if n < 2 {
         return false;
     }
@@ -77,6 +74,10 @@ pub(crate) fn vertices_self_intersect(vertices: &[Coord<f64>]) -> bool {
         let (low, high) = (a.index.min(b.index), a.index.max(b.index));
         high - low == 1 || (closed && low == 0 && high == n - 1)
     };
+    let segments = ends().enumerate().map(|(index, ends)| Segment {
+        index,
+        line: Line::new(ends[0], ends[1]),
+    });
     Intersections::from_iter(segments)
         .any(|(a, b, hit)| !adjacent(&a, &b) || matches!(hit, LineIntersection::Collinear { .. }))
 }

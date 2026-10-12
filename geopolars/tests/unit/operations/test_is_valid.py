@@ -128,6 +128,20 @@ def test_a_missing_vertex_is_invalid() -> None:
     assert _is_valid(LineStringXY(), [{"x": 0.0, "y": 0.0}, None]) == [False]
 
 
+@pytest.mark.parametrize(
+    ("dtype", "valid", "missing_vertex"),
+    [
+        (LineStringXY(), _SQUARE, [_SQUARE[0], None]),
+        (PolygonXY(), [_SQUARE, _HOLE], [[_SQUARE[0], None, *_SQUARE[2:]]]),
+    ],
+    ids=["line", "polygon"],
+)
+def test_a_missing_vertex_only_makes_its_own_row_invalid(
+    dtype: GeoArrowType, valid: object, missing_vertex: object
+) -> None:
+    assert _is_valid(dtype, valid, missing_vertex, valid) == [True, False, True]
+
+
 # Polygons.
 
 
