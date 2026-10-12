@@ -45,47 +45,54 @@ fn transformation(dtype: &DataType, to: &str) -> PolarsResult<Proj> {
 ///
 /// Only `x` and `y` go through PROJ. `z` and `m` are carried through untouched.
 fn reproject(coords: &Series, dim: GeoDimension, proj: &Proj) -> PolarsResult<Series> {
+    // TODO: Make this function take a flag 'must_check_validity'.
+    // This flag would only have to be set to true if you
+    // hand a column of Points, because invalidity can only be on the outer level.
+    // Rings/polygons will have them be valid.
     let fields = coords.struct_()?;
-    let x = fields.field_by_name("x")?;
-    let y = fields.field_by_name("y")?;
+    let position = |name: &str| -> PolarsResult<Float64Chunked> {
+        Ok(fields.field_by_name(name)?.f64()?.rechunk().into_owned())
+    };
+    let (x, y) = (position("x")?, position("y")?);
+    let (x, y) = (
+        x.downcast_as_array().values().as_slice(),
+        y.downcast_as_array().values().as_slice(),
+    );
 
     let mut xs = Vec::with_capacity(coords.len());
     let mut ys = Vec::with_capacity(coords.len());
-    // A missing coordinate can hold anything in its fields. Never hand that to PROJ.
-    let present = coords.is_not_null();
-    for ((present, x), y) in present.iter().zip(x.f64()?.iter()).zip(y.f64()?.iter()) {
-        let (x, y) = match (present, x, y) {
-            (Some(true), Some(x), Some(y)) => {
-                let (x, y) = proj.convert((x, y)).map_err(
-                    |e| polars_err!(ComputeError: "failed to reproject ({x}, {y}): {e}"),
-                )?;
-                (Some(x), Some(y))
-            }
-            _ => (None, None),
+    // A missing point can hold anything in its fields. Never hand that to PROJ.
+    let present = fields.rechunk_validity();
+    for (i, (&x, &y)) in x.iter().zip(y).enumerate() {
+        let (x, y) = if present.as_ref().is_none_or(|present| present.get_bit(i)) {
+            proj.convert((x, y))
+                .map_err(|e| polars_err!(ComputeError: "failed to reproject ({x}, {y}): {e}"))?
+        } else {
+            (x, y)
         };
         xs.push(x);
         ys.push(y);
     }
 
-    let reprojected =
-        dim.field_names()
-            .iter()
-            .map(|name| {
-                let out = match *name {
-                    "x" => Float64Chunked::from_iter_options("x".into(), xs.iter().copied())
-                        .into_series(),
-                    "y" => Float64Chunked::from_iter_options("y".into(), ys.iter().copied())
-                        .into_series(),
-                    _ => fields.field_by_name(name)?,
-                };
-                Ok(out)
-            })
-            .collect::<PolarsResult<Vec<Series>>>()?;
+    let xs = Float64Chunked::from_vec("x".into(), xs).into_series();
+    let ys = Float64Chunked::from_vec("y".into(), ys).into_series();
+    let reprojected = dim
+        .field_names()
+        .iter()
+        .map(|name| {
+            let out = match *name {
+                "x" => xs.clone(),
+                "y" => ys.clone(),
+                _ => fields.field_by_name(name)?,
+            };
+            Ok(out)
+        })
+        .collect::<PolarsResult<Vec<Series>>>()?;
 
     let mut out =
         StructChunked::from_series(coords.name().clone(), coords.len(), reprojected.iter())?;
-    // Same as in `shift`: rebuilding from the fields drops which coordinates
-    // were missing entirely.
+    // For points the coordinate struct is the geometry, and its validity says the point is missing.
+    // Building from fields alone drops that.
     out.zip_outer_validity(fields);
 
     Ok(out.into_series())

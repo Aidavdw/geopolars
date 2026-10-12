@@ -131,13 +131,6 @@ fn transform(
 
     let (x, y) = (x.downcast_as_array(), y.downcast_as_array());
     let z = z.as_ref().map(|z| z.downcast_as_array());
-    // Every output coordinate is made from all of the input ones,
-    // so it is missing wherever any of those is.
-    let validity = combine_validities_and(x.validity(), y.validity());
-    let validity = match z {
-        Some(z) => combine_validities_and(validity.as_ref(), z.validity()),
-        None => validity,
-    };
 
     let z_values = z.map(|z| z.values().as_slice());
     let transformed = |axis: usize, name: &str| -> PolarsResult<Series> {
@@ -145,10 +138,7 @@ fn transform(
         Ok(
             match matrix.apply(axis, x.values(), y.values(), z_values, shift) {
                 None => fields.field_by_name(name)?,
-                Some(values) => {
-                    Float64Chunked::from_vec_validity(name.into(), values, validity.clone())
-                        .into_series()
-                }
+                Some(values) => Float64Chunked::from_vec(name.into(), values).into_series(),
             },
         )
     };
@@ -162,7 +152,8 @@ fn transform(
     }
 
     let mut out = StructChunked::from_series(coords.name().clone(), coords.len(), out.iter())?;
-    // Building from fields alone drops the validity that says a coordinate is missing entirely.
+    // For points the coordinate struct is the geometry, and its validity says the point is missing.
+    // Building from fields alone drops that.
     out.zip_outer_validity(fields);
     Ok(out.into_series())
 }
@@ -268,11 +259,8 @@ fn shifted_per_row(
         })
     };
     let at = [position("x")?, position("y")?, position("z")?];
-    // A geometry is missing wherever its point, or any part of it, is.
-    let mut missing = fields.rechunk_validity();
-    for at in at.iter().flatten() {
-        missing = combine_validities_and(missing.as_ref(), at.downcast_as_array().validity());
-    }
+    // A geometry is missing wherever its point is.
+    let missing = fields.rechunk_validity();
     let at = [0, 1, 2].map(|axis| {
         at[axis]
             .as_ref()
