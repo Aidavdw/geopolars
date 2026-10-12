@@ -121,6 +121,22 @@ def test_a_hole_outside_the_exterior_nulls_the_polygon() -> None:
     assert out["polygon"].is_null().to_list() == [True, False]
 
 
+def test_without_the_overlap_check_a_hole_outside_is_kept() -> None:
+    hole = [
+        {"x": 5.0, "y": 5.0},
+        {"x": 6.0, "y": 5.0},
+        {"x": 6.0, "y": 6.0},
+        {"x": 5.0, "y": 5.0},
+    ]
+    df = pl.DataFrame(
+        {"polygon": [[_SQUARE, hole]]}, schema={"polygon": _XY_RINGS}
+    ).select(pl.col("polygon").ext.to(PolygonXY()))
+
+    out = df.select(geo.null_out_invalid("polygon", check_polygon_self_overlap=False))
+
+    assert out["polygon"].is_null().to_list() == [False]
+
+
 def test_a_point_outside_its_crs_is_nulled_and_the_crs_kept() -> None:
     df = pl.DataFrame(
         {"point": [{"x": 0.0, "y": 95.0}, {"x": 190.0, "y": 0.0}]},

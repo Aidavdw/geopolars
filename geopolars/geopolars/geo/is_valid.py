@@ -23,19 +23,35 @@ if TYPE_CHECKING:
 
 
 def _kernel(
-    function_name: str, allow_wrapped_longitude: bool, within_area_of_use: bool
+    function_name: str,
+    *,
+    allow_wrapped_longitude: bool,
+    within_area_of_use: bool,
+    check_vertex_validity: bool,
+    check_ring_self_intersect: bool,
+    check_polygon_self_overlap: bool,
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-        bounds = geometry._crs_bounds(
-            allow_wrapped_longitude=allow_wrapped_longitude,
-            within_area_of_use=within_area_of_use,
+        # The bounds are only for the vertex check, so PROJ is not asked without it.
+        bounds = (
+            geometry._crs_bounds(
+                allow_wrapped_longitude=allow_wrapped_longitude,
+                within_area_of_use=within_area_of_use,
+            )
+            if check_vertex_validity
+            else None
         )
         return register_plugin_function(
             plugin_path=LIB,
             args=[column],
             function_name=function_name,
             is_elementwise=True,
-            kwargs={"bounds": bounds},
+            kwargs={
+                "bounds": bounds,
+                "check_vertex_validity": check_vertex_validity,
+                "check_ring_self_intersect": check_ring_self_intersect,
+                "check_polygon_self_overlap": check_polygon_self_overlap,
+            },
         )
 
     return build
@@ -46,6 +62,9 @@ def is_valid(
     *,
     allow_wrapped_longitude: bool = True,
     within_area_of_use: bool = False,
+    check_vertex_validity: bool = True,
+    check_ring_self_intersect: bool = True,
+    check_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
     """Whether each geometry is valid: one `bool` per row, a multi-geometry included.
     A missing geometry gives a missing result.
@@ -91,12 +110,33 @@ def is_valid(
       PROJ says the CRS is meant for (UTM zone 31N covers 0 to 6 degrees east, for one).
       Data just past it is common and often fine, so this is off by default.
 
+    Parts of the check can be individually turned off.
+    This can be used to reduce computation time when you know for sure that
+    your data is valid in some way.
+    The shape rules in the table (vertex counts, repeats, closed rings) always apply.
+
+    - `check_vertex_validity=False` drops the rules for every coordinate above,
+      CRS bounds included (`allow_wrapped_longitude` and `within_area_of_use` then do nothing).
+      The fit of a polygon's rings is still only known for finite x and y,
+      so such a ring stays invalid while either check below is on.
+    - `check_ring_self_intersect=False` skips checking for a polygon's ring crossing itself.
+    - `check_polygon_self_overlap=False` drops the rules on how the rings sit together
+      (inside the exterior, not overlapping, touching only at points). This has the biggest performance impact out of all of the checks for polygons.
+
     ```python
     df.filter(geo.is_valid("parcel"))
     ```
     """
     return on_geometry(
-        geometry, _kernel("is_valid", allow_wrapped_longitude, within_area_of_use)
+        geometry,
+        _kernel(
+            "is_valid",
+            allow_wrapped_longitude=allow_wrapped_longitude,
+            within_area_of_use=within_area_of_use,
+            check_vertex_validity=check_vertex_validity,
+            check_ring_self_intersect=check_ring_self_intersect,
+            check_polygon_self_overlap=check_polygon_self_overlap,
+        ),
     )
 
 
@@ -105,6 +145,9 @@ def null_out_invalid(
     *,
     allow_wrapped_longitude: bool = True,
     within_area_of_use: bool = False,
+    check_vertex_validity: bool = True,
+    check_ring_self_intersect: bool = True,
+    check_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
     """Null out every geometry that `is_valid` rejects, keeping the rest as they are.
     The arguments are those of `is_valid`.
@@ -121,5 +164,12 @@ def null_out_invalid(
     """
     return on_geometry(
         geometry,
-        _kernel("null_out_invalid", allow_wrapped_longitude, within_area_of_use),
+        _kernel(
+            "null_out_invalid",
+            allow_wrapped_longitude=allow_wrapped_longitude,
+            within_area_of_use=within_area_of_use,
+            check_vertex_validity=check_vertex_validity,
+            check_ring_self_intersect=check_ring_self_intersect,
+            check_polygon_self_overlap=check_polygon_self_overlap,
+        ),
     )

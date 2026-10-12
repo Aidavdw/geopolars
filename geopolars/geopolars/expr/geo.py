@@ -173,7 +173,13 @@ class ExprGeoNameSpace:
         return is_standard_orientation(self._expr, holes_clockwise=holes_clockwise)
 
     def is_valid(
-        self, *, allow_wrapped_longitude: bool = True, within_area_of_use: bool = False
+        self,
+        *,
+        allow_wrapped_longitude: bool = True,
+        within_area_of_use: bool = False,
+        check_vertex_validity: bool = True,
+        check_ring_self_intersect: bool = True,
+        check_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
         from geopolars.geo.is_valid import is_valid
 
@@ -181,10 +187,19 @@ class ExprGeoNameSpace:
             self._expr,
             allow_wrapped_longitude=allow_wrapped_longitude,
             within_area_of_use=within_area_of_use,
+            check_vertex_validity=check_vertex_validity,
+            check_ring_self_intersect=check_ring_self_intersect,
+            check_polygon_self_overlap=check_polygon_self_overlap,
         )
 
     def null_out_invalid(
-        self, *, allow_wrapped_longitude: bool = True, within_area_of_use: bool = False
+        self,
+        *,
+        allow_wrapped_longitude: bool = True,
+        within_area_of_use: bool = False,
+        check_vertex_validity: bool = True,
+        check_ring_self_intersect: bool = True,
+        check_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
         from geopolars.geo.is_valid import null_out_invalid
 
@@ -192,6 +207,9 @@ class ExprGeoNameSpace:
             self._expr,
             allow_wrapped_longitude=allow_wrapped_longitude,
             within_area_of_use=within_area_of_use,
+            check_vertex_validity=check_vertex_validity,
+            check_ring_self_intersect=check_ring_self_intersect,
+            check_polygon_self_overlap=check_polygon_self_overlap,
         )
 
     def distance(self, other: IntoExprColumn) -> pl.Expr:

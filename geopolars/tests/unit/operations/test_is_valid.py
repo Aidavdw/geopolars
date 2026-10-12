@@ -366,6 +366,80 @@ def test_an_opaque_srid_has_no_area_of_use() -> None:
         _is_valid(_srid(), _point(0, 0), within_area_of_use=True)
 
 
+# Turning parts of the check off.
+
+_BOWTIE = _line((0, 0), (4, 4), (4, 0), (0, 4), (0, 0))
+
+
+@pytest.mark.parametrize(
+    "line",
+    [_line((0, 0), (NAN, 1)), _line((0, 0), (INF, 1)), [_point(0, 0), {"x": 1.0}]],
+    ids=["nan", "infinite", "missing-axis"],
+)
+def test_without_the_vertex_check_any_coordinate_will_do(line: Line) -> None:
+    assert _is_valid(LineStringXY(), line, check_vertex_validity=False) == [True]
+
+
+def test_without_the_vertex_check_there_are_no_crs_bounds() -> None:
+    out = _is_valid(PointXY(crs=WGS84), _point(0, 91), check_vertex_validity=False)
+
+    assert out == [True]
+
+
+def test_without_the_vertex_check_proj_is_not_asked_for_an_area_of_use() -> None:
+    out = _is_valid(
+        _srid(), _point(0, 0), within_area_of_use=True, check_vertex_validity=False
+    )
+
+    assert out == [True]
+
+
+@pytest.mark.parametrize(
+    ("dtype", "row"),
+    [(LineStringXY(), _line((0, 0))), (PolygonXY(), [_SQUARE[:-1]])],
+    ids=["one-vertex-line", "open-ring"],
+)
+def test_without_the_vertex_check_the_shape_still_counts(
+    dtype: GeoArrowType, row: object
+) -> None:
+    assert _is_valid(dtype, row, check_vertex_validity=False) == [False]
+
+
+def test_a_ring_with_a_nan_vertex_cannot_be_checked_for_how_it_fits() -> None:
+    ring = _line((0, 0), (4, 0), (NAN, 4), (0, 4), (0, 0))
+    no_vertices = {"check_vertex_validity": False}
+    no_topology = {
+        "check_ring_self_intersect": False,
+        "check_polygon_self_overlap": False,
+    }
+
+    assert _is_valid(PolygonXY(), [ring], **no_vertices) == [False]
+    assert _is_valid(PolygonXY(), [ring], **no_vertices, **no_topology) == [True]
+
+
+def test_without_the_ring_check_a_ring_may_cross_itself() -> None:
+    out = _is_valid(
+        PolygonXY(),
+        [_BOWTIE],
+        [_SQUARE, _square(5, 5, 6, 6)],
+        check_ring_self_intersect=False,
+    )
+
+    assert out == [True, False]
+
+
+def test_without_the_overlap_check_the_holes_may_lie_anywhere() -> None:
+    out = _is_valid(
+        PolygonXY(),
+        [_SQUARE, _square(1, 1, 2, 2), _square(1.5, 1.5, 3, 3)],
+        [_SQUARE, _square(5, 5, 6, 6)],
+        [_BOWTIE],
+        check_polygon_self_overlap=False,
+    )
+
+    assert out == [True, True, False]
+
+
 # The expression itself.
 
 
@@ -396,6 +470,23 @@ def test_namespace_matches_the_functional_api() -> None:
         df.select(gpl.col("g").geo.is_valid(allow_wrapped_longitude=False)),
         df.select(geo.is_valid("g", allow_wrapped_longitude=False)),
     )
+
+
+def test_namespace_passes_the_checks_on() -> None:
+    rows = [[_SQUARE, _square(5, 5, 6, 6)], [_BOWTIE]]
+    df = pl.DataFrame(
+        pl.Series("g", rows, dtype=_storage(PolygonXY())).ext.to(PolygonXY())
+    )
+    checks = {
+        "check_vertex_validity": False,
+        "check_ring_self_intersect": False,
+        "check_polygon_self_overlap": False,
+    }
+
+    out = df.select(gpl.col("g").geo.is_valid(**checks))
+
+    assert_frame_equal(out, df.select(geo.is_valid("g", **checks)))
+    assert out["g"].to_list() == [True, True]
 
 
 def test_rejects_a_non_geometry_while_building_the_plan() -> None:

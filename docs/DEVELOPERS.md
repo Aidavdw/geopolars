@@ -219,7 +219,7 @@ the comment says when one without a CRS takes a different tier.
 | `self_intersects` | - | | B | rsgeo sweep; x/y only | - | | - | | B | list, one per part | - | |
 | `rings_overlap` | - | | B | hacked as polygon rsgeo relate | - | | - | | - | | - | |
 | `is_standard_orientation` | - | | A | CCW | A | | - | | A | list, one per part | A | list, one per part |
-| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings relate via rsgeo | A | every part valid | A | every part valid | A/B | every part valid |
+| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings relate via rsgeo; each part optional | A | every part valid | A | every part valid | A/B | every part valid |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
 | `distance` | B | PROJ + ggl; no CRS: C | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | skips ring's closing coord | C | | C | | C | skips ring's closing coord |

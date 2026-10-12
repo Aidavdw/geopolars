@@ -24,31 +24,51 @@ use crate::geoarrow::{describe, Kind};
 /// Where `x` and `y` may lie, as `[xmin, ymin, xmax, ymax]`, ends included.
 type Bounds = [f64; 4];
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct IsValidKwargs {
     bounds: Option<Bounds>,
+    /// Whether every coordinate has to be there, finite, and inside `bounds`.
+    check_vertex_validity: bool,
+    /// Whether a polygon's rings may not cross themselves.
+    check_ring_self_intersect: bool,
+    /// Whether a polygon's rings have to [fit](rings_fit) together.
+    check_polygon_self_overlap: bool,
+}
+
+impl Default for IsValidKwargs {
+    fn default() -> Self {
+        Self {
+            bounds: None,
+            check_vertex_validity: true,
+            check_ring_self_intersect: true,
+            check_polygon_self_overlap: true,
+        }
+    }
 }
 
 /// Checks the coordinates of one chunk,
 /// and the ranges of them that make up a line or ring.
 struct Checker<'a> {
     coords: CoordsView<'a>,
-    bounds: Option<Bounds>,
+    kwargs: &'a IsValidKwargs,
 }
 
 impl<'a> Checker<'a> {
-    fn new(coords: &'a dyn Array, bounds: Option<Bounds>) -> PolarsResult<Self> {
+    fn new(coords: &'a dyn Array, kwargs: &'a IsValidKwargs) -> PolarsResult<Self> {
         Ok(Self {
             coords: CoordsView::new(coords)?,
-            bounds,
+            kwargs,
         })
     }
 
     fn coord(&self, i: usize) -> bool {
+        if !self.kwargs.check_vertex_validity {
+            return true;
+        }
         self.coords.present(i)
             && self.coords.values(i).all(f64::is_finite)
-            && self.bounds.is_none_or(|[xmin, ymin, xmax, ymax]| {
+            && self.kwargs.bounds.is_none_or(|[xmin, ymin, xmax, ymax]| {
                 let (x, y) = (self.coords.nth(i, 0), self.coords.nth(i, 1));
                 (xmin..=xmax).contains(&x) && (ymin..=ymax).contains(&y)
             })
@@ -76,14 +96,23 @@ impl<'a> Checker<'a> {
 
     /// Check every ring
     /// either all of them empty, or all of them valid rings that do not cross themselves,
-    /// and that [fit](rings_fit) together.
+    /// and that [fit](rings_fit) together (each of those two only when the kwargs ask for it).
     fn polygon(&self, rings: &ListArray<i64>, polygon: Range<usize>) -> bool {
-        let rings_of = polygon.map(|ring| part(rings, ring));
+        let mut rings_of = polygon.map(|ring| part(rings, ring));
         if rings_of
             .clone()
             .all(|ring| ring.is_some_and(|ring| ring.is_empty()))
         {
             return true;
+        }
+        let IsValidKwargs {
+            check_ring_self_intersect,
+            check_polygon_self_overlap,
+            ..
+        } = *self.kwargs;
+        // Without topology, the rings need not be read into vertices at all.
+        if !check_ring_self_intersect && !check_polygon_self_overlap {
+            return rings_of.all(|ring| ring.is_some_and(|ring| self.ring(ring)));
         }
         rings_of
             .map(|ring| {
@@ -93,10 +122,11 @@ impl<'a> Checker<'a> {
                     start: ring.start,
                     end: ring.end,
                 })?;
-                (!vertices_self_intersect(&vertices)).then_some(vertices)
+                (!check_ring_self_intersect || !vertices_self_intersect(&vertices))
+                    .then_some(vertices)
             })
             .collect::<Option<Vec<_>>>()
-            .is_some_and(rings_fit)
+            .is_some_and(|rings| !check_polygon_self_overlap || rings_fit(rings))
     }
 }
 
@@ -145,10 +175,10 @@ fn per_row(rows: &dyn Array, valid: impl Fn(usize) -> bool) -> BooleanArray {
 fn chunk_is_valid(
     chunk: &dyn Array,
     kind: Kind,
-    bounds: Option<Bounds>,
+    kwargs: &IsValidKwargs,
 ) -> PolarsResult<BooleanArray> {
     if kind == Kind::Point {
-        let check = Checker::new(chunk, bounds)?;
+        let check = Checker::new(chunk, kwargs)?;
         return Ok(per_row(chunk, |i| check.point(i)));
     }
     let rows: &ListArray<i64> = downcast(chunk, "a list of parts")?;
@@ -157,21 +187,21 @@ fn chunk_is_valid(
     Ok(match kind {
         Kind::Point => unreachable!("handled above"),
         Kind::LineString => {
-            let check = Checker::new(parts, bounds)?;
+            let check = Checker::new(parts, kwargs)?;
             per_row(chunk, |i| check.line(row(i)))
         }
         Kind::MultiPoint => {
-            let check = Checker::new(parts, bounds)?;
+            let check = Checker::new(parts, kwargs)?;
             per_row(chunk, |i| row(i).all(|point| check.point(point)))
         }
         Kind::Polygon => {
             let rings: &ListArray<i64> = downcast(parts, "a list of rings")?;
-            let check = Checker::new(rings.values().as_ref(), bounds)?;
+            let check = Checker::new(rings.values().as_ref(), kwargs)?;
             per_row(chunk, |i| check.polygon(rings, row(i)))
         }
         Kind::MultiLineString => {
             let lines: &ListArray<i64> = downcast(parts, "a list of linestrings")?;
-            let check = Checker::new(lines.values().as_ref(), bounds)?;
+            let check = Checker::new(lines.values().as_ref(), kwargs)?;
             per_row(chunk, |i| {
                 row(i).all(|line| part(lines, line).is_some_and(|line| check.line(line)))
             })
@@ -179,7 +209,7 @@ fn chunk_is_valid(
         Kind::MultiPolygon => {
             let polygons: &ListArray<i64> = downcast(parts, "a list of polygons")?;
             let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
-            let check = Checker::new(rings.values().as_ref(), bounds)?;
+            let check = Checker::new(rings.values().as_ref(), kwargs)?;
             per_row(chunk, |i| {
                 row(i).all(|polygon| {
                     part(polygons, polygon).is_some_and(|polygon| check.polygon(rings, polygon))
@@ -193,14 +223,14 @@ fn chunk_is_valid(
 /// One chunk out for every chunk in.
 pub(crate) fn are_valid(
     geometries: &Series,
-    bounds: Option<Bounds>,
+    kwargs: &IsValidKwargs,
 ) -> PolarsResult<BooleanChunked> {
     let kind = describe(geometries.dtype())?.kind;
     let storage = geometries.ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()
-        .map(|chunk| chunk_is_valid(chunk.as_ref(), kind, bounds));
+        .map(|chunk| chunk_is_valid(chunk.as_ref(), kind, kwargs));
     BooleanChunked::try_from_chunk_iter(geometries.name().clone(), chunks)
 }
 
@@ -214,14 +244,14 @@ fn is_valid_type(input_fields: &[Field]) -> PolarsResult<Field> {
 /// See `is_valid`.
 #[polars_expr(output_type_func=is_valid_type)]
 fn is_valid(inputs: &[Series], kwargs: IsValidKwargs) -> PolarsResult<Series> {
-    Ok(are_valid(&inputs[0], kwargs.bounds)?.into_series())
+    Ok(are_valid(&inputs[0], &kwargs)?.into_series())
 }
 
 /// See `null_out_invalid`.
 #[polars_expr(output_type_func=same_geometry)]
 fn null_out_invalid(inputs: &[Series], kwargs: IsValidKwargs) -> PolarsResult<Series> {
     let geometries = &inputs[0];
-    let valid = are_valid(geometries, kwargs.bounds)?;
+    let valid = are_valid(geometries, &kwargs)?;
     // Missing rows do not count, and stay missing.
     if valid.all() {
         return Ok(geometries.clone());
