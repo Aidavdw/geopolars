@@ -251,7 +251,7 @@ fn ringed_polygons(polygons: &ListArray<i64>, close: bool) -> PolarsResult<ListA
 }
 
 /// Null out every polygon with a ring that is not a ring (see [`CoordsView::is_ring`]),
-/// and every multipolygon with such a polygon.
+/// and every multipolygon with such a polygon (leaving the polygon itself in place).
 /// With `close`, an open ring is closed first by repeating its first vertex at its end.
 /// Other kinds come back as they are.
 fn only_rings(storage: Series, kind: Kind, close: bool) -> PolarsResult<Series> {
@@ -272,7 +272,7 @@ fn only_rings(storage: Series, kind: Kind, close: bool) -> PolarsResult<Series> 
         Ok(ListArray::<i64>::new(
             chunk.dtype().clone(),
             chunk.offsets().clone(),
-            polygons.boxed(),
+            polygons.with_validity(None).boxed(),
             valid,
         )
         .boxed())

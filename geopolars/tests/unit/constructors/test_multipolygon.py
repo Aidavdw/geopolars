@@ -359,6 +359,18 @@ def test_one_polygon_with_a_ring_that_is_no_ring_invalidates_the_multipolygon() 
     assert out.is_null().to_list() == [True, False, False, False, True]
 
 
+def test_a_ring_that_is_no_ring_leaves_no_null_inside_the_multipolygon() -> None:
+    """GeoArrow allows nulls only at the outermost level.
+    See https://geoarrow.org/format.html#missing-values-null"""
+    out = _from_polygons([_SQUARE_POLYGON, _OPEN_POLYGON], [_SQUARE_POLYGON])
+
+    level = out.ext.storage().to_arrow()
+    assert level.null_count == 1
+    for _ in ("polygons", "rings", "coordinates"):
+        level = level.values
+        assert level.null_count == 0
+
+
 def test_close_closes_the_rings_of_every_polygon() -> None:
     out = _from_polygons([_OPEN_POLYGON, _SQUARE_POLYGON, _OPEN_POLYGON], close=True)
 
