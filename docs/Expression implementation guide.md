@@ -36,6 +36,17 @@ e.g. `#[polars_expr(output_type_func=kernel_output_type_area_planar)]`.
 These should always be named `kernel_output_type_*`.
 Functions that wrap these should be `kernel_output_type_wrapper_*`
 
+## Coordinate reading helpers
+
+In `../geopolars/src/geoarrow/storage.rs`, you will find two helpers for reading coordinates.
+They are split up based on the GeoArrow spec stating that validity shall always only be expressed
+at the outer level (e.g. a valid Polygon cannot have invalid coordinates).
+
+- *Axes*, which ignores the validity, assuming all to be valid (i.e. in polygon).
+- *CoordsView*, which considers validity (only for Points).
+
+Note that valid thins can still contain NaN values (and *Empty* points, represented as both NaN)
+
 ## Implementation tiers
 
 Every operation is implemented at one of three tiers:
