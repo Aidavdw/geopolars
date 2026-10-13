@@ -8,15 +8,14 @@ use std::rc::Rc;
 
 use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
 use polars::prelude::*;
-use polars_arrow::array::{Array, PrimitiveArray, StructArray};
-use polars_arrow::compute::utils::combine_validities_and;
+use polars_arrow::array::{MutablePrimitiveArray, PrimitiveArray};
 use polars_arrow::datatypes::ArrowDataType;
 use polars_core::utils::align_chunks_binary;
 use pyo3_polars::derive::polars_expr;
 use rsgeo::proj::Proj;
 
 use crate::geoarrow::geodetic::GeodeticCrs;
-use crate::geoarrow::storage::Axes;
+use crate::geoarrow::storage::CoordsView;
 use crate::geoarrow::{describe, Kind};
 
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
@@ -116,8 +115,8 @@ impl GeodesicMetric {
 pub(crate) trait Metric {
     /// A vertex, ready to measure from (reprojected once, for the ellipsoid).
     type Vertex: Copy;
-    /// Vertex `i`. Its height only counts with `Z`.
-    fn vertex<const Z: bool>(&self, axes: &Axes, i: usize) -> PolarsResult<Self::Vertex>;
+    /// The vertex at `position`. Its height only counts in [`segment`](Self::segment) with `Z`.
+    fn vertex(&self, position: [f64; 3]) -> PolarsResult<Self::Vertex>;
     /// How long the segment `ab` is.
     fn segment<const Z: bool>(&self, a: Self::Vertex, b: Self::Vertex) -> f64;
 }
@@ -129,8 +128,8 @@ impl Metric for Planar {
     type Vertex = [f64; 3];
 
     #[inline(always)]
-    fn vertex<const Z: bool>(&self, axes: &Axes, i: usize) -> PolarsResult<[f64; 3]> {
-        Ok(axes.position::<Z>(i))
+    fn vertex(&self, position: [f64; 3]) -> PolarsResult<[f64; 3]> {
+        Ok(position)
     }
 
     #[inline(always)]
@@ -151,8 +150,7 @@ impl Metric for GeodesicMetric {
     type Vertex = WithHeight;
 
     #[inline(always)]
-    fn vertex<const Z: bool>(&self, axes: &Axes, i: usize) -> PolarsResult<WithHeight> {
-        let [x, y, z] = axes.position::<Z>(i);
+    fn vertex(&self, [x, y, z]: [f64; 3]) -> PolarsResult<WithHeight> {
         Ok((self.lonlat((x, y))?, z))
     }
 
@@ -218,52 +216,42 @@ fn kernel_output_type_distance_geodesic(input_fields: &[Field]) -> PolarsResult<
 /// A point's `(x, y)` and its `z`, kept apart so the `(x, y)` can go to PROJ as is.
 pub type WithHeight = ((f64, f64), f64);
 
-/// The distance between the points of `a` and `b`, row by row,
-/// over two chunks of the same length.
+/// The distance between the points of `a` and `b`
 fn pairwise<const Z: bool>(
     metric: &impl Metric,
-    a: &StructArray,
-    b: &StructArray,
+    a: &CoordsView,
+    b: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let ((axes_a, _), (axes_b, _)) = (Axes::new(a)?, Axes::new(b)?);
-    let validity = combine_validities_and(a.validity(), b.validity());
-    let values = (0..a.len())
-        .map(|i| {
-            // A missing point can hold anything in its fields. Never hand that to PROJ.
-            if validity.as_ref().is_some_and(|valid| !valid.get_bit(i)) {
-                return Ok(0.0);
-            }
-            let here = metric.vertex::<Z>(&axes_a, i)?;
-            let there = metric.vertex::<Z>(&axes_b, i)?;
-            Ok(metric.segment::<Z>(here, there))
-        })
-        // FIXME: this is not pre-sized
-        .collect::<PolarsResult<Vec<f64>>>()?;
-    Ok(PrimitiveArray::from_vec(values).with_validity(validity))
+    polars_ensure!(a.len() == b.len(), ComputeError: "Chunks must be same size");
+    let mut distances = MutablePrimitiveArray::with_capacity(a.len());
+    for i in 0..a.len() {
+        // A missing point can hold anything in its fields. Never hand that to PROJ.
+        match (a.position::<true>(i), b.position::<true>(i)) {
+            (Some(here), Some(there)) => distances
+                .push_value(metric.segment::<Z>(metric.vertex(here)?, metric.vertex(there)?)),
+            _ => distances.push(None),
+        }
+    }
+    Ok(distances.into())
 }
 
-/// The distance between the single point `one` and every point of `many`.
+/// The distance between the single point at `one` and every point of `many`.
 /// `one` is prepared (reprojected) once, rather than on every row.
 fn against_one<const Z: bool>(
     metric: &impl Metric,
-    one: &StructArray,
-    many: &StructArray,
+    one: [f64; 3],
+    many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    if one.is_null(0) {
-        return Ok(PrimitiveArray::new_null(ArrowDataType::Float64, many.len()));
+    let one = metric.vertex(one)?;
+    let mut distances = MutablePrimitiveArray::with_capacity(many.len());
+    for i in 0..many.len() {
+        // A missing point can hold anything in its fields. Never hand that to PROJ.
+        match many.position::<true>(i) {
+            Some(there) => distances.push_value(metric.segment::<Z>(one, metric.vertex(there)?)),
+            None => distances.push(None),
+        }
     }
-    let one = metric.vertex::<Z>(&Axes::new(one)?.0, 0)?;
-    let (axes, _) = Axes::new(many)?;
-    let values = (0..many.len())
-        .map(|i| {
-            // A missing point can hold anything in its fields. Never hand that to PROJ.
-            if many.is_null(i) {
-                return Ok(0.0);
-            }
-            Ok(metric.segment::<Z>(one, metric.vertex::<Z>(&axes, i)?))
-        })
-        .collect::<PolarsResult<Vec<f64>>>()?;
-    Ok(PrimitiveArray::from_vec(values).with_validity(many.validity().cloned()))
+    Ok(distances.into())
 }
 
 /// [`against_one`] for every chunk of `many`. Distance goes both ways,
@@ -279,8 +267,14 @@ fn every_against_one(
         .downcast_iter()
         .next()
         .expect("a single point is one chunk");
+    let Some(one) = CoordsView::new(one)?.position::<true>(0) else {
+        return Ok(many
+            .downcast_iter()
+            .map(|many| PrimitiveArray::new_null(ArrowDataType::Float64, many.len()))
+            .collect());
+    };
     many.downcast_iter()
-        .map(|many| with_const_flags!(against_one(metric, one, many); z))
+        .map(|many| with_const_flags!(against_one(metric, one, &CoordsView::new(many)?); z))
         .collect()
 }
 
@@ -301,7 +295,10 @@ fn distance_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
             let (a, b) = align_chunks_binary(a, b);
             a.downcast_iter()
                 .zip(b.downcast_iter())
-                .map(|(a, b)| with_const_flags!(pairwise(&*metric, a, b); z))
+                .map(|(a, b)| {
+                    let (a, b) = (CoordsView::new(a)?, CoordsView::new(b)?);
+                    with_const_flags!(pairwise(&*metric, &a, &b); z)
+                })
                 .collect::<PolarsResult<Vec<_>>>()?
         }
         (1, _) => every_against_one(&*metric, a, b, z)?,

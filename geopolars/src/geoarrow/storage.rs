@@ -120,6 +120,11 @@ impl<'a> CoordsView<'a> {
         Ok(Self { coords, x, y, z, m })
     }
 
+    /// How many coordinates there are.
+    pub(crate) fn len(&self) -> usize {
+        self.coords.len()
+    }
+
     /// Whether coordinate `i` is there, with every one of its axes.
     pub(crate) fn present(&self, i: usize) -> bool {
         self.coords.is_valid(i) && self.axes().all(|axis| axis.is_valid(i))

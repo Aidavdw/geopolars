@@ -66,10 +66,10 @@ fn line_length<const Z: bool, M: Metric>(
     let Some(first) = vertices.next() else {
         return Ok(0.0);
     };
-    let mut previous = metric.vertex::<Z>(axes, first)?;
+    let mut previous = metric.vertex(axes.position::<Z>(first))?;
     let mut total = 0.0;
     for i in vertices {
-        let here = metric.vertex::<Z>(axes, i)?;
+        let here = metric.vertex(axes.position::<Z>(i))?;
         total += metric.segment::<Z>(previous, here);
         previous = here;
     }
