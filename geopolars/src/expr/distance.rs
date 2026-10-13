@@ -8,6 +8,13 @@
 //! - Planar
 //! - Geodesic
 
+// TODO: A couple more methods of calculating distance:
+// - Euclidian (fast like planar, but now uses the CRS units),
+//   which should have a usage note that it might have a large error for long distances.
+// - Haversine, errors up to 0.5%
+// - Rhumb, distance along const lat or long bearing
+// - Projected, which is just Geodesic but first projected to WGS84, and uses Karney's algorithm.
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -186,6 +193,8 @@ enum DistanceMethod {
 #[serde(deny_unknown_fields)]
 struct DistanceKwargs {
     method: DistanceMethod,
+    // TODO: flag which allows automatically re-projecting points if they are in a different CRS.
+    // Should be false by default (which raises plan-time error)
 }
 
 /// The CRS two point columns share, or `None` if neither declares one. Type operation only.
