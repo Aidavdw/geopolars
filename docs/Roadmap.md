@@ -1,0 +1,77 @@
+
+# Roadmap
+
+## Core IO
+
+- [x] WKB encoding and decoding
+- [x] WKT encoding and decoding
+- [x] GeoParquet read
+- [x] GeoParquet write
+- [x] GeoParquet bbox covering (written on request, read as a box)
+
+Later goals:
+
+- [ ] GeoJson read
+- [ ] PostGIS read
+- [ ] GDAL vector files
+- [ ] Interop with arrow
+
+## Per-geometry properties and ops
+
+- [x] Area
+- [x] Length
+- [x] getters for coordinates (z/m)
+- [ ] CRS: opaque SRIDs refused for reprojection?
+- [x] is_empty for all geo
+- [x] validity checking functions
+- [ ] Handling closing of loop consistently for polygon
+- [ ] mean coordinate
+- [ ] centroid
+- [ ] convex hull
+- [ ] simplify/decimate
+- [ ] equality
+
+affine transforms:
+
+- [x] translate
+- [x] rotate
+- [x] scale
+- [x] skew
+- [x] transform (with a matrix): `affine_transform`
+- [x] shift (by a value in a different column)
+- [x] rotate around coordinate from another column
+- [x] scale around coordinate from another column
+- [x] skew around a coordinate from another column
+- [x] rotate around own centroid (can use the above)
+- [x] scale around own centroid (can use the above)
+- [x] skew around own centroid (can use the above)
+
+transfer transforms
+
+- [ ] interpolate
+- [ ] project
+
+geometry editing
+
+- [ ] Linestring joining
+- [ ] polygon construction from linestrings
+- [ ] Adding additional holes to polygons from linestrings
+
+## Binary predicates
+
+- [ ] intersect
+- [ ] contains
+- [ ] within
+- [ ] covers
+- [ ] covered_by
+- [ ] touches
+- [ ] crosses
+- [ ] overlaps
+- [ ] disjoint
+- [ ] distance_to
+
+creating new geometries
+
+- [ ] intersection
+- [ ] union
+- [ ] difference
