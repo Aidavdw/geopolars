@@ -53,8 +53,8 @@ fn centroids_of(dtype: &DataType) -> PolarsResult<Centroids> {
     })
 }
 
-/// `output_type_func` for [`centroid`].
-fn centroid_type(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`centroid`].
+fn kernel_output_type_centroid(input_fields: &[Field]) -> PolarsResult<Field> {
     let centroids = centroids_of(input_fields[0].dtype())?;
     Ok(Field::new(input_fields[0].name().clone(), centroids.dtype))
 }
@@ -303,7 +303,7 @@ fn polygon_centroids(chunk: &ListArray<i64>, multi: bool) -> PolarsResult<Box<dy
 }
 
 /// See python `centroid`.
-#[polars_expr(output_type_func=centroid_type)]
+#[polars_expr(output_type_func=kernel_output_type_centroid)]
 fn centroid(inputs: &[Series]) -> PolarsResult<Series> {
     let Centroids {
         dtype,

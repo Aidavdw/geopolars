@@ -24,9 +24,9 @@ fn reprojected_geometry_type(dtype: &DataType, to: &str) -> PolarsResult<Geo> {
     Ok(Geo::new(geo.kind, geo.dim, Arc::new(metadata)))
 }
 
-/// `output_type_func_with_kwargs` for [`to_crs`]: the same geometry, but the
+/// For [`to_crs`]: the same geometry, but the
 /// metadata now names the target CRS, so the dtype is a different one.
-fn reprojected(input_fields: &[Field], kwargs: ToCrsKwargs) -> PolarsResult<Field> {
+fn kernel_output_type_to_crs(input_fields: &[Field], kwargs: ToCrsKwargs) -> PolarsResult<Field> {
     let field = &input_fields[0];
     // Built here as well as in the kernel, so a CRS PROJ cannot use fails while the plan is built.
     transformation(field.dtype(), &kwargs.to)?;
@@ -99,7 +99,7 @@ fn reproject(coords: &Series, dim: GeoDimension, proj: &Proj) -> PolarsResult<Se
 }
 
 /// See `to_crs`.
-#[polars_expr(output_type_func_with_kwargs=reprojected)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_to_crs)]
 fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
     let proj = transformation(inputs[0].dtype(), &kwargs.to)?;

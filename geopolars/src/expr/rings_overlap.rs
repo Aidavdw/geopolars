@@ -21,10 +21,10 @@ pub struct RingsOverlapKwargs {
     include_touching: bool,
 }
 
-/// `output_type_func` for [`rings_overlap`]: a `bool`, named after the first ring.
+/// For [`rings_overlap`]: a `bool`, named after the first ring.
 ///
 /// Both have to be linestrings, in the same CRS (or neither declaring one).
-fn rings_overlap_type(input_fields: &[Field]) -> PolarsResult<Field> {
+fn kernel_output_type_rings_overlap(input_fields: &[Field]) -> PolarsResult<Field> {
     let [a, b] = input_fields else {
         polars_bail!(ComputeError: "rings_overlap takes two rings, got {} inputs", input_fields.len());
     };
@@ -121,7 +121,7 @@ pub(crate) fn overlap(matrix: &IntersectionMatrix, include_touching: bool) -> bo
 }
 
 /// See `rings_overlap`.
-#[polars_expr(output_type_func=rings_overlap_type)]
+#[polars_expr(output_type_func=kernel_output_type_rings_overlap)]
 fn rings_overlap(inputs: &[Series], kwargs: RingsOverlapKwargs) -> PolarsResult<Series> {
     let out: BooleanChunked = relate_rings(&inputs[0], &inputs[1])?
         .into_iter()

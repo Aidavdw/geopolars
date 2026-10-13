@@ -104,9 +104,9 @@ fn polygon_self_intersects(rings: Vec<Polygon<f64>>) -> bool {
     })
 }
 
-/// `output_type_func` for [`self_intersects`]:
+/// For [`self_intersects`]:
 /// a `bool` per linestring or polygon, or a list of them (one per part) for a multi-geometry.
-fn self_intersects_type(input_fields: &[Field]) -> PolarsResult<Field> {
+fn kernel_output_type_self_intersects(input_fields: &[Field]) -> PolarsResult<Field> {
     let field = &input_fields[0];
     let dtype = match describe(field.dtype())?.kind {
         Kind::LineString | Kind::Polygon => DataType::Boolean,
@@ -169,9 +169,9 @@ fn polygons(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<Boole
 }
 
 /// See `self_intersects`.
-#[polars_expr(output_type_func=self_intersects_type)]
+#[polars_expr(output_type_func=kernel_output_type_self_intersects)]
 fn self_intersects(inputs: &[Series]) -> PolarsResult<Series> {
-    self_intersects_type(&[inputs[0].field().into_owned()])?;
+    kernel_output_type_self_intersects(&[inputs[0].field().into_owned()])?;
     let kind = describe(inputs[0].dtype())?.kind;
     let storage = inputs[0].ext()?.storage();
     let name = inputs[0].name().clone();
@@ -193,7 +193,9 @@ fn self_intersects(inputs: &[Series]) -> PolarsResult<Series> {
             let chunks = chunks.map(|chunk| per_part(chunk, polygons));
             ListChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
-        Kind::Point | Kind::MultiPoint => unreachable!("refused by `self_intersects_type`"),
+        Kind::Point | Kind::MultiPoint => {
+            unreachable!("refused by `kernel_output_type_self_intersects`")
+        }
     };
     Ok(out)
 }

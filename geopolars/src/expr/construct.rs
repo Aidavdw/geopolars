@@ -90,8 +90,8 @@ fn gathered(
     Ok(Geo::new(kind, dim, kwargs.apply(metadata)?))
 }
 
-/// `output_type_func_with_kwargs` for gathering a list of `part`s into a `kind`.
-fn gathered_type(
+/// For gathering a list of `part`s into a `kind`.
+fn kernel_output_type_wrapper_gathered(
     input_fields: &[Field],
     kwargs: &MetadataKwargs,
     kind: Kind,
@@ -102,12 +102,18 @@ fn gathered_type(
     Ok(Field::new(field.name().clone(), geo.dtype()))
 }
 
-fn linestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    gathered_type(input_fields, &kwargs, Kind::LineString, Kind::Point)
+fn kernel_output_type_linestring(
+    input_fields: &[Field],
+    kwargs: MetadataKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_gathered(input_fields, &kwargs, Kind::LineString, Kind::Point)
 }
 
-fn polygon_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<Field> {
-    gathered_type(
+fn kernel_output_type_polygon(
+    input_fields: &[Field],
+    kwargs: PolygonKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_gathered(
         input_fields,
         &kwargs.metadata(),
         Kind::Polygon,
@@ -115,12 +121,18 @@ fn polygon_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<F
     )
 }
 
-fn multipoint_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    gathered_type(input_fields, &kwargs, Kind::MultiPoint, Kind::Point)
+fn kernel_output_type_multipoint(
+    input_fields: &[Field],
+    kwargs: MetadataKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_gathered(input_fields, &kwargs, Kind::MultiPoint, Kind::Point)
 }
 
-fn multilinestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    gathered_type(
+fn kernel_output_type_multilinestring(
+    input_fields: &[Field],
+    kwargs: MetadataKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_gathered(
         input_fields,
         &kwargs,
         Kind::MultiLineString,
@@ -128,8 +140,11 @@ fn multilinestring_type(input_fields: &[Field], kwargs: MetadataKwargs) -> Polar
     )
 }
 
-fn multipolygon_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<Field> {
-    gathered_type(
+fn kernel_output_type_multipolygon(
+    input_fields: &[Field],
+    kwargs: PolygonKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_gathered(
         input_fields,
         &kwargs.metadata(),
         Kind::MultiPolygon,
@@ -307,13 +322,13 @@ fn gather(
 }
 
 /// See `linestring_from_vertices`.
-#[polars_expr(output_type_func_with_kwargs=linestring_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_linestring)]
 fn linestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     gather(&inputs[0], &kwargs, false, Kind::LineString, Kind::Point)
 }
 
 /// See `polygon_from_rings`.
-#[polars_expr(output_type_func_with_kwargs=polygon_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon)]
 fn polygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     gather(
         &inputs[0],
@@ -325,14 +340,14 @@ fn polygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
 }
 
 /// See `multipoint_from_points`.
-#[polars_expr(output_type_func_with_kwargs=multipoint_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipoint)]
 fn multipoint(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     // Note that this is basically the same as linestring, but just a different [Kind].
     gather(&inputs[0], &kwargs, false, Kind::MultiPoint, Kind::Point)
 }
 
 /// See `multilinestring_from_linestrings`.
-#[polars_expr(output_type_func_with_kwargs=multilinestring_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_multilinestring)]
 fn multilinestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     gather(
         &inputs[0],
@@ -344,7 +359,7 @@ fn multilinestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Se
 }
 
 /// See `multipolygon_from_polygons`.
-#[polars_expr(output_type_func_with_kwargs=multipolygon_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipolygon)]
 fn multipolygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     gather(
         &inputs[0],
@@ -392,33 +407,49 @@ fn zipped(input_fields: &[Field], kwargs: &MetadataKwargs, kind: Kind) -> Polars
     Ok(Geo::new(kind, dim, kwargs.apply(Default::default())?))
 }
 
-/// `output_type_func_with_kwargs` for zipping coordinate columns into a `kind`.
-fn zipped_type(input_fields: &[Field], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<Field> {
+/// For zipping coordinate columns into a `kind`.
+fn kernel_output_type_wrapper_zipped(
+    input_fields: &[Field],
+    kwargs: &MetadataKwargs,
+    kind: Kind,
+) -> PolarsResult<Field> {
     let geo = zipped(input_fields, kwargs, kind)?;
     Ok(Field::new(input_fields[0].name().clone(), geo.dtype()))
 }
 
-fn linestring_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    zipped_type(input_fields, &kwargs, Kind::LineString)
-}
-
-fn polygon_coords_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<Field> {
-    zipped_type(input_fields, &kwargs.metadata(), Kind::Polygon)
-}
-
-fn multipoint_coords_type(input_fields: &[Field], kwargs: MetadataKwargs) -> PolarsResult<Field> {
-    zipped_type(input_fields, &kwargs, Kind::MultiPoint)
-}
-
-fn multilinestring_coords_type(
+fn kernel_output_type_linestring_coords(
     input_fields: &[Field],
     kwargs: MetadataKwargs,
 ) -> PolarsResult<Field> {
-    zipped_type(input_fields, &kwargs, Kind::MultiLineString)
+    kernel_output_type_wrapper_zipped(input_fields, &kwargs, Kind::LineString)
 }
 
-fn multipolygon_coords_type(input_fields: &[Field], kwargs: PolygonKwargs) -> PolarsResult<Field> {
-    zipped_type(input_fields, &kwargs.metadata(), Kind::MultiPolygon)
+fn kernel_output_type_polygon_coords(
+    input_fields: &[Field],
+    kwargs: PolygonKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_zipped(input_fields, &kwargs.metadata(), Kind::Polygon)
+}
+
+fn kernel_output_type_multipoint_coords(
+    input_fields: &[Field],
+    kwargs: MetadataKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_zipped(input_fields, &kwargs, Kind::MultiPoint)
+}
+
+fn kernel_output_type_multilinestring_coords(
+    input_fields: &[Field],
+    kwargs: MetadataKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_zipped(input_fields, &kwargs, Kind::MultiLineString)
+}
+
+fn kernel_output_type_multipolygon_coords(
+    input_fields: &[Field],
+    kwargs: PolygonKwargs,
+) -> PolarsResult<Field> {
+    kernel_output_type_wrapper_zipped(input_fields, &kwargs.metadata(), Kind::MultiPolygon)
 }
 
 /// Interleave columns that each nest their coordinate `nesting` `List` layers
@@ -489,31 +520,31 @@ fn zip(
 }
 
 /// See `linestring_from_columns`.
-#[polars_expr(output_type_func_with_kwargs=linestring_coords_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_linestring_coords)]
 fn linestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, false, Kind::LineString)
 }
 
 /// See `polygon_from_columns`.
-#[polars_expr(output_type_func_with_kwargs=polygon_coords_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon_coords)]
 fn polygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs.metadata(), kwargs.close, Kind::Polygon)
 }
 
 /// See `multipoint_from_columns`.
-#[polars_expr(output_type_func_with_kwargs=multipoint_coords_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipoint_coords)]
 fn multipoint_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, false, Kind::MultiPoint)
 }
 
 /// See `multilinestring_from_columns`.
-#[polars_expr(output_type_func_with_kwargs=multilinestring_coords_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_multilinestring_coords)]
 fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs, false, Kind::MultiLineString)
 }
 
 /// See `multipolygon_from_columns`.
-#[polars_expr(output_type_func_with_kwargs=multipolygon_coords_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipolygon_coords)]
 fn multipolygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs.metadata(), kwargs.close, Kind::MultiPolygon)
 }

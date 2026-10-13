@@ -44,14 +44,14 @@ fn rings_type(dtype: &DataType, name: &str, kind: Kind) -> PolarsResult<(DataTyp
     Ok((dtype, multi))
 }
 
-/// `output_type_func` for [`exterior`].
-fn exterior_type(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`exterior`].
+fn kernel_output_type_exterior(input_fields: &[Field]) -> PolarsResult<Field> {
     let (dtype, _) = rings_type(input_fields[0].dtype(), "exterior", Kind::LineString)?;
     Ok(Field::new(input_fields[0].name().clone(), dtype))
 }
 
-/// `output_type_func` for [`interior`].
-fn interior_type(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`interior`].
+fn kernel_output_type_interior(input_fields: &[Field]) -> PolarsResult<Field> {
     let (dtype, _) = rings_type(input_fields[0].dtype(), "interior", Kind::MultiLineString)?;
     Ok(Field::new(input_fields[0].name().clone(), dtype))
 }
@@ -191,14 +191,14 @@ fn per_polygon(
 }
 
 /// See `exterior`.
-#[polars_expr(output_type_func=exterior_type)]
+#[polars_expr(output_type_func=kernel_output_type_exterior)]
 fn exterior(inputs: &[Series]) -> PolarsResult<Series> {
     let (dtype, multi) = rings_type(inputs[0].dtype(), "exterior", Kind::LineString)?;
     per_polygon(inputs, &dtype, multi, exterior_part)
 }
 
 /// See `interior`.
-#[polars_expr(output_type_func=interior_type)]
+#[polars_expr(output_type_func=kernel_output_type_interior)]
 fn interior(inputs: &[Series]) -> PolarsResult<Series> {
     let (dtype, multi) = rings_type(inputs[0].dtype(), "interior", Kind::MultiLineString)?;
     per_polygon(inputs, &dtype, multi, interior_part)

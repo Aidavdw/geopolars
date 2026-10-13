@@ -13,9 +13,9 @@ use pyo3_polars::derive::polars_expr;
 use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
 
-/// `output_type_func` for [`is_ring`]:
+/// For [`is_ring`]:
 /// a `bool` per linestring, or a list of them (one per part) for a multilinestring.
-fn is_ring_type(input_fields: &[Field]) -> PolarsResult<Field> {
+fn kernel_output_type_is_ring(input_fields: &[Field]) -> PolarsResult<Field> {
     let field = &input_fields[0];
     let dtype = match describe(field.dtype())?.kind {
         Kind::LineString => DataType::Boolean,
@@ -42,9 +42,9 @@ fn rings(lines: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArra
 }
 
 /// See `is_ring`.
-#[polars_expr(output_type_func=is_ring_type)]
+#[polars_expr(output_type_func=kernel_output_type_is_ring)]
 fn is_ring(inputs: &[Series]) -> PolarsResult<Series> {
-    let field = is_ring_type(&[inputs[0].field().into_owned()])?;
+    let field = kernel_output_type_is_ring(&[inputs[0].field().into_owned()])?;
     let storage = inputs[0].ext()?.storage();
     let name = inputs[0].name().clone();
     let chunks = storage.list()?.downcast_iter();

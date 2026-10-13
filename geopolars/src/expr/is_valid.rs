@@ -24,7 +24,7 @@ use rsgeo::relate::IntersectionMatrix;
 use rsgeo::{Coord, LineString, Polygon, PreparedGeometry, Relate};
 use serde::Deserialize;
 
-use super::coords::same_geometry;
+use super::coords::kernel_output_type_same_geometry;
 use super::self_intersects::vertices_self_intersect;
 use crate::geoarrow::storage::{downcast, same_position, CoordsView};
 use crate::geoarrow::{describe, Kind};
@@ -558,21 +558,21 @@ pub(crate) fn are_valid(
     BooleanChunked::try_from_chunk_iter(geometries.name().clone(), chunks)
 }
 
-/// `output_type_func` for [`is_valid`]: a `bool` per geometry.
-fn is_valid_type(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`is_valid`]: a `bool` per geometry.
+fn kernel_output_type_is_valid(input_fields: &[Field]) -> PolarsResult<Field> {
     let field = &input_fields[0];
     describe(field.dtype())?;
     Ok(Field::new(field.name().clone(), DataType::Boolean))
 }
 
 /// See `is_valid`.
-#[polars_expr(output_type_func=is_valid_type)]
+#[polars_expr(output_type_func=kernel_output_type_is_valid)]
 fn is_valid(inputs: &[Series], kwargs: IsValidKwargs) -> PolarsResult<Series> {
     Ok(are_valid(&inputs[0], &kwargs)?.into_series())
 }
 
 /// See `null_out_invalid`.
-#[polars_expr(output_type_func=same_geometry)]
+#[polars_expr(output_type_func=kernel_output_type_same_geometry)]
 fn null_out_invalid(inputs: &[Series], kwargs: IsValidKwargs) -> PolarsResult<Series> {
     let geometries = &inputs[0];
     let valid = are_valid(geometries, &kwargs)?;

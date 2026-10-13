@@ -67,13 +67,13 @@ fn area_dtype(field: &Field) -> PolarsResult<Field> {
     }
 }
 
-/// `output_type_func` for [`area_planar`]: in the unit of the coordinates squared.
-fn areas_planar(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`area_planar`]: in the unit of the coordinates squared.
+fn kernel_output_type_area_planar(input_fields: &[Field]) -> PolarsResult<Field> {
     area_dtype(&input_fields[0])
 }
 
-/// `output_type_func` for [`area_geodesic`]: in the unit of the CRS squared.
-fn areas(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`area_geodesic`]: in the unit of the CRS squared.
+fn kernel_output_type_area_geodesic(input_fields: &[Field]) -> PolarsResult<Field> {
     // Check if the CRS can be used by PROJ. If not, raise error at plan time rather than at runtime.
     GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
     area_dtype(&input_fields[0])
@@ -104,7 +104,7 @@ fn planar(storage: &Series, kind: Kind) -> PolarsResult<Float64Chunked> {
 }
 
 /// See `area_planar`.
-#[polars_expr(output_type_func=areas_planar)]
+#[polars_expr(output_type_func=kernel_output_type_area_planar)]
 fn area_planar(inputs: &[Series]) -> PolarsResult<Series> {
     let storage = inputs[0].ext()?.storage();
     let out = match describe(inputs[0].dtype())?.kind {
@@ -200,7 +200,7 @@ fn multipolygons(storage: &Series, metric: &GeodesicMetric) -> PolarsResult<Floa
 }
 
 /// See `area`.
-#[polars_expr(output_type_func=areas)]
+#[polars_expr(output_type_func=kernel_output_type_area_geodesic)]
 fn area_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let crs = crs_of(&inputs[0].field())?;
     let storage = inputs[0].ext()?.storage();

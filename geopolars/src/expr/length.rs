@@ -44,13 +44,13 @@ fn length_dtype(field: &Field) -> PolarsResult<Field> {
     }
 }
 
-/// `output_type_func` for [`length_planar`]: in the unit of the coordinates.
-fn lengths_planar(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`length_planar`]: in the unit of the coordinates.
+fn kernel_output_type_length_planar(input_fields: &[Field]) -> PolarsResult<Field> {
     length_dtype(&input_fields[0])
 }
 
-/// `output_type_func` for [`length_geodesic`]: in the unit of the CRS.
-fn lengths_geodesic(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`length_geodesic`]: in the unit of the CRS.
+fn kernel_output_type_length_geodesic(input_fields: &[Field]) -> PolarsResult<Field> {
     // So a CRS PROJ cannot measure in fails while the plan is built.
     GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
     length_dtype(&input_fields[0])
@@ -127,13 +127,13 @@ fn measure(metric: &impl Metric, geometries: &Series) -> PolarsResult<Series> {
 }
 
 /// See `length_planar`.
-#[polars_expr(output_type_func=lengths_planar)]
+#[polars_expr(output_type_func=kernel_output_type_length_planar)]
 fn length_planar(inputs: &[Series]) -> PolarsResult<Series> {
     measure(&Planar, &inputs[0])
 }
 
 /// See `length_geodesic`.
-#[polars_expr(output_type_func=lengths_geodesic)]
+#[polars_expr(output_type_func=kernel_output_type_length_geodesic)]
 fn length_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let metric = GeodesicMetric::of(&crs_of(&inputs[0].field())?)?;
     measure(&*metric, &inputs[0])

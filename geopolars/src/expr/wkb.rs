@@ -13,8 +13,8 @@ use crate::geoarrow::describe;
 use crate::geoarrow::encoded::{describe_encoded, Encoded, Encoding};
 use crate::geoarrow::geotraits::for_each_geometry;
 
-/// `output_type_func` for [`to_wkb`]: WKB carrying the geometry's metadata.
-fn wkb_type(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`to_wkb`]: WKB carrying the geometry's metadata.
+fn kernel_output_type_to_wkb(input_fields: &[Field]) -> PolarsResult<Field> {
     let field = &input_fields[0];
     let geo = describe(field.dtype())?;
     let wkb = Encoded::new(Encoding::Wkb, geo.metadata.clone());
@@ -22,7 +22,7 @@ fn wkb_type(input_fields: &[Field]) -> PolarsResult<Field> {
 }
 
 /// See `to_wkb`.
-#[polars_expr(output_type_func=wkb_type)]
+#[polars_expr(output_type_func=kernel_output_type_to_wkb)]
 fn to_wkb(inputs: &[Series]) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
     let storage = inputs[0].ext()?.storage();
@@ -49,14 +49,17 @@ fn to_wkb(inputs: &[Series]) -> PolarsResult<Series> {
     Ok(binary.into_extension(wkb.instance()))
 }
 
-fn from_wkb_type(input_fields: &[Field], kwargs: DecodeKwargs) -> PolarsResult<Field> {
+fn kernel_output_type_from_wkb(
+    input_fields: &[Field],
+    kwargs: DecodeKwargs,
+) -> PolarsResult<Field> {
     let field = &input_fields[0];
     let geo = target(describe_encoded(field.dtype(), Encoding::Wkb)?, &kwargs)?;
     Ok(Field::new(field.name().clone(), geo.dtype()))
 }
 
 /// See `from_wkb`.
-#[polars_expr(output_type_func_with_kwargs=from_wkb_type)]
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_from_wkb)]
 fn from_wkb(inputs: &[Series], kwargs: DecodeKwargs) -> PolarsResult<Series> {
     let geo = target(describe_encoded(inputs[0].dtype(), Encoding::Wkb)?, &kwargs)?;
     let binary = match inputs[0].dtype() {

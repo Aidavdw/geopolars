@@ -32,9 +32,9 @@ fn unoriented(kind: Kind) -> PolarsError {
     )
 }
 
-/// `output_type_func` for [`is_standard_orientation`]:
+/// For [`is_standard_orientation`]:
 /// a `bool` per geometry, or a list of them (one per part) for a multi.
-fn is_standard_orientation_type(input_fields: &[Field]) -> PolarsResult<Field> {
+fn kernel_output_type_is_standard_orientation(input_fields: &[Field]) -> PolarsResult<Field> {
     let field = &input_fields[0];
     let dtype = match describe(field.dtype())?.kind {
         Kind::LineString | Kind::Polygon => DataType::Boolean,
@@ -123,7 +123,7 @@ pub(crate) fn per_part(
 }
 
 /// See `is_standard_orientation`.
-#[polars_expr(output_type_func=is_standard_orientation_type)]
+#[polars_expr(output_type_func=kernel_output_type_is_standard_orientation)]
 fn is_standard_orientation(inputs: &[Series], kwargs: OrientationKwargs) -> PolarsResult<Series> {
     let kind = describe(inputs[0].dtype())?.kind;
     let storage = inputs[0].ext()?.storage();

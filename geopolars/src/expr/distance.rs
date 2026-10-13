@@ -205,8 +205,8 @@ fn shared_crs(fields: &[Field]) -> PolarsResult<String> {
     Ok(crs_a)
 }
 
-/// `output_type_func` for [`distance_geodesic`]: an `f64`, named after the first point.
-fn distance_field(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`distance_geodesic`]: an `f64`, named after the first point.
+fn kernel_output_type_distance_geodesic(input_fields: &[Field]) -> PolarsResult<Field> {
     // So a CRS PROJ cannot measure in fails while the plan is built.
     GeodesicMetric::of(&shared_crs(input_fields)?)?;
     Ok(Field::new(
@@ -285,7 +285,7 @@ fn every_against_one(
 }
 
 /// See `distance`.
-#[polars_expr(output_type_func=distance_field)]
+#[polars_expr(output_type_func=kernel_output_type_distance_geodesic)]
 fn distance_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let fields = [
         inputs[0].field().into_owned(),

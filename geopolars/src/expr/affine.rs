@@ -10,7 +10,7 @@ use polars_arrow::compute::utils::combine_validities_and;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{coordinate_bounds, map_coords, same_geometry};
+use super::coords::{coordinate_bounds, kernel_output_type_same_geometry, map_coords};
 use crate::geoarrow::{describe, GeoDimension, Kind};
 
 // TODO: (Blocked until z-centroid is implemented): allow rotation around x/y for polygon
@@ -159,7 +159,7 @@ fn transform(
 }
 
 /// The kernel behind affine ops like `translate` (see `geo/affine.py`).
-#[polars_expr(output_type_func=same_geometry)]
+#[polars_expr(output_type_func=kernel_output_type_same_geometry)]
 fn affine(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
     let out = map_coords(inputs[0].ext()?.storage(), geo.kind.nesting(), &|coords| {
@@ -169,9 +169,9 @@ fn affine(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
     Ok(out.into_extension(geo.typ.clone()))
 }
 
-/// `output_type_func` for an operation by the points of a second column,
+/// For an operation by the points of a second column,
 /// one per geometry: it hands back the geometry it got.
-fn same_geometry_by_points(input_fields: &[Field]) -> PolarsResult<Field> {
+fn kernel_output_type_same_geometry_by_points(input_fields: &[Field]) -> PolarsResult<Field> {
     let [geometry, points] = input_fields else {
         polars_bail!(ComputeError: "expected a geometry and its points, got {} inputs", input_fields.len());
     };
@@ -199,7 +199,7 @@ fn same_geometry_by_points(input_fields: &[Field]) -> PolarsResult<Field> {
 ///
 /// That is `L.p + offset + (o − L.o)`, with `L` the matrix without its offsets:
 /// the constant kernel, with a shift that is the same for every position of a geometry.
-#[polars_expr(output_type_func=same_geometry_by_points)]
+#[polars_expr(output_type_func=kernel_output_type_same_geometry_by_points)]
 fn affine_about(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
     shifted_per_row(inputs, &kwargs, &|axis, origin| {
         // A row that keeps its coordinate moves it by its offset alone, about any origin.
@@ -224,7 +224,7 @@ fn affine_about(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series>
 
 /// The kernel behind affine ops that move every geometry by a vector of its own
 /// (see `geo/affine.py`): `M.p + v`, with `v` a point per row.
-#[polars_expr(output_type_func=same_geometry_by_points)]
+#[polars_expr(output_type_func=kernel_output_type_same_geometry_by_points)]
 fn affine_then_shift(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
     // A vector without a `z` leaves it where the matrix puts it.
     shifted_per_row(inputs, &kwargs, &|axis, by| by[axis].map(<[f64]>::to_vec))

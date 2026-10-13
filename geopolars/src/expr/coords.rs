@@ -5,8 +5,8 @@ use polars::prelude::*;
 
 use crate::geoarrow::describe;
 
-/// `output_type_func` for an operation that hands back the geometry it got.
-pub fn same_geometry(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For an operation that hands back the geometry it got.
+pub fn kernel_output_type_same_geometry(input_fields: &[Field]) -> PolarsResult<Field> {
     let field = &input_fields[0];
     describe(field.dtype())?;
     Ok(field.clone())
