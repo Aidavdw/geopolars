@@ -225,7 +225,9 @@ fn pairwise<const Z: bool>(
     polars_ensure!(a.len() == b.len(), ComputeError: "Chunks must be same size");
     let mut distances = MutablePrimitiveArray::with_capacity(a.len());
     for i in 0..a.len() {
-        // A missing point can hold anything in its fields. Never hand that to PROJ.
+        // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
+        // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
+        // empty points are assumed rare enough not to warrant an extra check on every valid point.
         match (a.position::<true>(i), b.position::<true>(i)) {
             (Some(here), Some(there)) => distances
                 .push_value(metric.segment::<Z>(metric.vertex(here)?, metric.vertex(there)?)),
@@ -245,7 +247,9 @@ fn against_one<const Z: bool>(
     let one = metric.vertex(one)?;
     let mut distances = MutablePrimitiveArray::with_capacity(many.len());
     for i in 0..many.len() {
-        // A missing point can hold anything in its fields. Never hand that to PROJ.
+        // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
+        // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
+        // empty points are assumed rare enough not to warrant an extra check on every valid point.
         match many.position::<true>(i) {
             Some(there) => distances.push_value(metric.segment::<Z>(one, metric.vertex(there)?)),
             None => distances.push(None),
