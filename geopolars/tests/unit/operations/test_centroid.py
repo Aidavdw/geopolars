@@ -357,7 +357,10 @@ def test_a_multilinestring_weighs_each_part_like_a_lone_linestring(
     multis = dimension.multilinestrings(ring_coords)
     out = multis.select(geo.centroid("multilinestring"))
     expected = _weighted_mean_of_parts(
-        multis, "multilinestring", dimension.linestring_dtype(), geo.length_planar
+        multis,
+        "multilinestring",
+        dimension.linestring_dtype(),
+        lambda name: geo.length(name, method="planar"),
     )
 
     assert out.schema["multilinestring"] == dimension.point_dtype()

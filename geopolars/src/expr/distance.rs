@@ -182,7 +182,7 @@ impl Metric for GeodesicMetric {
 /// How `distance` measures, as passed from Python.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
-enum DistanceMethod {
+pub(crate) enum DistanceMethod {
     /// See [`Planar`].
     Planar,
     /// See [`GeodesicMetric`].
@@ -191,8 +191,8 @@ enum DistanceMethod {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct DistanceKwargs {
-    method: DistanceMethod,
+pub(crate) struct DistanceKwargs {
+    pub(crate) method: DistanceMethod,
     // TODO: flag which allows automatically re-projecting points if they are in a different CRS.
     // Should be false by default (which raises plan-time error)
 }

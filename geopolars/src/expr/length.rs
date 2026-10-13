@@ -1,6 +1,6 @@
 //! How long a linestring is:
-//! - in the space its coordinates lie in ([`length_planar`]),
-//! - along the ellipsoid of its CRS ([`length_geodesic`]).
+//! - in the space its coordinates lie in ([`DistanceMethod::Planar`]),
+//! - along the ellipsoid of its CRS ([`DistanceMethod::Geodesic`]).
 
 use std::ops::Range;
 
@@ -8,7 +8,7 @@ use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray};
 use pyo3_polars::derive::polars_expr;
 
-use super::distance::{GeodesicMetric, Metric, Planar};
+use super::distance::{DistanceKwargs, DistanceMethod, GeodesicMetric, Metric, Planar};
 use crate::geoarrow::storage::{downcast, Axes};
 use crate::geoarrow::{describe, Kind};
 
@@ -44,15 +44,17 @@ fn length_dtype(field: &Field) -> PolarsResult<Field> {
     }
 }
 
-/// For [`length_planar`]: in the unit of the coordinates.
-fn kernel_output_type_length_planar(input_fields: &[Field]) -> PolarsResult<Field> {
-    length_dtype(&input_fields[0])
-}
-
-/// For [`length_geodesic`]: in the unit of the CRS.
-fn kernel_output_type_length_geodesic(input_fields: &[Field]) -> PolarsResult<Field> {
-    // So a CRS PROJ cannot measure in fails while the plan is built.
-    GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
+/// Output for length:
+/// - Planar is in the unit of the coordinates
+/// - geodesic in the unit of the CRS
+fn kernel_output_type_length(
+    input_fields: &[Field],
+    kwargs: DistanceKwargs,
+) -> PolarsResult<Field> {
+    if let DistanceMethod::Geodesic = kwargs.method {
+        // So a CRS PROJ cannot measure in fails while the plan is built.
+        GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
+    }
     length_dtype(&input_fields[0])
 }
 
@@ -126,15 +128,14 @@ fn measure(metric: &impl Metric, geometries: &Series) -> PolarsResult<Series> {
     Ok(Float64Chunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())
 }
 
-/// See `length_planar`.
-#[polars_expr(output_type_func=kernel_output_type_length_planar)]
-fn length_planar(inputs: &[Series]) -> PolarsResult<Series> {
-    measure(&Planar, &inputs[0])
-}
-
-/// See `length_geodesic`.
-#[polars_expr(output_type_func=kernel_output_type_length_geodesic)]
-fn length_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
-    let metric = GeodesicMetric::of(&crs_of(&inputs[0].field())?)?;
-    measure(&*metric, &inputs[0])
+/// See `length`.
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_length)]
+fn length(inputs: &[Series], kwargs: DistanceKwargs) -> PolarsResult<Series> {
+    match kwargs.method {
+        DistanceMethod::Planar => measure(&Planar, &inputs[0]),
+        DistanceMethod::Geodesic => {
+            let metric = GeodesicMetric::of(&crs_of(&inputs[0].field())?)?;
+            measure(&*metric, &inputs[0])
+        }
+    }
 }

@@ -45,7 +45,7 @@ from geopolars.geo.is_empty import is_empty
 from geopolars.geo.is_ring import is_ring
 from geopolars.geo.is_standard_orientation import is_standard_orientation
 from geopolars.geo.is_valid import is_valid, null_out_invalid
-from geopolars.geo.length import length, length_geodesic, length_planar
+from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.rings_overlap import rings_overlap
 from geopolars.geo.self_intersects import self_intersects
@@ -75,8 +75,6 @@ __all__ = [
     "is_standard_orientation",
     "is_valid",
     "length",
-    "length_geodesic",
-    "length_planar",
     "line_string",
     "line_string_from_columns",
     "line_string_from_vertices",

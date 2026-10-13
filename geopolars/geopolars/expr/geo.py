@@ -238,20 +238,15 @@ class ExprGeoNameSpace:
 
         return distance(self._expr, other, method=method)
 
-    def length(self, *, allow_non_lines: bool = False) -> pl.Expr:
+    def length(
+        self,
+        *,
+        method: Literal["planar", "geodesic"] | None = None,
+        allow_non_lines: bool = False,
+    ) -> pl.Expr:
         from geopolars.geo.length import length
 
-        return length(self._expr, allow_non_lines=allow_non_lines)
-
-    def length_planar(self, *, allow_non_lines: bool = False) -> pl.Expr:
-        from geopolars.geo.length import length_planar
-
-        return length_planar(self._expr, allow_non_lines=allow_non_lines)
-
-    def length_geodesic(self, *, allow_non_lines: bool = False) -> pl.Expr:
-        from geopolars.geo.length import length_geodesic
-
-        return length_geodesic(self._expr, allow_non_lines=allow_non_lines)
+        return length(self._expr, method=method, allow_non_lines=allow_non_lines)
 
     def area(self, *, allow_non_polygons: bool = False) -> pl.Expr:
         from geopolars.geo.area import area
