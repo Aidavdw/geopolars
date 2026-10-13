@@ -61,6 +61,10 @@ def scan_parquet(
     )
     ```
     """
+    # FIXME: we should not offer a scan_parquet,
+    # this should work with built in.
+    # extension type registry should do this.
+    # This already works???? can get rid if.
     lf = pl.scan_parquet(
         source,
         storage_options=storage_options,

@@ -163,5 +163,9 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         slf = target.__new__(target)
         slf._name = name
         slf._storage = storage
+        # TODO: Show metadata in the long name.
+        # Must be stored on the type as well.
+        # would require parsing on pyhton side too.
+
         slf._metadata = metadata
         return slf

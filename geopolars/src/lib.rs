@@ -12,6 +12,9 @@ mod geoparquet;
 #[global_allocator]
 static ALLOC: PolarsAllocator = PolarsAllocator::new();
 
+// VERY IMPORTANT!!! NONE of these may contain polars datatypes in the type signatures
+// because we bind to a specific polars version
+
 /// See `GeoArrowType.__init__`.
 #[pyfunction]
 #[pyo3(signature = (*, crs = None))]
