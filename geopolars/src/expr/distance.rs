@@ -293,9 +293,18 @@ fn against_one<const Z: bool>(
     one: [f64; 3],
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
+    // If any of the 'one' is NaN, then everything will become NaN anyway,
+    // so we might as well exit early.
+    // Missing points stay missing.
+    if one[..if Z { 3 } else { 2 }]
+        .iter()
+        .any(|axis| axis.is_nan())
+    {
+        return Ok((0..many.len())
+            .map(|i| many.position::<true>(i).map(|_| f64::NAN))
+            .collect());
+    }
     let one = metric.vertex(one)?;
-    // TODO: if 'one' contains a nan (ignoring the third axis if not Z), exit early by just writing
-    // full NaNs.
     let mut distances = MutablePrimitiveArray::with_capacity(many.len());
     for i in 0..many.len() {
         // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
