@@ -23,22 +23,8 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
-def _squared_norm(dx: pl.Expr, dy: pl.Expr) -> pl.Expr:
-    """The squared length of an offset, by Pythagoras.
-
-    Shared by everything measured on the plane:
-    two points subtract their coordinates, a linestring diffs its vertices.
-    """
-    return dx.pow(2) + dy.pow(2)
-
-
 def _offset(a: pl.Expr, b: pl.Expr, axis: str) -> pl.Expr:
     return b.struct.field(axis) - a.struct.field(axis)
-
-
-def _planar_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    """The squared distance between two coordinate structs, in the plane."""
-    return _squared_norm(_offset(a, b, "x"), _offset(a, b, "y"))
 
 
 def _has_z(dtype: GeoArrowType) -> bool:
@@ -49,12 +35,12 @@ def _both_have_z(a_dtype: GeoArrowType, b_dtype: GeoArrowType) -> bool:
     return _has_z(a_dtype) and _has_z(b_dtype)
 
 
-def _geodesic_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
-    """The squared geodesic distance between two points in the same CRS, in its unit²."""
+def _geodesic(a: pl.Expr, b: pl.Expr) -> pl.Expr:
+    """The geodesic distance between two points in the same CRS, in its unit."""
     return register_plugin_function(
         plugin_path=LIB,
         args=[a, b],
-        function_name="distance_squared_geodesic",
+        function_name="distance_geodesic",
         is_elementwise=True,
     )
 
@@ -63,7 +49,7 @@ def _geodesic_squared(a: pl.Expr, b: pl.Expr) -> pl.Expr:
 # with flag to also interpolate between points / line?
 
 
-def _distance_squared(
+def _distance(
     a: pl.Expr, a_dtype: GeoArrowType, b: pl.Expr, b_dtype: GeoArrowType
 ) -> pl.Expr:
     # TODO: for other shapes, calculate centroid, and take distance on that.
@@ -78,27 +64,13 @@ def _distance_squared(
     # is for the kernel to check while resolving the schema.
     # The kernel counts the height itself, when both points carry one.
     if a_dtype._declares_crs() or b_dtype._declares_crs():
-        return _geodesic_squared(a, b)
+        return _geodesic(a, b)
 
     a, b = a.ext.storage(), b.ext.storage()
-    squared = _planar_squared(a, b)
+    squared = _offset(a, b, "x").pow(2) + _offset(a, b, "y").pow(2)
     if _both_have_z(a_dtype, b_dtype):
         squared = squared + _offset(a, b, "z").pow(2)
-    return squared
-
-
-def distance_squared(a: IntoExprColumn, b: IntoExprColumn) -> pl.Expr:
-    """The square of `distance`, as an `f64`.
-
-    Cheaper than `distance` when only comparing distances,
-    because ordering by the square orders by the distance as well.
-    See `distance` for more information.
-
-    ```python
-    df.select(geo.distance_squared("home", "work"))
-    ```
-    """
-    return on_geometry_pair(a, b, _distance_squared)
+    return squared.sqrt()
 
 
 def distance(a: IntoExprColumn, b: IntoExprColumn) -> pl.Expr:
@@ -135,4 +107,4 @@ def distance(a: IntoExprColumn, b: IntoExprColumn) -> pl.Expr:
     df.select(geo.distance("home", "work"))
     ```
     """
-    return distance_squared(a, b).sqrt()
+    return on_geometry_pair(a, b, _distance)

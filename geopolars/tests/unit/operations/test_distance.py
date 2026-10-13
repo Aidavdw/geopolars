@@ -48,12 +48,9 @@ def test_without_a_crs_it_is_pythagoras() -> None:
     assert _distances(df) == [5.0, 0.0]
 
 
-def test_the_distance_is_the_root_of_the_squared_distance() -> None:
+def test_negative_offsets_measure_the_same() -> None:
     df = _pairs([(0.0, 0.0), (-1.0, 2.0)], [(3.0, 4.0), (5.0, -6.0)])
 
-    squared = df.select(geo.distance_squared("a", "b")).to_series().to_list()
-
-    assert squared == [25.0, 100.0]
     assert _distances(df) == [5.0, 10.0]
 
 
@@ -289,19 +286,16 @@ def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
 def test_the_result_is_named_after_the_first_point(crs: str | None) -> None:
     df = _pairs([(0.0, 0.0)], [(3.0, 4.0)], crs=crs)
 
-    out = df.select(geo.distance("b", "a"), geo.distance_squared("a", "b"))
+    out = df.select(geo.distance("b", "a"))
 
-    assert out.schema == pl.Schema({"b": pl.Float64, "a": pl.Float64})
+    assert out.schema == pl.Schema({"b": pl.Float64})
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
 def test_the_namespace_matches_the_function(crs: str | None) -> None:
     df = _pairs([NEW_YORK, (0.0, 0.0)], [LONDON, (3.0, 4.0)], crs=crs)
 
-    for name in ("distance", "distance_squared"):
-        method = getattr(gpl.col("a").geo, name)
-        function = getattr(geo, name)
-        assert_series_equal(
-            df.select(method("b")).to_series(),
-            df.select(function("a", "b")).to_series(),
-        )
+    assert_series_equal(
+        df.select(gpl.col("a").geo.distance("b")).to_series(),
+        df.select(geo.distance("a", "b")).to_series(),
+    )

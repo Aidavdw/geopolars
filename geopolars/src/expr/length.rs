@@ -31,7 +31,8 @@ fn has_no_length(kind: Kind) -> PolarsError {
     )
 }
 
-/// An `f64` per geometry: for a multilinestring, the sum of its parts.
+/// Length always returns an `f64`.
+/// Multilinestring: sum
 fn length_dtype(field: &Field) -> PolarsResult<Field> {
     match describe(field.dtype())?.kind {
         Kind::LineString | Kind::MultiLineString => {

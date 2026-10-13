@@ -87,7 +87,6 @@ impl GeodesicMetric {
     /// in the unit of the CRS's `x` and `y` (metres if those are degrees),
     /// which is the unit [`GeodeticCrs::semi_major`] gives the ellipsoid in.
     pub fn between(&self, (lon_a, lat_a): (f64, f64), (lon_b, lat_b): (f64, f64)) -> f64 {
-        // This is distance, not squared.
         self.ellipsoid.inverse(lat_a, lon_a, lat_b, lon_b)
     }
 
@@ -206,8 +205,8 @@ fn shared_crs(fields: &[Field]) -> PolarsResult<String> {
     Ok(crs_a)
 }
 
-/// `output_type_func` for [`distance_squared_geodesic`]: an `f64`, named after the first point.
-fn squared_distance(input_fields: &[Field]) -> PolarsResult<Field> {
+/// `output_type_func` for [`distance_geodesic`]: an `f64`, named after the first point.
+fn distance_field(input_fields: &[Field]) -> PolarsResult<Field> {
     // So a CRS PROJ cannot measure in fails while the plan is built.
     GeodesicMetric::of(&shared_crs(input_fields)?)?;
     Ok(Field::new(
@@ -219,7 +218,7 @@ fn squared_distance(input_fields: &[Field]) -> PolarsResult<Field> {
 /// A point's `(x, y)` and its `z`, kept apart so the `(x, y)` can go to PROJ as is.
 pub type WithHeight = ((f64, f64), f64);
 
-/// The squared distance between the points of `a` and `b`, row by row,
+/// The distance between the points of `a` and `b`, row by row,
 /// over two chunks of the same length.
 fn pairwise<const Z: bool>(
     metric: &impl Metric,
@@ -236,14 +235,14 @@ fn pairwise<const Z: bool>(
             }
             let here = metric.vertex::<Z>(&axes_a, i)?;
             let there = metric.vertex::<Z>(&axes_b, i)?;
-            Ok(metric.segment::<Z>(here, there).powi(2))
+            Ok(metric.segment::<Z>(here, there))
         })
         // FIXME: this is not pre-sized
         .collect::<PolarsResult<Vec<f64>>>()?;
     Ok(PrimitiveArray::from_vec(values).with_validity(validity))
 }
 
-/// The squared distance between the single point `one` and every point of `many`.
+/// The distance between the single point `one` and every point of `many`.
 /// `one` is prepared (reprojected) once, rather than on every row.
 fn against_one<const Z: bool>(
     metric: &impl Metric,
@@ -261,9 +260,7 @@ fn against_one<const Z: bool>(
             if many.is_null(i) {
                 return Ok(0.0);
             }
-            Ok(metric
-                .segment::<Z>(one, metric.vertex::<Z>(&axes, i)?)
-                .powi(2))
+            Ok(metric.segment::<Z>(one, metric.vertex::<Z>(&axes, i)?))
         })
         .collect::<PolarsResult<Vec<f64>>>()?;
     Ok(PrimitiveArray::from_vec(values).with_validity(many.validity().cloned()))
@@ -287,9 +284,9 @@ fn every_against_one(
         .collect()
 }
 
-/// See `distance_squared`.
-#[polars_expr(output_type_func=squared_distance)]
-fn distance_squared_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
+/// See `distance`.
+#[polars_expr(output_type_func=distance_field)]
+fn distance_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let fields = [
         inputs[0].field().into_owned(),
         inputs[1].field().into_owned(),

@@ -233,11 +233,6 @@ class ExprGeoNameSpace:
 
         return distance(self._expr, other)
 
-    def distance_squared(self, other: IntoExprColumn) -> pl.Expr:
-        from geopolars.geo.distance import distance_squared
-
-        return distance_squared(self._expr, other)
-
     def length(self, *, allow_non_lines: bool = False) -> pl.Expr:
         from geopolars.geo.length import length
 
