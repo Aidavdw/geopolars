@@ -122,6 +122,13 @@ and dispatching to specific versions.
 Something like the `with_const_flags!` macro is very useful here.
 Be careful you don't blow it up with combinatorics though.
 
+## Naming out kernel output types
+
+Polars allows you to pass a function which gets the output dtype of the kernel,
+e.g. `#[polars_expr(output_type_func=kernel_output_type_area_planar)]`.
+These should always be named `kernel_output_type_*`.
+Functions that wrap these should be `kernel_output_type_wrapper_*`
+
 ## Implementation tiers
 
 Every operation is implemented at one of three tiers:
