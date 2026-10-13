@@ -130,7 +130,7 @@ impl Metric for Planar {
 
     #[inline(always)]
     fn vertex<const Z: bool>(&self, axes: &Axes, i: usize) -> PolarsResult<[f64; 3]> {
-        Ok([axes.x[i], axes.y[i], if Z { axes.z[i] } else { 0.0 }])
+        Ok(axes.position::<Z>(i))
     }
 
     #[inline(always)]
@@ -152,8 +152,8 @@ impl Metric for GeodesicMetric {
 
     #[inline(always)]
     fn vertex<const Z: bool>(&self, axes: &Axes, i: usize) -> PolarsResult<WithHeight> {
-        let lonlat = self.lonlat((axes.x[i], axes.y[i]))?;
-        Ok((lonlat, if Z { axes.z[i] } else { 0.0 }))
+        let [x, y, z] = axes.position::<Z>(i);
+        Ok((self.lonlat((x, y))?, z))
     }
 
     #[inline(always)]

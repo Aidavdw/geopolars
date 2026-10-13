@@ -41,12 +41,12 @@ pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
 /// For coordinates that *can* include invalid coordinates (columns of Points),
 /// use [`CoordsView`].
 pub(crate) struct Axes<'a> {
-    pub(crate) x: &'a [f64],
-    pub(crate) y: &'a [f64],
+    x: &'a [f64],
+    y: &'a [f64],
     /// Empty for a dimension without a `z`.
-    pub(crate) z: &'a [f64],
+    z: &'a [f64],
     /// Empty for a dimension without an `m`.
-    pub(crate) m: &'a [f64],
+    m: &'a [f64],
 }
 
 impl<'a> Axes<'a> {
@@ -55,6 +55,12 @@ impl<'a> Axes<'a> {
     pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, GeoDimension)> {
         let view = CoordsView::new(coords)?;
         Ok((Self::from(&view), view.dim()))
+    }
+
+    /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
+    #[inline(always)]
+    pub(crate) fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
+        [self.x[i], self.y[i], if Z { self.z[i] } else { 0.0 }]
     }
 }
 
