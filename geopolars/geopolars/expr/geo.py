@@ -228,10 +228,15 @@ class ExprGeoNameSpace:
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         )
 
-    def distance(self, other: IntoExprColumn) -> pl.Expr:
+    def distance(
+        self,
+        other: IntoExprColumn,
+        *,
+        method: Literal["planar", "geodesic"] | None = None,
+    ) -> pl.Expr:
         from geopolars.geo.distance import distance
 
-        return distance(self._expr, other)
+        return distance(self._expr, other, method=method)
 
     def length(self, *, allow_non_lines: bool = False) -> pl.Expr:
         from geopolars.geo.length import length

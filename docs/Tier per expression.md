@@ -27,7 +27,7 @@ the comment says when one without a CRS takes a different tier.
 | `is_standard_orientation` | - | | A | CCW | A | | - | | A | LPP | A | LPP |
 | `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings via rsgeo relate | A | EP | A | EP | A/B | EP and RGR |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
-| `distance` | B | PROJ + GGL; no CRS: C | - | | - | | - | | - | | - | |
+| `distance` | A/B | [^2] | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |
 | `rotate` | A | | A | | A | | A | | A | | A | |
@@ -66,4 +66,7 @@ In this table:
 - SCC = skips the closing coordinate of each ring
 - RGR = uses `rsgeo`'s `relate` to get an intersection matrix
 
-[^1]: limited because Z-polygon cannot calculate its xyz-centroid yet, and therefore converts to a xy centroid[Issue #277: Centroid for Z-polygon](https://github.com/pola-rs/geopolars/issues/277)
+[^1]: limited because Z-polygon cannot calculate its xyz-centroid yet,
+      and therefore converts to a xy centroid[Issue #277: Centroid for Z-polygon](https://github.com/pola-rs/geopolars/issues/277)
+[^2]: user chooses method, all of which differ in implementation method.
+      Planar: A; geodesic: PROJ + GGL, needs a CRS.

@@ -4,6 +4,7 @@ ellipsoid with one."""
 from __future__ import annotations
 
 import math
+from typing import Literal
 
 import polars as pl
 import pytest
@@ -238,6 +239,21 @@ def test_metadata_without_a_crs_is_still_planar() -> None:
     assert _distances(df) == [5.0]
 
 
+def test_planar_ignores_the_crs() -> None:
+    df = _pairs([(0.0, 0.0)], [(3.0, 4.0)], crs=WGS84)
+
+    out = df.select(geo.distance("a", "b", method="planar")).to_series().to_list()
+
+    assert out == [5.0]
+
+
+def test_geodesic_without_a_crs_is_refused() -> None:
+    lf = _pairs([NEW_YORK], [LONDON]).lazy()
+
+    with pytest.raises(TypeError, match="neither point declares one"):
+        lf.select(geo.distance("a", "b", method="geodesic")).collect_schema()
+
+
 def test_points_in_different_crss_are_refused_while_resolving_the_schema() -> None:
     a = _pairs([NEW_YORK], [LONDON], crs=WGS84)
     lf = a.lazy().select(geo.distance("a", geo.to_crs("b", "EPSG:3857")))
@@ -292,10 +308,13 @@ def test_the_result_is_named_after_the_first_point(crs: str | None) -> None:
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_the_namespace_matches_the_function(crs: str | None) -> None:
+@pytest.mark.parametrize("method", [None, "planar"])
+def test_the_namespace_matches_the_function(
+    crs: str | None, method: Literal["planar"] | None
+) -> None:
     df = _pairs([NEW_YORK, (0.0, 0.0)], [LONDON, (3.0, 4.0)], crs=crs)
 
     assert_series_equal(
-        df.select(gpl.col("a").geo.distance("b")).to_series(),
-        df.select(geo.distance("a", "b")).to_series(),
+        df.select(gpl.col("a").geo.distance("b", method=method)).to_series(),
+        df.select(geo.distance("a", "b", method=method)).to_series(),
     )

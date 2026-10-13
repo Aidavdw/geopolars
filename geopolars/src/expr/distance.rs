@@ -1,6 +1,12 @@
-//! How far apart two points are along the ellipsoid, for points that declare a CRS.
+//! How far apart points are.
+//! Functionality for:
+//! - distance between arrays of two points
+//! - distance between one fixed and an array of others
+//! - n*n distances (between each and all other)
 //!
-//! Points without a CRS are measured in plain Polars expressions instead, on the Python side.
+//! Multiple methods are possible:
+//! - Planar
+//! - Geodesic
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,6 +19,7 @@ use polars_arrow::datatypes::ArrowDataType;
 use polars_core::utils::align_chunks_binary;
 use pyo3_polars::derive::polars_expr;
 use rsgeo::proj::Proj;
+use serde::Deserialize;
 
 use crate::geoarrow::geodetic::GeodeticCrs;
 use crate::geoarrow::storage::CoordsView;
@@ -165,11 +172,27 @@ impl Metric for GeodesicMetric {
     }
 }
 
-/// The CRS two point columns share. Type operation only.
+/// How `distance` measures, as passed from Python.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum DistanceMethod {
+    /// See [`Planar`].
+    Planar,
+    /// See [`GeodesicMetric`].
+    Geodesic,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DistanceKwargs {
+    method: DistanceMethod,
+}
+
+/// The CRS two point columns share, or `None` if neither declares one. Type operation only.
 ///
 /// Distances between points in different CRSs would have to pick one of them,
 /// so they are refused rather than silently reprojected.
-fn shared_crs(fields: &[Field]) -> PolarsResult<String> {
+fn shared_crs(fields: &[Field]) -> PolarsResult<Option<String>> {
     let [a, b] = fields else {
         polars_bail!(ComputeError: "a distance is between two points, got {} inputs", fields.len());
     };
@@ -190,9 +213,7 @@ fn shared_crs(fields: &[Field]) -> PolarsResult<String> {
             SchemaMismatch: "only one of the points declares a CRS, so they cannot be measured \
             against each other; declare the same one on both"
         ),
-        (false, false) => polars_bail!(
-            SchemaMismatch: "neither point declares a CRS, so there is no ellipsoid to measure on"
-        ),
+        (false, false) => return Ok(None),
     }
     let (crs_a, crs_b) = (metadata[0].crs()?, metadata[1].crs()?);
     polars_ensure!(
@@ -200,13 +221,32 @@ fn shared_crs(fields: &[Field]) -> PolarsResult<String> {
         SchemaMismatch: "the points declare different CRSs, {crs_a} and {crs_b}; \
         use `to_crs` to bring one onto the other first"
     );
-    Ok(crs_a)
+    Ok(Some(crs_a))
 }
 
-/// For [`distance_geodesic`]: an `f64`, named after the first point.
-fn kernel_output_type_distance_geodesic(input_fields: &[Field]) -> PolarsResult<Field> {
-    // So a CRS PROJ cannot measure in fails while the plan is built.
-    GeodesicMetric::of(&shared_crs(input_fields)?)?;
+/// The CRS to measure along the ellipsoid of. Type operation only.
+fn geodesic_crs(fields: &[Field]) -> PolarsResult<String> {
+    shared_crs(fields)?.ok_or_else(|| {
+        polars_err!(
+            SchemaMismatch: "neither point declares a CRS, so there is no ellipsoid to measure on"
+        )
+    })
+}
+
+/// Distance is returned as `f64`, named after the first point.
+fn kernel_output_type_distance(
+    input_fields: &[Field],
+    kwargs: DistanceKwargs,
+) -> PolarsResult<Field> {
+    match kwargs.method {
+        DistanceMethod::Planar => {
+            shared_crs(input_fields)?;
+        }
+        DistanceMethod::Geodesic => {
+            // So a CRS PROJ cannot measure in fails while the plan is built.
+            GeodesicMetric::of(&geodesic_crs(input_fields)?)?;
+        }
+    }
     Ok(Field::new(
         input_fields[0].name().clone(),
         DataType::Float64,
@@ -245,6 +285,8 @@ fn against_one<const Z: bool>(
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let one = metric.vertex(one)?;
+    // TODO: if 'one' contains a nan (ignoring the third axis if not Z), exit early by just writing
+    // full NaNs.
     let mut distances = MutablePrimitiveArray::with_capacity(many.len());
     for i in 0..many.len() {
         // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
@@ -282,15 +324,9 @@ fn every_against_one(
         .collect()
 }
 
-/// See `distance`.
-#[polars_expr(output_type_func=kernel_output_type_distance_geodesic)]
-fn distance_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
-    let fields = [
-        inputs[0].field().into_owned(),
-        inputs[1].field().into_owned(),
-    ];
-    let metric = GeodesicMetric::of(&shared_crs(&fields)?)?;
-    let z = describe(fields[0].dtype())?.dim.has_z() && describe(fields[1].dtype())?.dim.has_z();
+/// The distance between the points of `inputs[0]` and `inputs[1]`, measured with `metric`.
+fn measure(metric: &impl Metric, inputs: &[Series]) -> PolarsResult<Series> {
+    let z = describe(inputs[0].dtype())?.dim.has_z() && describe(inputs[1].dtype())?.dim.has_z();
 
     let a = inputs[0].ext()?.storage().struct_()?;
     let b = inputs[1].ext()?.storage().struct_()?;
@@ -301,15 +337,31 @@ fn distance_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
                 .zip(b.downcast_iter())
                 .map(|(a, b)| {
                     let (a, b) = (CoordsView::new(a)?, CoordsView::new(b)?);
-                    with_const_flags!(pairwise(&*metric, &a, &b); z)
+                    with_const_flags!(pairwise(metric, &a, &b); z)
                 })
                 .collect::<PolarsResult<Vec<_>>>()?
         }
-        (1, _) => every_against_one(&*metric, a, b, z)?,
-        (_, 1) => every_against_one(&*metric, b, a, z)?,
+        (1, _) => every_against_one(metric, a, b, z)?,
+        (_, 1) => every_against_one(metric, b, a, z)?,
         (n, m) => polars_bail!(ShapeMismatch: "cannot measure {n} points against {m}"),
     };
     Ok(Float64Chunked::from_chunk_iter(inputs[0].name().clone(), chunks).into_series())
+}
+
+/// See `distance`.
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_distance)]
+fn distance(inputs: &[Series], kwargs: DistanceKwargs) -> PolarsResult<Series> {
+    let fields = [
+        inputs[0].field().into_owned(),
+        inputs[1].field().into_owned(),
+    ];
+    match kwargs.method {
+        DistanceMethod::Planar => {
+            shared_crs(&fields)?;
+            measure(&Planar, inputs)
+        }
+        DistanceMethod::Geodesic => measure(&*GeodesicMetric::of(&geodesic_crs(&fields)?)?, inputs),
+    }
 }
 
 #[cfg(test)]
