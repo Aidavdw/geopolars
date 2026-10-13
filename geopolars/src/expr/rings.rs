@@ -13,7 +13,7 @@ use std::ops::Range;
 
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
-use polars_arrow::bitmap::{Bitmap, MutableBitmap};
+use polars_arrow::bitmap::Bitmap;
 use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
@@ -62,16 +62,8 @@ fn validity(polygons: &ListArray<i64>, rows: &Range<usize>) -> Option<Bitmap> {
         .map(|valid| valid.clone().sliced(rows.start, rows.len()))
 }
 
-fn copy_bits(bitmap: Option<&Bitmap>, ranges: &[Range<usize>], len: usize) -> Option<Bitmap> {
-    let bitmap = bitmap?;
-    let mut copied = MutableBitmap::with_capacity(len);
-    for range in ranges {
-        copied.extend_from_bitmap(&bitmap.clone().sliced(range.start, range.len()));
-    }
-    Some(copied.freeze())
-}
-
 /// The coordinates at `ranges`, in order, copied out of `coords` field by field.
+/// Coordinates are never null in GeoArrow, so no validity is carried along.
 pub(crate) fn copy_coords(
     coords: &StructArray,
     ranges: &[Range<usize>],
@@ -83,12 +75,10 @@ pub(crate) fn copy_coords(
         for range in ranges {
             values.extend_from_slice(&field.values()[range.clone()]);
         }
-        let valid = copy_bits(field.validity(), ranges, len);
-        Ok(PrimitiveArray::new(field.dtype().clone(), values.into(), valid).boxed())
+        Ok(PrimitiveArray::new(field.dtype().clone(), values.into(), None).boxed())
     });
     let fields = fields.collect::<PolarsResult<Vec<_>>>()?;
-    let valid = copy_bits(coords.validity(), ranges, len);
-    Ok(StructArray::new(coords.dtype().clone(), len, fields, valid).boxed())
+    Ok(StructArray::new(coords.dtype().clone(), len, fields, None).boxed())
 }
 
 fn rings_of(polygons: &ListArray<i64>) -> PolarsResult<(&ListArray<i64>, &StructArray)> {
@@ -117,19 +107,11 @@ fn exterior_part(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<
         };
         ranges.push(coordinates_of(rings, exterior));
     }
-    // Missing if its polygon is, or if its ring is.
-    let valid = match rings.validity() {
-        None => validity(polygons, &rows),
-        Some(_) => Some(Bitmap::from_iter(rows.clone().map(|i| {
-            let (start, end) = polygons.offsets().start_end(i);
-            polygons.is_valid(i) && (end == start || rings.is_valid(start))
-        }))),
-    };
     Ok(ListArray::<i64>::new(
         ListArray::<i64>::default_datatype(coords.dtype().clone()),
         Offsets::try_from_lengths(ranges.iter().map(Range::len))?.into(),
         copy_coords(coords, &ranges)?,
-        valid,
+        validity(polygons, &rows),
     )
     .boxed())
 }
@@ -155,7 +137,6 @@ fn interior_part(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<
         .iter()
         .flat_map(|kept| kept.clone().map(|ring| rings.offsets().start_end(ring)))
         .map(|(start, end)| end - start);
-    let ring_count = counts.iter().sum();
     let ranges: Vec<_> = holes
         .iter()
         .map(|kept| coordinates_of(rings, kept.clone()))
@@ -164,7 +145,7 @@ fn interior_part(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<
         ListArray::<i64>::default_datatype(coords.dtype().clone()),
         Offsets::try_from_lengths(ring_lengths)?.into(),
         copy_coords(coords, &ranges)?,
-        copy_bits(rings.validity(), &holes, ring_count),
+        None,
     );
     Ok(ListArray::<i64>::new(
         ListArray::<i64>::default_datatype(kept_rings.dtype().clone()),
@@ -194,7 +175,8 @@ fn per_polygon(
             *chunk.offsets().first() as usize,
             *chunk.offsets().last() as usize,
         );
-        let parts = part(polygons, first..last)?;
+        // Only the multipolygon itself may be missing, not one of its parts.
+        let parts = part(polygons, first..last)?.with_validity(None);
         Ok(ListArray::<i64>::new(
             ListArray::<i64>::default_datatype(parts.dtype().clone()),
             Offsets::try_from_lengths(chunk.offsets().lengths())?.into(),

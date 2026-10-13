@@ -122,10 +122,16 @@ def test_the_namespace_matches_the_function() -> None:
     )
 
 
-def test_a_missing_polygon_in_a_multipolygon_has_no_exterior() -> None:
-    df = _multipolygons([[_SQUARE], None, []])
+def test_a_missing_multipolygon_leaves_no_null_inside_the_exteriors() -> None:
+    """GeoArrow allows nulls only at the outermost level.
+    See https://geoarrow.org/format.html#missing-values-null"""
+    df = _multipolygons([[_SQUARE], []], None)
 
-    assert _rings(df, "multi") == [[_SQUARE, None, []]]
+    level = df.select(geo.exterior("multi")).to_series().ext.storage().to_arrow()
+    assert level.null_count == 1
+    for _ in ("linestrings", "coordinates"):
+        level = level.values
+        assert level.null_count == 0
 
 
 def test_multipolygon_rows_line_up_across_chunks_and_slices() -> None:

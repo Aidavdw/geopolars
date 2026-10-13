@@ -203,7 +203,7 @@ fn close_rings(rings: &ListArray<i64>) -> PolarsResult<Option<ListArray<i64>>> {
     let open: Vec<bool> = (0..rings.len())
         .map(|ring| {
             let (start, end) = rings.offsets().start_end(ring);
-            rings.is_valid(ring) && end > start && !coords.same_place(start, end - 1)
+            end > start && !coords.same_place(start, end - 1)
         })
         .collect();
     if !open.contains(&true) {
@@ -227,7 +227,7 @@ fn close_rings(rings: &ListArray<i64>) -> PolarsResult<Option<ListArray<i64>>> {
         rings.dtype().clone(),
         Offsets::try_from_lengths(lengths.into_iter())?.into(),
         copy_coords(values, &ranges)?,
-        rings.validity().cloned(),
+        None,
     )))
 }
 

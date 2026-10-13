@@ -124,10 +124,16 @@ def test_the_namespace_matches_the_function() -> None:
     )
 
 
-def test_a_missing_polygon_in_a_multipolygon_has_no_interior() -> None:
-    df = _multipolygons([[_OUTER, _HOLE], None, []])
+def test_a_missing_multipolygon_leaves_no_null_inside_the_interiors() -> None:
+    """GeoArrow allows nulls only at the outermost level.
+    See https://geoarrow.org/format.html#missing-values-null"""
+    df = _multipolygons([[_OUTER, _HOLE], []], None)
 
-    assert _interiors(df) == [[[_HOLE], None, []]]
+    level = df.select(geo.interior("multi")).to_series().ext.storage().to_arrow()
+    assert level.null_count == 1
+    for _ in ("multilinestrings", "linestrings", "coordinates"):
+        level = level.values
+        assert level.null_count == 0
 
 
 def test_multipolygon_rows_line_up_across_chunks_and_slices() -> None:
