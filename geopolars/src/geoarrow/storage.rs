@@ -28,40 +28,65 @@ pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
     is_close(a[0], b[0]) && is_close(a[1], b[1]) && is_close(a[2], b[2])
 }
 
-/// The axes of one chunk of coordinates.
-/// Nulls live at outer level, so valid storage has no missing coordinates,
-/// so their validity is never read.
+/// The main helper for reading coordinates that are all assumed to be valid.
+/// A view (zero-allocation) of a chunk's coordinates as stored in the arrow array.
+///
+/// Arrow only has nulls at the outer level, so every coordinate that is used in a nested
+/// geometry (anything but a Point) has to be valid, so you don't need their validity bitmap.
+///
+/// Note that this does not mean that values inside here are all usable `f64`!
+/// Single NaN values, and *empty* points (all NaN) can still show up here to ruin the day.
+/// How you want to handle these is up to the kernel.
+///
+/// For coordinates that *can* include invalid coordinates (columns of Points),
+/// use [`CoordsView`].
 pub(crate) struct Axes<'a> {
     pub(crate) x: &'a [f64],
     pub(crate) y: &'a [f64],
     /// Empty for a dimension without a `z`.
     pub(crate) z: &'a [f64],
+    /// Empty for a dimension without an `m`.
+    pub(crate) m: &'a [f64],
 }
 
 impl<'a> Axes<'a> {
-    /// The axes, and whether there is a `z`.
-    pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, bool)> {
-        let coords: &StructArray = downcast(coords, "a coordinate struct")?;
-        let axis = |i: usize| -> PolarsResult<&'a [f64]> {
-            let values: &PrimitiveArray<f64> =
-                downcast(coords.values()[i].as_ref(), "f64 coordinates")?;
-            Ok(values.values().as_slice())
-        };
-        // `coord::dimension_of` fixes the field order, so x and y always come first.
-        let z = coords
-            .fields()
-            .iter()
-            .position(|field| field.name.as_str() == "z");
-        let axes = Self {
-            x: axis(0)?,
-            y: axis(1)?,
-            z: z.map(axis).transpose()?.unwrap_or_default(),
-        };
-        Ok((axes, z.is_some()))
+    /// The axes, and the dimension they carry.
+    /// (An empty chunk has empty axes either way, so the dimension can't be read off them.)
+    pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, GeoDimension)> {
+        let view = CoordsView::new(coords)?;
+        Ok((Self::from(&view), view.dim()))
     }
 }
 
-/// View (zero-allocation) of one chunk's coordinates in the Arrow array.
+/// The axes of `view`, without their validity.
+/// Under a missing Point, its values can be anything:
+/// the caller gates on the Point's validity before reading them.
+impl<'a> From<&CoordsView<'a>> for Axes<'a> {
+    fn from(view: &CoordsView<'a>) -> Self {
+        let axis = |values: Option<&'a PrimitiveArray<f64>>| {
+            values.map_or(&[][..], |values| values.values().as_slice())
+        };
+        Self {
+            x: axis(Some(view.x)),
+            y: axis(Some(view.y)),
+            z: axis(view.z),
+            m: axis(view.m),
+        }
+    }
+}
+
+/// The main helper for reading coordinates, where individual coordinates can be invalid.
+/// a view (zero-allocation) of a chunk's coordinates in the Arrow array.
+///
+/// Arrow only has nulls at the outer level, so in practice this struct only makes sense to use
+/// for Points.
+/// For other geometries, it can be assumed all values are valid,
+/// making them faster to read through [`Axes`].
+///
+/// In addition to being marked invalid,
+/// individual coordinates are not guaranteed to all be usable `f64`!
+/// Single NaN values, and *empty* points (all NaN) can still show up here to ruin the day.
+/// How you want to handle these is up to the kernel.
 pub(crate) struct CoordsView<'a> {
     coords: &'a StructArray,
     x: &'a PrimitiveArray<f64>,

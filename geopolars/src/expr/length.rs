@@ -120,8 +120,8 @@ fn measure(metric: &impl Metric, geometries: &Series) -> PolarsResult<Series> {
         } else {
             rows
         };
-        let (axes, z) = Axes::new(lines.values().as_ref())?;
-        with_const_flags!(lengths(metric, rows, lines, &axes); z, multi)
+        let (axes, dim) = Axes::new(lines.values().as_ref())?;
+        with_const_flags!(lengths(metric, rows, lines, &axes); dim.has_z(), multi)
     });
     Ok(Float64Chunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())
 }
