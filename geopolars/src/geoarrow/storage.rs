@@ -62,6 +62,12 @@ impl<'a> Axes<'a> {
     pub(crate) fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
         [self.x[i], self.y[i], if Z { self.z[i] } else { 0.0 }]
     }
+
+    /// The m of coordinate `i`. Only for a dimension with an `m`.
+    #[inline(always)]
+    pub(crate) fn m(&self, i: usize) -> f64 {
+        self.m[i]
+    }
 }
 
 /// The axes of `view`, without their validity.
