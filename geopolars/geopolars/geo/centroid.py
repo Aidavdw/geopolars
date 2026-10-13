@@ -47,10 +47,11 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     A polygon's centroid is measured on the plane the coordinates lie in,
     even when they carry a CRS, and the CRS is carried over to the result.
     Holes are taken out.
-    Only the two-dimensional part is considered: 'z' and 'm' are ignored.
-    For a 3D polygon that gives the centroid of its footprint
-    (its shadow on the x/y plane), which is not its centroid in 3D,
-    and the result has no 'z'.
+    Its 'x' and 'y' are the centroid of its footprint (its shadow on the x/y plane),
+    and its 'z' and 'm' are averaged over that footprint's area.
+    For a flat 3D polygon, that puts the centroid on the polygon,
+    right above the centroid of its footprint.
+    The result keeps the polygon's dimension.
     A vertical polygon has a footprint that encloses nothing, so it has no centroid.
 
     A linestring's centroid is the midpoint of each of its segments,
@@ -85,9 +86,9 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     | `LineStringXYM`        | `PointXYM`       |
     | `LineStringXYZM`       | `PointXYZM`      |
     | `PolygonXY`            | `PointXY`        |
-    | `PolygonXYZM`          | `PointXY`        |
+    | `PolygonXYZM`          | `PointXYZM`      |
     | `MultiLineStringXYZ`   | `PointXYZ`       |
-    | `MultiPolygonXYZM`     | `PointXY`        |
+    | `MultiPolygonXYZM`     | `PointXYZM`      |
 
     ```python
     df.select(geo.centroid("parcel"), geo.centroid("road"))

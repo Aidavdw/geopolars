@@ -66,14 +66,17 @@ def test_each_geometry_turns_about_its_own_centroid(ring_coords: pl.DataFrame) -
 
 @pytest.mark.parametrize("dimension", [XYZ, XYZM], ids=["XYZ", "XYZM"])
 @pytest.mark.parametrize("axis", ["x", "y"])
-def test_a_polygon_cannot_turn_out_of_the_plane(
+def test_a_polygon_turns_out_of_the_plane_about_its_centroid(
     ring_coords: pl.DataFrame, dimension: Dimension, axis: Literal["x", "y"]
 ) -> None:
-    """Its centroid has no `z` to put the axis at."""
-    out = dimension.polygons(ring_coords).lazy()
+    """A polygon's centroid keeps its `z`, so the axis goes through its height."""
+    df = dimension.polygons(ring_coords)
 
-    with pytest.raises(TypeError, match="its centroid has no z"):
-        out.select(geo.rotate_about_centroid("polygon", 30, axis=axis)).collect_schema()
+    assert_frame_equal(
+        df.select(geo.rotate_about_centroid("polygon", 30, axis=axis)),
+        df.select(geo.rotate("polygon", 30, axis=axis, origin=geo.centroid("polygon"))),
+        check_exact=True,
+    )
 
 
 def test_only_lines_and_polygons_are_accepted(

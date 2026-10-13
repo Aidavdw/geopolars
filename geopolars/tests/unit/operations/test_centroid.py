@@ -17,6 +17,7 @@ from geopolars.datatypes import (
     MultiLineStringXY,
     MultiPolygonXY,
     PointXY,
+    PolygonXYZM,
 )
 from tests.unit.conftest import XY, Dimension, coordinates
 
@@ -84,12 +85,56 @@ def test_a_hole_is_taken_out_whichever_way_it_winds(reverse_hole: bool) -> None:
     assert got == pytest.approx((expected, expected))
 
 
-def test_z_and_m_are_left_out(ring_coords: pl.DataFrame, dimension: Dimension) -> None:
+def test_a_polygon_keeps_its_dimension(
+    ring_coords: pl.DataFrame, dimension: Dimension
+) -> None:
     df = dimension.polygons(ring_coords)
     out = df.select(geo.centroid("polygon"))
 
-    assert out.schema["polygon"] == PointXY()
+    assert out.schema["polygon"] == dimension.point_dtype()
+    # z and m don't move the centroid in xy.
     assert _centroids(df) == pytest.approx(_centroids(XY.polygons(ring_coords)))
+
+
+def _polygon_xyzm(
+    rings: list[Ring], z: Callable[[float, float], float]
+) -> pl.DataFrame:
+    """A `PolygonXYZM` column of one polygon: `rings` with both z and m at `z(x, y)`."""
+    rings_zm = [
+        [{**c, "z": z(c["x"], c["y"]), "m": z(c["x"], c["y"])} for c in ring]
+        for ring in rings
+    ]
+    vertex = pl.Struct(dict.fromkeys("xyzm", pl.Float64))
+    storage = pl.Series("polygon", [rings_zm], dtype=pl.List(pl.List(vertex)))
+    return pl.DataFrame(storage.ext.to(PolygonXYZM()))
+
+
+@pytest.mark.parametrize(
+    ("rings", "z", "expected"),
+    [
+        # Over the L's centroid (5/6, 5/6); its vertices average to 1 + 2.
+        ([_L], lambda x, y: x + 2 * y, 5 / 6 + 2 * 5 / 6),
+        # Over the square with a hole's centroid; with the hole kept, it would be 2.
+        (
+            [
+                _ring((0, 0), (4, 0), (4, 4), (0, 4)),
+                _ring((2, 2), (3, 2), (3, 3), (2, 3)),
+            ],
+            lambda x, _: x,
+            (16 * 2 - 2.5) / 15,
+        ),
+    ],
+    ids=["L", "hole"],
+)
+def test_z_and_m_are_averaged_over_the_area(
+    rings: list[Ring], z: Callable[[float, float], float], expected: float
+) -> None:
+    # On a tilted plane, the centroid lies on it: above the centroid of the footprint.
+    out = _polygon_xyzm(rings, z).select(geo.centroid("polygon"))
+
+    (got,) = out.to_series().ext.storage().to_list()
+
+    assert (got["z"], got["m"]) == pytest.approx((expected, expected))
 
 
 def test_the_crs_is_carried_over() -> None:
@@ -376,7 +421,7 @@ def test_a_multipolygon_weighs_each_part_like_a_lone_polygon(
         multis, "multipolygon", dimension.polygon_dtype(), geo.area_planar
     )
 
-    assert out.schema["multipolygon"] == PointXY()
+    assert out.schema["multipolygon"] == dimension.point_dtype()
     assert_frame_equal(coordinates(out, "multipolygon"), expected)
 
 

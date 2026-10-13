@@ -2,6 +2,10 @@
 //! - a linestring's is the midpoint of every segment, weighted by its length,
 //! - a polygon's is the shoelace formula, over the planar area,
 //! - a multi-geometry's is that of its parts together: the running sum just goes on over them.
+//!
+//! With generics, a total 8 (lines) + 8 (polygons) = 16 copies of functions exist.
+
+// Should add_ring and add_polygon not also be generic?
 
 use std::ops::Range;
 
@@ -15,18 +19,19 @@ use crate::geoarrow::storage::{downcast, Axes};
 use crate::geoarrow::{describe, Geo, GeoDimension, Kind};
 
 /// The point a `dtype` column's centroids are, and the kind of geometry they are of.
-/// A (multi)linestring's centroid keeps its dimension, a (multi)polygon's is xy.
+/// The centroid keeps the geometry's dimension.
 fn centroid_of(dtype: &DataType) -> PolarsResult<(Geo, Kind)> {
     let geo = describe(dtype)?;
-    let dim = match geo.kind {
-        Kind::Point | Kind::MultiPoint => polars_bail!(
+    if let Kind::Point | Kind::MultiPoint = geo.kind {
+        polars_bail!(
             SchemaMismatch: "centroid expects a (multi)linestring or (multi)polygon column, got: {}",
             dtype
-        ),
-        Kind::Polygon | Kind::MultiPolygon => GeoDimension::XY,
-        Kind::LineString | Kind::MultiLineString => geo.dim,
-    };
-    Ok((Geo::new(Kind::Point, dim, geo.metadata.clone()), geo.kind))
+        )
+    }
+    Ok((
+        Geo::new(Kind::Point, geo.dim, geo.metadata.clone()),
+        geo.kind,
+    ))
 }
 
 /// For [`centroid`].
@@ -58,6 +63,12 @@ impl Moment {
     }
 }
 
+#[inline(always)]
+fn vertex<const Z: bool, const M: bool>(axes: &Axes, i: usize) -> [f64; 4] {
+    let [x, y, z] = axes.position::<Z>(i);
+    [x, y, z, if M { axes.m(i) } else { 0.0 }]
+}
+
 /// Adds the line through `vertices`: Σ len (a + b) / 2 and Σ len over its segments `ab`,
 /// where `len` is measured in xy, or xyz with `Z`,
 /// and every axis (incl. m with `M`) is averaged by it.
@@ -67,16 +78,12 @@ fn add_line<const Z: bool, const M: bool>(
     axes: &Axes,
     mut vertices: Range<usize>,
 ) {
-    let vertex = |i| {
-        let [x, y, z] = axes.position::<Z>(i);
-        [x, y, z, if M { axes.m(i) } else { 0.0 }]
-    };
     let Some(first) = vertices.next() else {
         return;
     };
-    let mut previous = vertex(first);
+    let mut previous = vertex::<Z, M>(axes, first);
     for i in vertices {
-        let here = vertex(i);
+        let here = vertex::<Z, M>(axes, i);
         // Without `Z`, both z are `0.0`.
         let len = (0..3)
             .map(|k| (here[k] - previous[k]).powi(2))
@@ -90,34 +97,57 @@ fn add_line<const Z: bool, const M: bool>(
     }
 }
 
-/// Adds the closed ring through `vertices` by the shoelace formula, whichever way it runs,
-/// with `sign` `-1.0` to take it out (a hole).
+/// Moment += that of a (closed) ring.
+/// shoelace formula:
 /// Over the ring, a = Σ cross, mx = Σ (x_i + x_{i+1}) cross and my = Σ (y_i + y_{i+1}) cross,
 /// with cross = x_i y_{i+1} - x_{i+1} y_i: its centroid is (mx, my) / 3a,
 /// so weighted by its area a / 2, (mx, my) / 6.
+/// z (if `Z=true`) and m (if `M=true`) are averaged over the area too:
+/// over the triangles fanning out from the first vertex `p0`,
+/// each weighted by its area, fan / 2 (with fan the cross of `p_i - p0` and `p_{i+1} - p0`),
+/// at the mean of its corners, (z_0 + z_i + z_{i+1}) / 3: Σ fan (z_0 + z_i + z_{i+1}) / 6.
+/// On a flat ring, that is the height of its plane above the centroid.
 #[inline(always)]
-fn add_ring(moment: &mut Moment, axes: &Axes, vertices: Range<usize>, sign: f64) {
-    // TODO: do these consider m?
-    // Should they be made generic?
-    let (mut a, mut mx, mut my) = (0.0, 0.0, 0.0);
+fn add_ring<const Z: bool, const M: bool>(
+    moment: &mut Moment,
+    axes: &Axes,
+    vertices: Range<usize>,
+    sign: f64,
+) {
+    if vertices.is_empty() {
+        return;
+    }
+    let p0 = vertex::<Z, M>(axes, vertices.start);
+    let (mut a, mut sum) = (0.0, [0.0; 4]);
     // The repeated last vertex is only ever the `i + 1`.
-    for i in vertices.start..vertices.end.saturating_sub(1) {
-        let [x0, y0, _] = axes.position::<false>(i);
-        let [x1, y1, _] = axes.position::<false>(i + 1);
-        let cross = x0 * y1 - x1 * y0;
+    for i in vertices.start..vertices.end - 1 {
+        let (p, q) = (vertex::<Z, M>(axes, i), vertex::<Z, M>(axes, i + 1));
+        let cross = p[0] * q[1] - q[0] * p[1];
         a += cross;
-        mx += (x0 + x1) * cross;
-        my += (y0 + y1) * cross;
+        sum[0] += (p[0] + q[0]) * cross;
+        sum[1] += (p[1] + q[1]) * cross;
+        if Z || M {
+            let fan = (p[0] - p0[0]) * (q[1] - p0[1]) - (q[0] - p0[0]) * (p[1] - p0[1]);
+            for k in 2..4 {
+                sum[k] += fan * (p0[k] + p[k] + q[k]);
+            }
+        }
     }
     let sign = sign * a.signum();
-    moment.sum[0] += sign * mx / 6.0;
-    moment.sum[1] += sign * my / 6.0;
+    for (total, s) in moment.sum.iter_mut().zip(sum) {
+        *total += sign * s / 6.0;
+    }
     moment.weight += sign * a / 2.0;
 }
 
-/// Adds the polygon made of the rings `rings[ring_range]`: its exterior, less its holes.
+/// moment += (extorior - holes)
 #[inline(always)]
-fn add_polygon(moment: &mut Moment, rings: &ListArray<i64>, axes: &Axes, ring_range: Range<usize>) {
+fn add_polygon<const Z: bool, const M: bool>(
+    moment: &mut Moment,
+    rings: &ListArray<i64>,
+    axes: &Axes,
+    ring_range: Range<usize>,
+) {
     let mut rings = ring_range.map(|ring| {
         let (start, end) = rings.offsets().start_end(ring);
         start..end
@@ -125,9 +155,9 @@ fn add_polygon(moment: &mut Moment, rings: &ListArray<i64>, axes: &Axes, ring_ra
     let Some(exterior) = rings.next() else {
         return;
     };
-    add_ring(moment, axes, exterior, 1.0);
+    add_ring::<Z, M>(moment, axes, exterior, 1.0);
     for hole in rings {
-        add_ring(moment, axes, hole, -1.0);
+        add_ring::<Z, M>(moment, axes, hole, -1.0);
     }
 }
 
@@ -196,18 +226,17 @@ fn line_centroids<const Z: bool, const M: bool, const MULTI: bool>(
 }
 
 /// [`centroids`] of (multi)polygons: `polygons` is `rows`, or with `MULTI` its parts.
-fn polygon_centroids<const MULTI: bool>(
+fn polygon_centroids<const Z: bool, const M: bool, const MULTI: bool>(
     rows: &ListArray<i64>,
     polygons: &ListArray<i64>,
     rings: &ListArray<i64>,
     axes: &Axes,
+    dim: GeoDimension,
 ) -> Box<dyn Array> {
-    let dtype = GeoDimension::XY
-        .coordinates()
-        .to_arrow(CompatLevel::newest());
-    centroids::<MULTI>(rows, dtype, GeoDimension::XY, |moment, polygon| {
+    let dtype = rings.values().dtype().clone();
+    centroids::<MULTI>(rows, dtype, dim, |moment, polygon| {
         let (start, end) = polygons.offsets().start_end(polygon);
-        add_polygon(moment, rings, axes, start..end)
+        add_polygon::<Z, M>(moment, rings, axes, start..end)
     })
 }
 
@@ -230,8 +259,11 @@ fn centroid(inputs: &[Series]) -> PolarsResult<Series> {
             };
             Ok(if polygons {
                 let rings: &ListArray<i64> = downcast(parts.values().as_ref(), "a list of rings")?;
-                let (axes, _) = Axes::new(rings.values().as_ref())?;
-                with_const_flags!(polygon_centroids(rows, parts, rings, &axes); multi)
+                let (axes, dim) = Axes::new(rings.values().as_ref())?;
+                with_const_flags!(
+                    polygon_centroids(rows, parts, rings, &axes, dim);
+                    dim.has_z(), dim.has_m(), multi
+                )
             } else {
                 let (axes, dim) = Axes::new(parts.values().as_ref())?;
                 with_const_flags!(

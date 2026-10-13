@@ -15,7 +15,7 @@ the comment says when one without a CRS takes a different tier.
 | `area_planar` | - | ANP | - | ANP | A | shoelace; CRS ignored | - | ANP | - | ANP | A | sum of parts |
 | `area_geodesic` | - | ANP | - | ANP | B | PROJ + GGL; needs a CRS | - | ANP | - | ANP | B | sum of parts |
 | `length` | - | ANL | A/B | Reuses bits of `distance` [^2] | - | ANL | - | ANL | A/B | sum of parts | - | ANL |
-| `centroid` | C | returns the point | A | length-weighted; keeps z/m | A | shoelace; XY only [^1] | C | fwd `mean_coordinate` | A | length-weighted parts | A | area-weighted parts |
+| `centroid` | C | returns the point | A | length-weighted; keeps z/m | A | shoelace; z/m area-weighted | C | fwd `mean_coordinate` | A | length-weighted parts | A | area-weighted parts |
 | `exterior` | - | | - | | A | ring 0 | - | | - | | A | LPP |
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | LPP |
 | `boundary` | - | | C | | C | every ring | - | | C | LPP | C | LPP |
@@ -29,11 +29,11 @@ the comment says when one without a CRS takes a different tier.
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |
 | `rotate` | A | | A | | A | | A | | A | | A | |
-| `rotate_about_centroid` | - | | C | CAA | C | about `x`/`y` refused [^1] | - | | - | | - | |
+| `rotate_about_centroid` | - | | C | CAA | C | | - | | - | | - | |
 | `skew` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
 | `skew_about_centroid` | - | | C | CAA | C | | - | | - | | - | |
 | `scale` | A | impl differs for const or col | A | | A | | A | | A | | A | |
-| `scale_about_centroid` | - | | C | CAA | C | `zfact` refused with z [^1] | - | | - | | - | |
+| `scale_about_centroid` | - | | C | CAA | C | | - | | - | | - | |
 | `affine_transform` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
 | `bounds` | C | repeats its coordinate | C | | C | | C | LPP of `box` | C | LPP of `box` | C | LPP of `box` |
 | `set_crs` | C | relabels only | C | | C | | C | | C | | C | |
@@ -64,7 +64,5 @@ In this table:
 - SCC = skips the closing coordinate of each ring
 - RGR = uses `rsgeo`'s `relate` to get an intersection matrix
 
-[^1]: limited because Z-polygon cannot calculate its xyz-centroid yet,
-      and therefore converts to a xy centroid[Issue #277: Centroid for Z-polygon](https://github.com/pola-rs/geopolars/issues/277)
 [^2]: user chooses method, all of which differ in implementation method.
       Planar: A; geodesic: PROJ + GGL, needs a CRS.

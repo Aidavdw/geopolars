@@ -73,14 +73,17 @@ def test_each_geometry_scales_about_its_own_centroid(
 
 
 @pytest.mark.parametrize("dimension", [XYZ, XYZM], ids=["XYZ", "XYZM"])
-def test_a_polygon_cannot_scale_z(
+def test_a_polygon_scales_z_about_its_centroid(
     ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
-    """Its centroid has no `z` to scale `z` about."""
-    out = dimension.polygons(ring_coords).lazy()
+    """A polygon's centroid keeps its `z`, so `z` can be scaled about it too."""
+    df = dimension.polygons(ring_coords)
 
-    with pytest.raises(TypeError, match="its centroid has no z"):
-        out.select(geo.scale_about_centroid("polygon", zfact=2.0)).collect_schema()
+    assert_frame_equal(
+        df.select(geo.scale_about_centroid("polygon", zfact=3.0)),
+        df.select(geo.scale("polygon", zfact=3.0, origin=geo.centroid("polygon"))),
+        check_exact=True,
+    )
 
 
 def test_zfact_without_a_z_is_refused(ring_coords: pl.DataFrame) -> None:
