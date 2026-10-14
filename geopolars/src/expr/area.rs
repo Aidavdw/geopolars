@@ -2,6 +2,7 @@
 //! - on the plane its coordinates lie in ([`area_planar`]),
 //! - along the ellipsoid of its CRS ([`area_geodesic`]).
 
+use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView};
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
@@ -10,7 +11,7 @@ use geo_traits::{MultiPolygonTrait, PolygonTrait};
 
 use super::distance::GeodesicMetric;
 use crate::geoarrow::geotraits::{for_each_geometry, Geometry, LineString, Polygon};
-use crate::geoarrow::storage::{downcast, CoordsTrait, CoordsView};
+use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
 
 /// Twice the signed area of one closed ring, positive when it runs CCW.

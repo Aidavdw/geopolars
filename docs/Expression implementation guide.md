@@ -40,6 +40,7 @@ Functions that wrap these should be `kernel_output_type_wrapper_*`
 
 In `../geopolars/src/geoarrow/storage.rs`, you will find abstractions over the
 Polars-representation of the GeoArrow data.
+The traits they implement, and `GeoDimension`, live in the polars-free `../geoarrow_abstr` crate.
 These are all 'views', zero-allocation reference types to the underlying storage.
 They are split up based on the GeoArrow spec stating that validity shall always only be expressed
 at the outer level.

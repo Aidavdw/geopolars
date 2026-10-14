@@ -4,6 +4,7 @@
 
 use std::ops::Range;
 
+use geoarrow_abstr::GeoArrowCoordsView;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
 use pyo3_polars::derive::polars_expr;

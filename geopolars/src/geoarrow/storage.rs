@@ -1,5 +1,8 @@
 //! See the expression implementation guide on Array abstractions for GeoArrow.
 
+use geoarrow_abstr::{
+    GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowValidCoordsView, GeoDimension,
+};
 use polars::prelude::*;
 use polars_arrow::array::{Array, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
@@ -7,7 +10,6 @@ use polars_arrow::bitmap::Bitmap;
 use std::ops::Range;
 
 use super::coord::is_close;
-use super::GeoDimension;
 
 /// Downcast one level of the storage to the array it has to be.
 /// [super::describe] already checked the dtype, so this failing is a bug.
@@ -20,7 +22,7 @@ pub(crate) fn downcast<'a, T: 'static>(array: &'a dyn Array, what: &str) -> Pola
 /// The fewest vertices a ring can have: a triangle, plus the vertex closing it.
 pub(crate) const MIN_RING_VERTICES: usize = 4;
 
-/// Whether two [positions](CoordsView::position) are [`is_close`] on every axis.
+/// Whether two [positions](GeoArrowCoordsView::position) are [`is_close`] on every axis.
 #[inline(always)]
 pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
     is_close(a[0], b[0]) && is_close(a[1], b[1]) && is_close(a[2], b[2])
@@ -52,9 +54,15 @@ impl<'a> ValidCoordsView<'a> {
         })
     }
 
-    /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
+    /// [`same_place`](GeoArrowCoordsShared::same_place), comparing z only with `Z`.
+    fn same_place_in<const Z: bool>(&self, i: usize, j: usize) -> bool {
+        same_position(self.position::<Z>(i), self.position::<Z>(j))
+    }
+}
+
+impl GeoArrowValidCoordsView for ValidCoordsView<'_> {
     #[inline(always)]
-    pub(crate) fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
+    fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
         [
             self.x[i],
             self.y[i],
@@ -62,36 +70,13 @@ impl<'a> ValidCoordsView<'a> {
         ]
     }
 
-    /// The m of coordinate `i`. Only for a dimension with an `m`.
     #[inline(always)]
-    pub(crate) fn m(&self, i: usize) -> f64 {
+    fn m(&self, i: usize) -> f64 {
         self.m.unwrap()[i]
     }
-
-    /// [`same_place`](CoordsTrait::same_place), comparing z only with `Z`.
-    fn same_place_in<const Z: bool>(&self, i: usize, j: usize) -> bool {
-        same_position(self.position::<Z>(i), self.position::<Z>(j))
-    }
 }
 
-/// What both [ValidCoordsView] and [CoordsView] offer.
-pub(crate) trait CoordsTrait {
-    /// How many coordinates there are.
-    fn len(&self) -> usize;
-
-    fn nth(&self, i: usize, n: usize) -> f64;
-
-    /// Whether coordinates `i` and `j` lie at almost the same place:
-    /// [`is_close`] in x, y and z. m is a measure rather than a position, so it is not compared.
-    fn same_place(&self, i: usize, j: usize) -> bool;
-
-    fn is_ring(&self, range: Range<usize>) -> bool;
-
-    /// The dimension these coordinates carry.
-    fn dim(&self) -> GeoDimension;
-}
-
-impl CoordsTrait for ValidCoordsView<'_> {
+impl GeoArrowCoordsShared for ValidCoordsView<'_> {
     fn len(&self) -> usize {
         self.x.len()
     }
@@ -189,28 +174,25 @@ impl<'a> CoordsView<'a> {
     fn is_valid(&self, i: usize) -> bool {
         self.validity.is_none_or(|validity| validity.get_bit(i))
     }
+}
 
-    pub(crate) fn xy(&self, i: usize) -> Option<(f64, f64)> {
+impl GeoArrowCoordsView for CoordsView<'_> {
+    fn xy(&self, i: usize) -> Option<(f64, f64)> {
         self.xy_checking_nulls::<true>(i)
     }
 
-    /// [`xy`](Self::xy), checking whether it is missing only with `NULLS`.
-    /// Without, it assumes every coordinate is there.
     #[inline(always)]
-    pub(crate) fn xy_checking_nulls<const NULLS: bool>(&self, i: usize) -> Option<(f64, f64)> {
+    fn xy_checking_nulls<const NULLS: bool>(&self, i: usize) -> Option<(f64, f64)> {
         (!NULLS || self.is_valid(i)).then(|| (self.axes.x[i], self.axes.y[i]))
     }
 
-    /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
-    /// With `NULLS`, `None` if it is missing.
-    /// Without, it assumes every coordinate is there.
     #[inline(always)]
-    pub(crate) fn position<const NULLS: bool, const Z: bool>(&self, i: usize) -> Option<[f64; 3]> {
+    fn position<const NULLS: bool, const Z: bool>(&self, i: usize) -> Option<[f64; 3]> {
         (!NULLS || self.is_valid(i)).then(|| self.axes.position::<Z>(i))
     }
 }
 
-impl CoordsTrait for CoordsView<'_> {
+impl GeoArrowCoordsShared for CoordsView<'_> {
     #[inline]
     fn len(&self) -> usize {
         self.axes.len()

@@ -68,7 +68,7 @@ pub fn is_close(a: f64, b: f64) -> bool {
 mod tests {
     //! Only what the Python suite cannot reach.
 
-    use super::super::Kind;
+    use super::super::{GeoDimensionDtype, Kind};
     use super::*;
     use polars_core::prelude::Field;
 

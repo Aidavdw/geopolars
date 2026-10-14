@@ -9,13 +9,14 @@
 
 use std::ops::Range;
 
+use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowValidCoordsView};
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::MutableBitmap;
 use polars_arrow::datatypes::ArrowDataType;
 use pyo3_polars::derive::polars_expr;
 
-use crate::geoarrow::storage::{downcast, CoordsTrait, ValidCoordsView};
+use crate::geoarrow::storage::{downcast, ValidCoordsView};
 use crate::geoarrow::{describe, Geo, GeoDimension, Kind};
 
 /// The point a `dtype` column's centroids are, and the kind of geometry they are of.

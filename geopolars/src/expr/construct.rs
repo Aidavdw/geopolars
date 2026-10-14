@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use geoarrow_abstr::GeoArrowCoordsShared;
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
@@ -11,7 +12,7 @@ use serde::Deserialize;
 
 use super::rings::copy_coords;
 use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
-use crate::geoarrow::storage::{downcast, CoordsTrait, CoordsView};
+use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
 
 /// The keyword arguments of the constructors that build polygons:
@@ -246,7 +247,7 @@ fn close_rings(rings: &ListArray<i64>) -> PolarsResult<Option<ListArray<i64>>> {
     )))
 }
 
-/// `polygons`, missing where one of their rings is not a ring (see [`CoordsTrait::is_ring`]).
+/// `polygons`, missing where one of their rings is not a ring (see [`GeoArrowCoordsShared::is_ring`]).
 /// With `close`, the open rings are closed first.
 fn ringed_polygons(polygons: &ListArray<i64>, close: bool) -> PolarsResult<ListArray<i64>> {
     let rings = downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of rings")?;
@@ -265,7 +266,7 @@ fn ringed_polygons(polygons: &ListArray<i64>, close: bool) -> PolarsResult<ListA
     ))
 }
 
-/// Null out every polygon with a ring that is not a ring (see [`CoordsTrait::is_ring`]),
+/// Null out every polygon with a ring that is not a ring (see [`GeoArrowCoordsShared::is_ring`]),
 /// and every multipolygon with such a polygon (leaving the polygon itself in place).
 /// With `close`, an open ring is closed first by repeating its first vertex at its end.
 /// Other kinds come back as they are.

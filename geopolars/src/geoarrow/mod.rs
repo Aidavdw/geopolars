@@ -16,8 +16,9 @@ pub mod geotraits;
 mod kind;
 pub mod storage;
 
-pub use dimension::GeoDimension;
+pub use dimension::GeoDimensionDtype;
 pub use geo::Geo;
+pub use geoarrow_abstr::GeoDimension;
 pub use kind::Kind;
 
 use std::any::Any;

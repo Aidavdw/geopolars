@@ -6,6 +6,7 @@
 
 use std::ops::Range;
 
+use geoarrow_abstr::GeoArrowCoordsView;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
 use polars_arrow::datatypes::ArrowDataType;

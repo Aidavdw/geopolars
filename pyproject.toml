@@ -20,7 +20,7 @@ dependencies = [
 # never built or published itself.
 package = false
 
-# Mirrors the [workspace] members in the root Cargo.toml.
+# Mirrors the Python members of the [workspace] in the root Cargo.toml.
 [tool.uv.workspace]
 members = ["geopolars"]
 

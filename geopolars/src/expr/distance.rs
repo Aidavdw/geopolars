@@ -19,6 +19,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView};
 use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
 use polars::prelude::*;
 use polars_arrow::array::{MutablePrimitiveArray, PrimitiveArray};
@@ -29,7 +30,7 @@ use rsgeo::proj::Proj;
 use serde::Deserialize;
 
 use crate::geoarrow::geodetic::GeodeticCrs;
-use crate::geoarrow::storage::{CoordsTrait, CoordsView};
+use crate::geoarrow::storage::CoordsView;
 use crate::geoarrow::{describe, Kind};
 
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.

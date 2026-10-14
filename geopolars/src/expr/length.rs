@@ -4,13 +4,14 @@
 
 use std::ops::Range;
 
+use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowValidCoordsView};
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray};
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::distance::{DistanceMethod, GeodesicMetric, Metric, Planar};
-use crate::geoarrow::storage::{downcast, CoordsTrait, ValidCoordsView};
+use crate::geoarrow::storage::{downcast, ValidCoordsView};
 use crate::geoarrow::{describe, Kind};
 
 #[derive(Debug, Deserialize)]

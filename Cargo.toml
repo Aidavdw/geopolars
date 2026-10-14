@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["geopolars"]
+members = ["geopolars", "geoarrow_abstr"]
 # The polars checkout for Python polars is its own workspace, not part of ours.
 exclude = [".polars"]
 

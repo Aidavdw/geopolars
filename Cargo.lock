@@ -852,6 +852,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "geoarrow_abstr"
+version = "0.1.0"
+dependencies = [
+ "geo-traits",
+]
+
+[[package]]
 name = "geographiclib-rs"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -867,6 +874,7 @@ dependencies = [
  "geo",
  "geo-traits",
  "geoarrow-schema",
+ "geoarrow_abstr",
  "geographiclib-rs",
  "indexmap",
  "polars",

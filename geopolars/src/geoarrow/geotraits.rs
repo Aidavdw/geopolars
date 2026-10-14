@@ -10,22 +10,12 @@ use geo_traits::{
     MultiPolygonTrait, PointTrait, PolygonTrait, UnimplementedGeometryCollection,
     UnimplementedLine, UnimplementedRect, UnimplementedTriangle,
 };
+use geoarrow_abstr::GeoArrowCoordsShared;
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray};
 
-use super::storage::{downcast, CoordsTrait, CoordsView};
-use super::{GeoDimension, Kind};
-
-impl From<GeoDimension> for Dimensions {
-    fn from(dim: GeoDimension) -> Self {
-        match dim {
-            GeoDimension::XY => Dimensions::Xy,
-            GeoDimension::XYZ => Dimensions::Xyz,
-            GeoDimension::XYM => Dimensions::Xym,
-            GeoDimension::XYZM => Dimensions::Xyzm,
-        }
-    }
-}
+use super::storage::{downcast, CoordsView};
+use super::Kind;
 
 /// The range of the level below that entry `i` of `list` spans.
 fn range(list: &ListArray<i64>, i: usize) -> (usize, usize) {
