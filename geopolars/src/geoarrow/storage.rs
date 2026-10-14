@@ -5,6 +5,7 @@
 
 use polars::prelude::*;
 use polars_arrow::array::{Array, PrimitiveArray, StructArray};
+use polars_arrow::bitmap::Bitmap;
 
 use std::ops::Range;
 
@@ -100,7 +101,7 @@ impl<'a> From<&CoordsView<'a>> for Axes<'a> {
 /// Single NaN values, and *empty* points (all NaN) can still show up here to ruin the day.
 /// How you want to handle these is up to the kernel.
 pub(crate) struct CoordsView<'a> {
-    coords: &'a StructArray,
+    validity: Option<&'a Bitmap>,
     x: &'a PrimitiveArray<f64>,
     y: &'a PrimitiveArray<f64>,
     z: Option<&'a PrimitiveArray<f64>>,
@@ -123,23 +124,35 @@ impl<'a> CoordsView<'a> {
         };
         let z = field("z")?;
         let m = field("m")?;
-        Ok(Self { coords, x, y, z, m })
+        let validity = coords.validity();
+        Ok(Self {
+            validity,
+            x,
+            y,
+            z,
+            m,
+        })
     }
 
     /// How many coordinates there are.
     pub(crate) fn len(&self) -> usize {
-        self.coords.len()
+        self.x.len()
     }
 
     /// Whether coordinate `i` is there, with every one of its axes.
     pub(crate) fn present(&self, i: usize) -> bool {
-        self.coords.is_valid(i) && self.axes().all(|axis| axis.is_valid(i))
+        self.is_valid(i) && self.axes().all(|axis| axis.is_valid(i))
     }
 
     /// Every axis of coordinate `i`, in x, y, z, m order.
     /// Only meaningful where it is [`present`](Self::present).
     pub(crate) fn values(&self, i: usize) -> impl Iterator<Item = f64> + '_ {
         self.axes().map(move |axis| axis.value(i))
+    }
+
+    #[inline(always)]
+    fn is_valid(&self, i: usize) -> bool {
+        self.validity.is_none_or(|validity| validity.get_bit(i))
     }
 
     fn axes(&self) -> impl Iterator<Item = &'a PrimitiveArray<f64>> {
@@ -151,7 +164,9 @@ impl<'a> CoordsView<'a> {
     /// Whether any coordinate, or any axis of one, is missing.
     /// Without any, the `NULLS = false` readers below can skip every validity lookup.
     pub(crate) fn has_missing_values(&self) -> bool {
-        self.coords.null_count() > 0 || self.axes().any(|axis| axis.null_count() > 0)
+        self.validity
+            .is_some_and(|validity| validity.unset_bits() > 0)
+            || self.axes().any(|axis| axis.null_count() > 0)
     }
 
     pub(crate) fn xy(&self, i: usize) -> Option<(f64, f64)> {
@@ -162,8 +177,7 @@ impl<'a> CoordsView<'a> {
     /// Without, it assumes there are [no missing values](Self::has_missing_values).
     #[inline(always)]
     pub(crate) fn xy_checking_nulls<const NULLS: bool>(&self, i: usize) -> Option<(f64, f64)> {
-        let present =
-            !NULLS || (self.coords.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i));
+        let present = !NULLS || (self.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i));
         present.then(|| (self.x.value(i), self.y.value(i)))
     }
 
