@@ -1,19 +1,7 @@
 //! How far apart points are.
-//! Functionality for:
-//! - distance between arrays of two points
-//! - distance between one fixed and an array of others
-//! - n*n distances (between each and all other)
+//! Uses [Metric] to choose the how to measure distance (Planar/geodesic etc)
+//! Wraps functions from [geoarrow_abstr::distance]
 //!
-//! Multiple methods are possible:
-//! - Planar
-//! - Geodesic
-
-// TODO: A couple more methods of calculating distance:
-// - Euclidian (fast like planar, but now uses the CRS units),
-//   which should have a usage note that it might have a large error for long distances.
-// - Haversine, errors up to 0.5%
-// - Rhumb, distance along const lat or long bearing
-// - Projected, which is just Geodesic but first projected to WGS84, and uses Karney's algorithm.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -167,7 +155,7 @@ fn pairwise<const Z: bool>(
     b: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     polars_ensure!(a.len() == b.len(), ComputeError: "Chunks must be same size");
-    let F64Array(distances) = geoarrow_abstr::pairwise::<Z, _, F64Array>(metric, a, b)
+    let F64Array(distances) = geoarrow_abstr::distance::pairwise::<Z, _, F64Array>(metric, a, b)
         .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(distances)
 }
@@ -179,8 +167,9 @@ fn against_one<const Z: bool>(
     one: [f64; 3],
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(distances) = geoarrow_abstr::against_one::<Z, _, F64Array>(metric, one, many)
-        .map_err(|e| polars_err!(ComputeError: "{e}"))?;
+    let F64Array(distances) =
+        geoarrow_abstr::distance::against_one::<Z, _, F64Array>(metric, one, many)
+            .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(distances)
 }
 

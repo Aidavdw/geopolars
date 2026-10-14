@@ -1,4 +1,14 @@
-//! How a segment is measured: on the plane, or along an ellipsoid.
+//! Different methods for measuring distance.
+//! Multiple methods are possible:
+//! - Planar
+//! - Geodesic
+
+// TODO: A couple more methods of calculating distance:
+// - Euclidian (fast like planar, but now uses the CRS units),
+//   which should have a usage note that it might have a large error for long distances.
+// - Haversine, errors up to 0.5%
+// - Rhumb, distance along const lat or long bearing
+// - Projected, which is just Geodesic but first projected to WGS84, and uses Karney's algorithm.
 
 use std::convert::Infallible;
 use std::fmt;

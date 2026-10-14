@@ -1,4 +1,8 @@
 //! How far apart points are, as a [Metric] measures them.
+//! Functionality for:
+//! - distance between arrays of two points
+//! - distance between one fixed and an array of others
+//! - n*n distances (between each and all other)
 
 use crate::{GeoArrowCoordsView, GeoArrowF64Array, Metric};
 
