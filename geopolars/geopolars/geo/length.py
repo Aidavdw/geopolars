@@ -46,6 +46,7 @@ def _length(
     *,
     method: Literal["planar", "geodesic"] | None,
     allow_non_lines: bool,
+    ignore_nan: bool,
 ) -> pl.Expr:
     # No projection keeps lengths everywhere, so every CRS is measured on its ellipsoid.
     declares_crs = geometry._declares_crs()
@@ -62,7 +63,7 @@ def _length(
         plugin_path=LIB,
         args=[column],
         function_name="length",
-        kwargs={"method": method},
+        kwargs={"method": method, "ignore_nan": ignore_nan},
         is_elementwise=True,
     )
 
@@ -72,6 +73,7 @@ def length(
     *,
     method: Literal["planar", "geodesic"] | None = None,
     allow_non_lines: bool = False,
+    ignore_nan: bool = False,
 ) -> pl.Expr:
     """How long a linestring is, as an `f64`.
     For details on `method`, see the description in `distance`.
@@ -80,6 +82,9 @@ def length(
     For a line with a `z`, every segment counts its difference in height too
     (with `"geodesic"`, taken to be in the unit of the result).
     `m` is ignored.
+
+    A vertex with a NaN in `x` or `y` (or `z`, for a line with a `z`) makes the length NaN,
+    unless `ignore_nan` is set: then it is skipped, and the line runs on to the next vertex.
 
     An empty linestring, or one of a single vertex, has a length of `0.0`.
     A missing geometry has no length.
@@ -104,5 +109,10 @@ def length(
     """
     return on_geometry(
         geometry,
-        partial(_length, method=method, allow_non_lines=allow_non_lines),
+        partial(
+            _length,
+            method=method,
+            allow_non_lines=allow_non_lines,
+            ignore_nan=ignore_nan,
+        ),
     )

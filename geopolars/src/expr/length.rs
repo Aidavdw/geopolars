@@ -7,10 +7,19 @@ use std::ops::Range;
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray};
 use pyo3_polars::derive::polars_expr;
+use serde::Deserialize;
 
-use super::distance::{DistanceKwargs, DistanceMethod, GeodesicMetric, Metric, Planar};
+use super::distance::{DistanceMethod, GeodesicMetric, Metric, Planar};
 use crate::geoarrow::storage::{downcast, Axes};
 use crate::geoarrow::{describe, Kind};
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LengthKwargs {
+    method: DistanceMethod,
+    /// Skip vertices with a NaN, rather than letting the length become NaN.
+    ignore_nan: bool,
+}
 
 /// The CRS of a column to measure a length in. Type operation only.
 fn crs_of(field: &Field) -> PolarsResult<String> {
@@ -47,10 +56,7 @@ fn length_dtype(field: &Field) -> PolarsResult<Field> {
 /// Output for length:
 /// - Planar is in the unit of the coordinates
 /// - geodesic in the unit of the CRS
-fn kernel_output_type_length(
-    input_fields: &[Field],
-    kwargs: DistanceKwargs,
-) -> PolarsResult<Field> {
+fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> PolarsResult<Field> {
     if let DistanceMethod::Geodesic = kwargs.method {
         // So a CRS PROJ cannot measure in fails while the plan is built.
         GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
@@ -59,19 +65,23 @@ fn kernel_output_type_length(
 }
 
 /// The length of the line through `vertices`: fewer than two have a length of `0.0`.
+/// With `IGNORE_NAN`, a vertex with a NaN is skipped, so the line runs on to the next one.
 #[inline(always)]
-fn line_length<const Z: bool, M: Metric>(
+fn line_length<const Z: bool, const IGNORE_NAN: bool, M: Metric>(
     metric: &M,
     axes: &Axes,
-    mut vertices: Range<usize>,
+    vertices: Range<usize>,
 ) -> PolarsResult<f64> {
+    let mut vertices = vertices
+        .map(|i| axes.position::<Z>(i))
+        .filter(|&[x, y, z]| !IGNORE_NAN || !(x.is_nan() || y.is_nan() || (Z && z.is_nan())));
     let Some(first) = vertices.next() else {
         return Ok(0.0);
     };
-    let mut previous = metric.vertex(axes.position::<Z>(first))?;
+    let mut previous = metric.vertex(first)?;
     let mut total = 0.0;
-    for i in vertices {
-        let here = metric.vertex(axes.position::<Z>(i))?;
+    for position in vertices {
+        let here = metric.vertex(position)?;
         total += metric.segment::<Z>(previous, here);
         previous = here;
     }
@@ -80,7 +90,7 @@ fn line_length<const Z: bool, M: Metric>(
 
 /// The length of every row of a chunk: a linestring,
 /// or with `MULTI`, a multilinestring as the sum of its parts.
-fn lengths<const Z: bool, const MULTI: bool>(
+fn lengths<const Z: bool, const MULTI: bool, const IGNORE_NAN: bool>(
     metric: &impl Metric,
     rows: &ListArray<i64>,
     lines: &ListArray<i64>,
@@ -88,7 +98,7 @@ fn lengths<const Z: bool, const MULTI: bool>(
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let line = |i: usize| {
         let (start, end) = lines.offsets().start_end(i);
-        line_length::<Z, _>(metric, axes, start..end)
+        line_length::<Z, IGNORE_NAN, _>(metric, axes, start..end)
     };
     let values = (0..rows.len())
         .map(|i| {
@@ -107,7 +117,7 @@ fn lengths<const Z: bool, const MULTI: bool>(
 }
 
 /// The length of every geometry in `geometries`, as `metric` measures it.
-fn measure(metric: &impl Metric, geometries: &Series) -> PolarsResult<Series> {
+fn measure(metric: &impl Metric, geometries: &Series, ignore_nan: bool) -> PolarsResult<Series> {
     let multi = match describe(geometries.dtype())?.kind {
         Kind::LineString => false,
         Kind::MultiLineString => true,
@@ -123,19 +133,19 @@ fn measure(metric: &impl Metric, geometries: &Series) -> PolarsResult<Series> {
             rows
         };
         let (axes, dim) = Axes::new(lines.values().as_ref())?;
-        with_const_flags!(lengths(metric, rows, lines, &axes); dim.has_z(), multi)
+        with_const_flags!(lengths(metric, rows, lines, &axes); dim.has_z(), multi, ignore_nan)
     });
     Ok(Float64Chunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())
 }
 
 /// See `length`.
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_length)]
-fn length(inputs: &[Series], kwargs: DistanceKwargs) -> PolarsResult<Series> {
+fn length(inputs: &[Series], kwargs: LengthKwargs) -> PolarsResult<Series> {
     match kwargs.method {
-        DistanceMethod::Planar => measure(&Planar, &inputs[0]),
+        DistanceMethod::Planar => measure(&Planar, &inputs[0], kwargs.ignore_nan),
         DistanceMethod::Geodesic => {
             let metric = GeodesicMetric::of(&crs_of(&inputs[0].field())?)?;
-            measure(&*metric, &inputs[0])
+            measure(&*metric, &inputs[0], kwargs.ignore_nan)
         }
     }
 }

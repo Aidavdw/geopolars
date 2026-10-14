@@ -243,10 +243,16 @@ class ExprGeoNameSpace:
         *,
         method: Literal["planar", "geodesic"] | None = None,
         allow_non_lines: bool = False,
+        ignore_nan: bool = False,
     ) -> pl.Expr:
         from geopolars.geo.length import length
 
-        return length(self._expr, method=method, allow_non_lines=allow_non_lines)
+        return length(
+            self._expr,
+            method=method,
+            allow_non_lines=allow_non_lines,
+            ignore_nan=ignore_nan,
+        )
 
     def area(self, *, allow_non_polygons: bool = False) -> pl.Expr:
         from geopolars.geo.area import area

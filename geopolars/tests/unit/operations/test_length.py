@@ -162,6 +162,24 @@ def test_too_few_vertices_have_no_length(crs: str | None) -> None:
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
+def test_with_ignore_nan_a_nan_vertex_is_skipped(crs: str | None) -> None:
+    nan = math.nan
+    line = [(4.9041, 52.3676), (4.3571, 52.0116), (5.1214, 52.0907)]
+    with_nans = [(nan, nan), line[0], (nan, 1.0), line[1], (2.0, nan), line[2]]
+    df = _lines([with_nans, [(nan, nan), (1.0, 2.0)]], crs=crs)
+
+    lengths = df.select(geo.length("line", ignore_nan=True)).to_series().to_list()
+
+    assert lengths == pytest.approx([*_lengths(_lines([line], crs=crs)), 0.0])
+
+
+def test_without_ignore_nan_a_nan_vertex_makes_the_length_nan() -> None:
+    df = _lines([[(0.0, 0.0), (math.nan, 1.0), (3.0, 4.0)]])
+
+    assert math.isnan(_lengths(df)[0])
+
+
+@pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
 def test_a_missing_line_has_no_length(crs: str | None) -> None:
     df = _lines([[(0.0, 0.0), (3.0, 4.0)], None], crs=crs)
 
