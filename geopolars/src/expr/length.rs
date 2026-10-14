@@ -4,7 +4,7 @@
 
 use std::fmt::Display;
 
-use geoarrow_abstr::{GeoArrowCoordsShared, Metric, Planar};
+use geoarrow_abstr::{GeoArrowCoordsShared, LineStringArray, Metric, MultiLineStringArray, Planar};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use pyo3_polars::derive::polars_expr;
@@ -65,16 +65,26 @@ fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> Po
     length_dtype(&input_fields[0])
 }
 
-/// [geoarrow_abstr::lengths], into a polars array.
+/// [geoarrow_abstr::line_string_lengths], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
-fn lengths<const Z: bool, const MULTI: bool, const IGNORE_NAN: bool>(
+fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl Metric<Error: Display>,
-    rows: &ListView,
-    lines: &ValidListView,
-    axes: &ValidCoordsView,
+    array: &LineStringArray<ListView, ValidCoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(lengths) =
-        geoarrow_abstr::lengths::<Z, MULTI, IGNORE_NAN, _, F64Array>(metric, rows, lines, axes)
+        geoarrow_abstr::line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(metric, array)
+            .map_err(|e| polars_err!(ComputeError: "{e}"))?;
+    Ok(lengths)
+}
+
+/// [geoarrow_abstr::multi_line_string_lengths], into a polars array.
+/// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
+fn multi_line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
+    metric: &impl Metric<Error: Display>,
+    array: &MultiLineStringArray<ListView, ValidListView, ValidCoordsView>,
+) -> PolarsResult<PrimitiveArray<f64>> {
+    let F64Array(lengths) =
+        geoarrow_abstr::multi_line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(metric, array)
             .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(lengths)
 }
@@ -94,15 +104,23 @@ fn measure(
     };
     let storage = geometries.ext()?.storage();
     let chunks = storage.list()?.downcast_iter().map(|rows| {
-        let lines = if multi {
-            downcast(rows.values().as_ref(), "a list of linestrings")?
+        if multi {
+            let lines = downcast(rows.values().as_ref(), "a list of linestrings")?;
+            let array = MultiLineStringArray {
+                rows: ListView::new(rows),
+                lines: ValidListView::new(lines),
+                coords: ValidCoordsView::new(lines.values().as_ref())?,
+            };
+            let z = array.coords.dim().has_z();
+            with_const_flags!(multi_line_string_lengths(metric, &array); z, ignore_nan)
         } else {
-            rows
-        };
-        let axes = ValidCoordsView::new(lines.values().as_ref())?;
-        let dim = axes.dim();
-        let (rows, lines) = (ListView::new(rows), ValidListView::new(lines));
-        with_const_flags!(lengths(metric, &rows, &lines, &axes); dim.has_z(), multi, ignore_nan)
+            let array = LineStringArray {
+                rows: ListView::new(rows),
+                coords: ValidCoordsView::new(rows.values().as_ref())?,
+            };
+            let z = array.coords.dim().has_z();
+            with_const_flags!(line_string_lengths(metric, &array); z, ignore_nan)
+        }
     });
     Ok(Float64Chunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())
 }

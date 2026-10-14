@@ -66,7 +66,8 @@ The list levels above the coordinates are split the same way:
 - *ValidListView*, which assumes every list is valid.
   Use this for the inner levels of a nested geometry (the linestrings of a multilinestring).
 
-Kernels written against these traits live in `../geoarrow_abstr` (e.g. `lengths`),
+Kernels written against these traits live in `../geoarrow_abstr` (e.g. `line_string_lengths`,
+which takes a `LineStringArray`: the views of a linestring column held together),
 as do the metrics they measure with (`Planar`, `GeodesicMetric`),
 and build their output through `GeoArrowF64Array`.
 
