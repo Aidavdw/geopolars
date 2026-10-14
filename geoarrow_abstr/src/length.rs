@@ -1,5 +1,6 @@
 //! How long a linestring is, as a [Metric] measures it.
 
+use crate::arrays::per_row;
 use crate::{
     GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, LineString,
     LineStringArray, Metric, MultiLineStringArray,
@@ -26,19 +27,6 @@ fn line_length<const Z: bool, const IGNORE_NAN: bool, M: Metric>(
         previous = here;
     }
     Ok(total)
-}
-
-/// `length` of every row of a chunk, with the rows' own validity.
-#[inline(always)]
-fn per_row<O: GeoArrowF64Array, E>(
-    rows: &impl GeoArrowListView<Validity = O::Validity>,
-    length: impl Fn(usize) -> Result<f64, E>,
-) -> Result<O, E> {
-    let values = (0..rows.len())
-        // A missing row's offsets point anywhere, so it is not measured.
-        .map(|i| if rows.is_valid(i) { length(i) } else { Ok(0.0) })
-        .collect::<Result<Vec<f64>, E>>()?;
-    Ok(O::from_values(values, rows.validity()))
 }
 
 /// The length of every linestring of a chunk.

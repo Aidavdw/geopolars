@@ -6,7 +6,7 @@
 
 use std::ops::Range;
 
-use geoarrow_abstr::GeoArrowCoordsView;
+use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView};
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
 use polars_arrow::datatypes::ArrowDataType;
@@ -14,7 +14,6 @@ use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::area::twice_signed;
 use crate::geoarrow::geotraits::LineString;
 use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
@@ -43,6 +42,20 @@ fn kernel_output_type_is_standard_orientation(input_fields: &[Field]) -> PolarsR
         kind @ (Kind::Point | Kind::MultiPoint) => return Err(unoriented(kind)),
     };
     Ok(Field::new(field.name().clone(), dtype))
+}
+
+/// Twice the signed area of one closed ring, positive when it runs CCW.
+/// Like `_twice_signed` in Python: relative to its first coordinate,
+/// and without the repeated last one.
+fn twice_signed(ring: &LineString) -> f64 {
+    if ring.end - ring.start < 2 {
+        return 0.0;
+    }
+    let (x, y) = (|i| ring.coords.nth(i, 0), |i| ring.coords.nth(i, 1));
+    let (x0, y0) = (x(ring.start), y(ring.start));
+    (ring.start..ring.end - 1)
+        .map(|i| (x(i) - x0) * (y(i + 1) - y0) - (x(i + 1) - x0) * (y(i) - y0))
+        .sum()
 }
 
 /// Whether `vertices` run counter-clockwise (or clockwise, with `clockwise`).

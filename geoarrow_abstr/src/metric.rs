@@ -16,7 +16,9 @@ use std::fmt;
 use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
 use proj::{Proj, ProjError};
 
-/// How a segment is measured: on the plane, or along an ellipsoid.
+use crate::{GeoArrowValidCoordsView, LineString};
+
+/// How a segment, or the area a ring encloses, is measured: on the plane, or along an ellipsoid.
 /// Generic, so every metric and dimension gets a loop of its own.
 pub trait Metric {
     /// A vertex, ready to measure from (reprojected once, for the ellipsoid).
@@ -27,6 +29,11 @@ pub trait Metric {
     fn vertex(&self, position: [f64; 3]) -> Result<Self::Vertex, Self::Error>;
     /// How long the segment `ab` is.
     fn segment<const Z: bool>(&self, a: Self::Vertex, b: Self::Vertex) -> f64;
+    /// The area the closed `ring` encloses, whichever way it winds. Its heights do not count.
+    fn ring_area(
+        &self,
+        ring: &LineString<impl GeoArrowValidCoordsView>,
+    ) -> Result<f64, Self::Error>;
 }
 
 /// In the space the coordinates lie in, by Pythagoras.
@@ -50,6 +57,27 @@ impl Metric for Planar {
         } else {
             dx.hypot(dy)
         }
+    }
+
+    /// By the shoelace formula, relative to the ring's first vertex,
+    /// so coordinates far from the origin keep their precision.
+    /// The repeated closing vertex adds nothing.
+    fn ring_area(
+        &self,
+        ring: &LineString<impl GeoArrowValidCoordsView>,
+    ) -> Result<f64, Infallible> {
+        let mut positions = ring.positions::<false>();
+        let Some([x0, y0, _]) = positions.next() else {
+            return Ok(0.0);
+        };
+        let (mut x_previous, mut y_previous) = (0.0, 0.0);
+        let mut twice_signed = 0.0;
+        for [x, y, _] in positions {
+            let (x, y) = (x - x0, y - y0);
+            twice_signed += x_previous * y - x * y_previous;
+            (x_previous, y_previous) = (x, y);
+        }
+        Ok(twice_signed.abs() / 2.0)
     }
 }
 
@@ -79,7 +107,7 @@ impl std::error::Error for ReprojectError {
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
 ///
 /// Kept apart from the kernels, so the distance between two points, the length of a linestring
-/// (both through [`Metric`]) and the area of a polygon can be measured with the same thing.
+/// and the area of a polygon (all through [`Metric`]) can be measured with the same thing.
 pub struct GeodesicMetric {
     /// To the CRS's own longitude/latitude, so no datum is shifted.
     to_lonlat: Proj,
@@ -115,26 +143,6 @@ impl GeodesicMetric {
     pub fn between(&self, (lon_a, lat_a): (f64, f64), (lon_b, lat_b): (f64, f64)) -> f64 {
         self.ellipsoid.inverse(lat_a, lon_a, lat_b, lon_b)
     }
-
-    /// The area the closed ring through `coords` encloses on the ellipsoid,
-    /// in the CRS's unit squared, like [`between`](Self::between).
-    /// Based on `geographiclib_rs`
-    pub fn ring_area(
-        &self,
-        coords: impl IntoIterator<Item = Option<(f64, f64)>>,
-    ) -> Result<Option<f64>, ReprojectError> {
-        let mut ring = PolygonArea::new(&self.ellipsoid, Winding::CounterClockwise);
-        for coord in coords {
-            let Some(coord) = coord else { return Ok(None) };
-            let (lon, lat) = self.lonlat(coord)?;
-            // The repeated closing vertex adds an edge of length zero, which encloses nothing.
-            ring.add_point(lat, lon);
-        }
-        // Signed, then made positive: unsigned would take a clockwise ring
-        // to enclose everything outside of it.
-        let (_perimeter, area, _vertices) = ring.compute(true);
-        Ok(Some(area.abs()))
-    }
 }
 
 /// Along the ellipsoid, climbing and descending with `z`:
@@ -156,5 +164,24 @@ impl Metric for GeodesicMetric {
         } else {
             along
         }
+    }
+
+    /// On the ellipsoid, in the CRS's unit squared, like [`between`](GeodesicMetric::between).
+    /// Based on `geographiclib_rs`.
+    fn ring_area(
+        &self,
+        ring: &LineString<impl GeoArrowValidCoordsView>,
+    ) -> Result<f64, ReprojectError> {
+        let mut area = PolygonArea::new(&self.ellipsoid, Winding::CounterClockwise);
+        for [x, y, _] in ring.positions::<false>() {
+            let (lon, lat) = self.lonlat((x, y))?;
+            // The repeated closing vertex adds an edge of length zero, which encloses nothing.
+            area.add_point(lat, lon);
+        }
+        // Signed, then made positive.
+        // unsigned would take a clockwise ring
+        // to enclose everything outside of it.
+        let (_perimeter, area, _vertices) = area.compute(true);
+        Ok(area.abs())
     }
 }

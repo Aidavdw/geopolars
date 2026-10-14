@@ -1,5 +1,7 @@
 //! What a kernel builds its output in, whatever storage backs it.
 
+use crate::GeoArrowListView;
+
 /// One `f64` per row, with missing rows recorded in the storage's own validity.
 pub trait GeoArrowF64Array {
     /// How the storage records which rows are there.
@@ -17,4 +19,23 @@ pub trait GeoArrowF64Array {
     ) -> Result<Self, E>
     where
         Self: Sized;
+}
+
+/// `measure` of every row of a chunk, with the rows' own validity.
+#[inline(always)]
+pub(crate) fn per_row<O: GeoArrowF64Array, E>(
+    rows: &impl GeoArrowListView<Validity = O::Validity>,
+    measure: impl Fn(usize) -> Result<f64, E>,
+) -> Result<O, E> {
+    let values = (0..rows.len())
+        // A missing row's offsets point anywhere, so it is not measured.
+        .map(|i| {
+            if rows.is_valid(i) {
+                measure(i)
+            } else {
+                Ok(0.0)
+            }
+        })
+        .collect::<Result<Vec<f64>, E>>()?;
+    Ok(O::from_values(values, rows.validity()))
 }

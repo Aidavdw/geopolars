@@ -4,6 +4,7 @@
 //!
 //! See the expression implementation guide on Array abstractions for GeoArrow.
 
+mod area;
 mod arrays;
 mod coords;
 mod dimension;
@@ -14,6 +15,7 @@ mod lists;
 mod metric;
 mod polygons;
 
+pub use area::{multi_polygon_areas, polygon_areas};
 pub use arrays::GeoArrowF64Array;
 pub use coords::{GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowValidCoordsView};
 pub use dimension::GeoDimension;
