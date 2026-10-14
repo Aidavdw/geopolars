@@ -15,7 +15,7 @@ use polars_arrow::bitmap::MutableBitmap;
 use polars_arrow::datatypes::ArrowDataType;
 use pyo3_polars::derive::polars_expr;
 
-use crate::geoarrow::storage::{downcast, ValidCoordsView};
+use crate::geoarrow::storage::{downcast, CoordsTrait, ValidCoordsView};
 use crate::geoarrow::{describe, Geo, GeoDimension, Kind};
 
 /// The point a `dtype` column's centroids are, and the kind of geometry they are of.
@@ -259,13 +259,15 @@ fn centroid(inputs: &[Series]) -> PolarsResult<Series> {
             };
             Ok(if polygons {
                 let rings: &ListArray<i64> = downcast(parts.values().as_ref(), "a list of rings")?;
-                let (axes, dim) = ValidCoordsView::new(rings.values().as_ref())?;
+                let axes = ValidCoordsView::new(rings.values().as_ref())?;
+                let dim = axes.dim();
                 with_const_flags!(
                     polygon_centroids(rows, parts, rings, &axes, dim);
                     dim.has_z(), dim.has_m(), multi
                 )
             } else {
-                let (axes, dim) = ValidCoordsView::new(parts.values().as_ref())?;
+                let axes = ValidCoordsView::new(parts.values().as_ref())?;
+                let dim = axes.dim();
                 with_const_flags!(
                     line_centroids(rows, parts, &axes, dim);
                     dim.has_z(), dim.has_m(), multi

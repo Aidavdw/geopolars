@@ -41,23 +41,25 @@ pub(crate) struct ValidCoordsView<'a> {
 }
 
 impl<'a> ValidCoordsView<'a> {
-    /// The axes, and the dimension they carry.
-    pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, GeoDimension)> {
+    pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<Self> {
         let coords: &StructArray = downcast(coords, "a coordinate struct")?;
         let arrays = AxisArrays::new(coords)?;
-        let axes = Self {
+        Ok(Self {
             x: arrays.x.values().as_slice(),
             y: arrays.y.values().as_slice(),
             z: arrays.z.map(|z| z.values().as_slice()),
             m: arrays.m.map(|m| m.values().as_slice()),
-        };
-        Ok((axes, arrays.dim()))
+        })
     }
 
     /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
     #[inline(always)]
     pub(crate) fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
-        [self.x[i], self.y[i], if Z { self.z.unwrap()[i] } else { 0.0 }]
+        [
+            self.x[i],
+            self.y[i],
+            if Z { self.z.unwrap()[i] } else { 0.0 },
+        ]
     }
 
     /// The m of coordinate `i`. Only for a dimension with an `m`.
@@ -84,6 +86,9 @@ pub(crate) trait CoordsTrait {
     fn same_place(&self, i: usize, j: usize) -> bool;
 
     fn is_ring(&self, range: Range<usize>) -> bool;
+
+    /// The dimension these coordinates carry.
+    fn dim(&self) -> GeoDimension;
 }
 
 impl CoordsTrait for ValidCoordsView<'_> {
@@ -112,6 +117,15 @@ impl CoordsTrait for ValidCoordsView<'_> {
 
     fn is_ring(&self, range: Range<usize>) -> bool {
         range.len() >= MIN_RING_VERTICES && self.same_place(range.start, range.end - 1)
+    }
+
+    fn dim(&self) -> GeoDimension {
+        match (self.z.is_some(), self.m.is_some()) {
+            (false, false) => GeoDimension::XY,
+            (true, false) => GeoDimension::XYZ,
+            (false, true) => GeoDimension::XYM,
+            (true, true) => GeoDimension::XYZM,
+        }
     }
 }
 
@@ -150,16 +164,6 @@ impl<'a> AxisArrays<'a> {
             m: field("m")?,
         })
     }
-
-    /// The dimension these axes carry.
-    pub(crate) fn dim(&self) -> GeoDimension {
-        match (self.z.is_some(), self.m.is_some()) {
-            (false, false) => GeoDimension::XY,
-            (true, false) => GeoDimension::XYZ,
-            (false, true) => GeoDimension::XYM,
-            (true, true) => GeoDimension::XYZM,
-        }
-    }
 }
 
 /// Abstraction over Polars storage for coordinates where individual coordinates can be invalid.
@@ -171,16 +175,13 @@ pub(crate) struct CoordsView<'a> {
     /// Which coordinates are there.
     validity: Option<&'a Bitmap>,
     axes: ValidCoordsView<'a>,
-    dim: GeoDimension,
 }
 
 impl<'a> CoordsView<'a> {
     pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<Self> {
-        let (axes, dim) = ValidCoordsView::new(coords)?;
         Ok(Self {
             validity: coords.validity(),
-            axes,
-            dim,
+            axes: ValidCoordsView::new(coords)?,
         })
     }
 
@@ -207,11 +208,6 @@ impl<'a> CoordsView<'a> {
     pub(crate) fn position<const NULLS: bool, const Z: bool>(&self, i: usize) -> Option<[f64; 3]> {
         (!NULLS || self.is_valid(i)).then(|| self.axes.position::<Z>(i))
     }
-
-    /// The dimension these coordinates carry.
-    pub(crate) fn dim(&self) -> GeoDimension {
-        self.dim
-    }
 }
 
 impl CoordsTrait for CoordsView<'_> {
@@ -233,5 +229,10 @@ impl CoordsTrait for CoordsView<'_> {
     #[inline]
     fn is_ring(&self, range: Range<usize>) -> bool {
         self.axes.is_ring(range)
+    }
+
+    #[inline]
+    fn dim(&self) -> GeoDimension {
+        self.axes.dim()
     }
 }

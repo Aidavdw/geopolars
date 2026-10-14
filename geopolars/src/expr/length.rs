@@ -10,7 +10,7 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::distance::{DistanceMethod, GeodesicMetric, Metric, Planar};
-use crate::geoarrow::storage::{downcast, ValidCoordsView};
+use crate::geoarrow::storage::{downcast, CoordsTrait, ValidCoordsView};
 use crate::geoarrow::{describe, Kind};
 
 #[derive(Debug, Deserialize)]
@@ -132,7 +132,8 @@ fn measure(metric: &impl Metric, geometries: &Series, ignore_nan: bool) -> Polar
         } else {
             rows
         };
-        let (axes, dim) = ValidCoordsView::new(lines.values().as_ref())?;
+        let axes = ValidCoordsView::new(lines.values().as_ref())?;
+        let dim = axes.dim();
         with_const_flags!(lengths(metric, rows, lines, &axes); dim.has_z(), multi, ignore_nan)
     });
     Ok(Float64Chunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())
