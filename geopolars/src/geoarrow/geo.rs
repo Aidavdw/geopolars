@@ -91,8 +91,7 @@ impl ExtensionTypeImpl for Geo {
         h.finish()
     }
 
-    /// Shown as `ext[point[xyzm]]` in a DataFrame header,
-    /// or `ext[point[xyzm, EPSG:4326]]` with a CRS.
+    /// shown as `ext[point[xyzm] EPSG:4326]` table header on python side
     fn dyn_display(&self) -> Cow<'_, str> {
         let (kind, dim) = (self.kind.display(), self.dim.tag());
         Cow::Owned(match self.metadata.crs_label() {
@@ -101,12 +100,13 @@ impl ExtensionTypeImpl for Geo {
         })
     }
 
+    /// Shown as `PointXY`, or `PointXY({"crs":"EPSG:4326"})` with all json metadata.
     fn dyn_debug(&self) -> Cow<'_, str> {
-        Cow::Owned(format!(
-            "{}{}",
-            self.kind.type_name(),
-            self.dim.tag().to_uppercase()
-        ))
+        let name = format!("{}{}", self.kind.type_name(), self.dim.tag().to_uppercase());
+        Cow::Owned(match self.metadata.serialize() {
+            Some(metadata) => format!("{name}({metadata})"),
+            None => name,
+        })
     }
 }
 
