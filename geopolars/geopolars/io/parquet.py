@@ -3,13 +3,13 @@
 A GeoParquet file is a Parquet file with a `geo` key in its metadata.
 It says which columns hold geometries, how, and in which CRS.
 Reading and writing the file is done with polars.
-This module only gives the geometry their dtypes on reading,
+This module only gives the geometry their dtypes after reading,
 and writes the `geo` key on writing.
 """
 
 from __future__ import annotations
 
-from typing import IO, TYPE_CHECKING, Any, Literal
+from typing import IO, TYPE_CHECKING, Any, Literal, TypeVar
 
 import polars as pl
 
@@ -32,50 +32,44 @@ if TYPE_CHECKING:
     )
     from polars.io.cloud import CredentialProviderFunction
 
+FrameT = TypeVar("FrameT", pl.DataFrame, pl.LazyFrame)
 
-def scan_parquet(
+
+def from_geoparquet(
+    frame: FrameT,
     source: str | Path | Sequence[str | Path],
     *,
     check_every_file: bool = True,
     storage_options: StorageOptionsDict | None = None,
     credential_provider: CredentialProviderFunction | Literal["auto"] | None = "auto",
-    **kwargs: Any,
-) -> pl.LazyFrame:
-    """Lazily read GeoParquet, like `pl.scan_parquet`.
+    glob: bool = True,
+    hidden_file_prefix: str | Sequence[str] | None = None,
+) -> FrameT:
+    """
+    Geoparquet only saves metadata stuff in the geo footer.
+    Polars saves the type information (e.g. PolygonXY),
+    but other software does not.
+    We can figure out the dimensions from struct names though,
+    and we can re-read the footer (which is why we need `path`).
 
-    The columns that have been read get geopolars dtypes, with the parquet's metadata.
+    `frame` is what `pl.read_parquet` or `pl.scan_parquet` read from `source`.
+    The columns get geopolars dtypes, with the metadata of the files in `source`.
     Native encodings become e.g. `PolygonXY`,
     and WKB becomes `Wkb` (which you can decode to native yourself with `geo.from_wkb`).
-    A file without GeoParquet metadata is read as plain Parquet.
+    A file without GeoParquet metadata leaves the frame as it is.
 
-    The metadata of every file in `source` is read and has to agree,
-    which costs reading each file's footer.
-    With `check_every_file=False`, only the first file's is read and the rest are trusted.
-    If another file has different metadata, the failure might be silent.
-
-    Other keyword arguments are passed on to `pl.scan_parquet`.
 
     ```python
-    gpl.scan_parquet("countries/*.parquet").select(
-        geo.from_wkb("geometry", MultiPolygonXY)
-    )
+    pl.scan_parquet("countries/*.parquet").pipe(
+        gpl.from_geoparquet, "countries/*.parquet"
+    ).select(geo.from_wkb("geometry", MultiPolygonXY))
     ```
     """
-    # FIXME: we should not offer a scan_parquet,
-    # this should work with built in.
-    # extension type registry should do this.
-    # This already works???? can get rid if.
-    lf = pl.scan_parquet(
-        source,
-        storage_options=storage_options,
-        credential_provider=credential_provider,
-        **kwargs,
-    )
     paths = (
         _expand_paths(
             source,
-            glob=kwargs.get("glob", True),
-            hidden_file_prefix=kwargs.get("hidden_file_prefix"),
+            glob=glob,
+            hidden_file_prefix=hidden_file_prefix,
             storage_options=storage_options,
             credential_provider=credential_provider,
         )
@@ -94,10 +88,10 @@ def scan_parquet(
         for path in paths
     ]
     if all(geo is None for geo in geos):
-        return lf
+        return frame
 
     # Polars reads with the first file's schema too.
-    schema = lf.collect_schema()
+    schema = frame.collect_schema()
     first: dict[str, pl.DataType] | None = None
     for path, geo in zip(paths, geos, strict=True):
         if geo is None:
@@ -115,7 +109,7 @@ def scan_parquet(
             raise pl.exceptions.SchemaError(msg)
 
     assert first is not None
-    return lf.with_columns(
+    return frame.with_columns(
         _storage_of(name, dtype).ext.to(dtype)
         for name, dtype in first.items()
         # A file Polars wrote can already have it.
@@ -135,13 +129,6 @@ def _storage_of(name: str, dtype: pl.DataType) -> pl.Expr:
     # We follow the spec.
     missing = pl.all_horizontal(bound.is_null() for bound in bounds)
     return pl.when(~missing).then(pl.struct(bounds)).alias(name)
-
-
-def read_parquet(
-    source: str | Path | Sequence[str | Path], **kwargs: Any
-) -> pl.DataFrame:
-    """Read GeoParquet into memory: `scan_parquet(source, **kwargs).collect()`."""
-    return scan_parquet(source, **kwargs).collect()
 
 
 def _geometry_dtypes(geo: str, schema: pl.Schema) -> dict[str, pl.DataType]:

@@ -156,9 +156,9 @@ def test_overlapping_parts_null_the_multipolygon() -> None:
 
 def test_without_the_multipolygon_overlap_check_overlapping_parts_are_kept() -> None:
     overlapping = [[_SQUARE], [_shifted(_SQUARE, 1)]]
-    df = pl.DataFrame(
-        {"parts": [overlapping]}, schema={"parts": _XY_POLYGONS}
-    ).select(pl.col("parts").ext.to(MultiPolygonXY()))
+    df = pl.DataFrame({"parts": [overlapping]}, schema={"parts": _XY_POLYGONS}).select(
+        pl.col("parts").ext.to(MultiPolygonXY())
+    )
 
     out = df.select(
         geo.null_out_invalid("parts", check_multi_polygon_self_overlap=False)
