@@ -230,7 +230,7 @@ fn shared_crs(fields: &[Field]) -> PolarsResult<Option<String>> {
         SchemaMismatch: "the points declare different CRSs, {crs_a} and {crs_b}; \
         use `to_crs` to bring one onto the other first"
     );
-    Ok(Some(crs_a))
+    Ok(Some(crs_a.to_owned()))
 }
 
 /// The CRS to measure along the ellipsoid of. Type operation only.

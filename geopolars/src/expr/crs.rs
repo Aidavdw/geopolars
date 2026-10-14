@@ -37,7 +37,7 @@ fn kernel_output_type_to_crs(input_fields: &[Field], kwargs: ToCrsKwargs) -> Pol
 /// The PROJ transformation from the CRS of `dtype` to `to`.
 fn transformation(dtype: &DataType, to: &str) -> PolarsResult<Proj> {
     let from = describe(dtype)?.metadata.crs()?;
-    Proj::new_known_crs(&from, to, None)
+    Proj::new_known_crs(from, to, None)
         .map_err(|e| polars_err!(ComputeError: "cannot reproject from {from} to {to}: {e}"))
 }
 

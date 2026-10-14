@@ -1,4 +1,5 @@
 //! Home of [ExtensionMetadata].
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use geoarrow_schema::{Crs, CrsType, Edges};
@@ -23,10 +24,48 @@ use serde_json::{Map, Value};
 ///
 /// whitespace and key order do not make two metadata different,
 /// and [`serialize`](Self::serialize) always writes compact JSON.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct ExtensionMetadata(Map<String, Value>);
+///
+/// The CRS and edges are parsed once, when the metadata is built, and cached next to the map.
+/// The map stays the source of truth: only it is compared, hashed and serialized.
+#[derive(Clone, Debug)]
+pub struct ExtensionMetadata {
+    map: Map<String, Value>,
+    /// Cache of `map`: the CRS in a form PROJ accepts, or why there is none.
+    crs: Result<String, String>,
+    /// Cache of `map`: how the edges run, or why they are invalid.
+    edges: Result<Option<Edges>, String>,
+}
+
+impl PartialEq for ExtensionMetadata {
+    fn eq(&self, other: &Self) -> bool {
+        self.map == other.map
+    }
+}
+
+impl Eq for ExtensionMetadata {}
+
+impl Hash for ExtensionMetadata {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.map.hash(state)
+    }
+}
+
+impl Default for ExtensionMetadata {
+    fn default() -> Self {
+        Self::from_map(Map::new())
+    }
+}
 
 impl ExtensionMetadata {
+    /// The only constructor, so the caches never drift from the map.
+    fn from_map(map: Map<String, Value>) -> Self {
+        Self {
+            crs: crs_of(&map),
+            edges: edges_of(&map),
+            map,
+        }
+    }
+
     /// Parses the raw metadata string.
     /// If no metadata is found, it produces an empty object.
     pub fn parse(metadata: Option<&str>) -> PolarsResult<Self> {
@@ -36,7 +75,7 @@ impl ExtensionMetadata {
             Some(metadata) => metadata,
         };
         match serde_json::from_str(metadata) {
-            Ok(Value::Object(map)) => Ok(Self(map)),
+            Ok(Value::Object(map)) => Ok(Self::from_map(map)),
             Ok(_) => polars_bail!(
                 ComputeError: "GeoArrow extension metadata must be a JSON object, got: {metadata}"
             ),
@@ -49,51 +88,34 @@ impl ExtensionMetadata {
     /// The metadata in a JSON-formatted string.
     /// If empty, this returns `None`.
     pub fn serialize(&self) -> Option<String> {
-        (!self.0.is_empty()).then(|| serde_json::to_string(&self.0).unwrap())
+        (!self.map.is_empty()).then(|| serde_json::to_string(&self.map).unwrap())
     }
 
     /// Gets the CRS in a form PROJ accepts
     ///
     /// Errors if there is no CRS.
-    pub fn crs(&self) -> PolarsResult<String> {
-        let crs = Crs::deserialize(&self.0).map_err(|e| {
-            let metadata = self.serialize().unwrap_or_default();
-            polars_err!(ComputeError: "invalid CRS in GeoArrow metadata {metadata}: {e}")
-        })?;
-
-        match (crs.crs_value(), crs.crs_type()) {
-            (None, _) => polars_bail!(
-                ComputeError: "the column does not declare a CRS, so it cannot be reprojected"
-            ),
-            // Only the producer knows what an SRID refers to.
-            (Some(srid), Some(CrsType::Srid)) => polars_bail!(
-                ComputeError: "the column's CRS is the opaque SRID {srid}, which cannot be \
-                reprojected from"
-            ),
-            // PROJJSON, WKT, `AUTH:CODE`, or a string of unstated kind: PROJ gets to try.
-            (Some(Value::String(crs)), _) => Ok(crs.clone()),
-            (Some(projjson @ Value::Object(_)), _) => Ok(projjson.to_string()),
-            (Some(other), _) => polars_bail!(
-                ComputeError: "a CRS must be a PROJJSON object or a string, got: {other}"
-            ),
-        }
+    pub fn crs(&self) -> PolarsResult<&str> {
+        self.crs
+            .as_deref()
+            .map_err(|e| polars_err!(ComputeError: "{e}"))
     }
 
     /// Whether the metadata names a CRS at all (whether or not PROJ can use it).
     pub fn declares_crs(&self) -> bool {
-        self.0.get("crs").is_some_and(|crs| !crs.is_null())
+        self.map.get("crs").is_some_and(|crs| !crs.is_null())
     }
 
     /// Whether the CRS is an SRID, which only its producer can read.
     pub fn is_opaque_srid(&self) -> bool {
-        Crs::deserialize(&self.0).is_ok_and(|crs| matches!(crs.crs_type(), Some(CrsType::Srid)))
+        self.map.get("crs_type").and_then(Value::as_str) == Some("srid")
     }
 
     /// Consuming setter for CRS.
-    pub fn with_crs(mut self, crs: &str) -> Self {
-        self.0.insert("crs".to_owned(), crs_value(crs));
-        self.0.shift_remove("crs_type");
-        self
+    pub fn with_crs(self, crs: &str) -> Self {
+        let mut map = self.map;
+        map.insert("crs".to_owned(), crs_value(crs));
+        map.shift_remove("crs_type");
+        Self::from_map(map)
     }
 
     /// The CRS as a PROJJSON object.
@@ -101,13 +123,13 @@ impl ExtensionMetadata {
     /// `None` if the metadata declares no CRS.
     /// A PROJJSON CRS comes back as-is; any other form is converted by PROJ.
     pub fn projjson(&self) -> PolarsResult<Option<Map<String, Value>>> {
-        match self.0.get("crs") {
+        match self.map.get("crs") {
             None | Some(Value::Null) => return Ok(None),
             Some(Value::Object(projjson)) => return Ok(Some(projjson.clone())),
             Some(_) => {}
         }
         let crs = self.crs()?;
-        let projjson = Proj::new(&crs)
+        let projjson = Proj::new(crs)
             .map_err(|e| polars_err!(ComputeError: "PROJ cannot read the CRS {crs}: {e}"))?
             .to_projjson(None, None, None)
             .map_err(
@@ -123,20 +145,50 @@ impl ExtensionMetadata {
 
     /// How the edges between coordinates run. `None` means planar.
     pub fn edges(&self) -> PolarsResult<Option<Edges>> {
-        match self.0.get("edges") {
-            None | Some(Value::Null) => Ok(None),
-            Some(edges) => Edges::deserialize(edges).map(Some).map_err(
-                |e| polars_err!(ComputeError: "invalid edges {edges} in GeoArrow metadata: {e}"),
-            ),
-        }
+        self.edges
+            .clone()
+            .map_err(|e| polars_err!(ComputeError: "{e}"))
     }
 
     /// Consuming setter for edges.
-    pub fn with_edges(mut self, edges: Edges) -> Self {
+    pub fn with_edges(self, edges: Edges) -> Self {
         // A unit variant always serialises.
         let edges = serde_json::to_value(edges).unwrap();
-        self.0.insert("edges".to_owned(), edges);
-        self
+        let mut map = self.map;
+        map.insert("edges".to_owned(), edges);
+        Self::from_map(map)
+    }
+}
+
+/// What [`ExtensionMetadata::crs`] gives for `map`, with the error as a message.
+fn crs_of(map: &Map<String, Value>) -> Result<String, String> {
+    let crs = Crs::deserialize(map).map_err(|e| {
+        let metadata = serde_json::to_string(map).unwrap();
+        format!("invalid CRS in GeoArrow metadata {metadata}: {e}")
+    })?;
+
+    match (crs.crs_value(), crs.crs_type()) {
+        (None, _) => Err("the column does not declare a CRS, so it cannot be reprojected".into()),
+        // Only the producer knows what an SRID refers to.
+        (Some(srid), Some(CrsType::Srid)) => Err(format!(
+            "the column's CRS is the opaque SRID {srid}, which cannot be reprojected from"
+        )),
+        // PROJJSON, WKT, `AUTH:CODE`, or a string of unstated kind: PROJ gets to try.
+        (Some(Value::String(crs)), _) => Ok(crs.clone()),
+        (Some(projjson @ Value::Object(_)), _) => Ok(projjson.to_string()),
+        (Some(other), _) => Err(format!(
+            "a CRS must be a PROJJSON object or a string, got: {other}"
+        )),
+    }
+}
+
+/// What [`ExtensionMetadata::edges`] gives for `map`, with the error as a message.
+fn edges_of(map: &Map<String, Value>) -> Result<Option<Edges>, String> {
+    match map.get("edges") {
+        None | Some(Value::Null) => Ok(None),
+        Some(edges) => Edges::deserialize(edges)
+            .map(Some)
+            .map_err(|e| format!("invalid edges {edges} in GeoArrow metadata: {e}")),
     }
 }
 
@@ -169,7 +221,7 @@ impl MetadataKwargs {
             return Ok(metadata);
         };
 
-        match metadata.0.get("crs") {
+        match metadata.map.get("crs") {
             None | Some(Value::Null) => Ok(Arc::new(Arc::unwrap_or_clone(metadata).with_crs(crs))),
             Some(declared) if *declared == crs_value(crs) => Ok(metadata),
             Some(declared) => polars_bail!(
@@ -188,7 +240,7 @@ mod tests {
     use super::*;
 
     fn crs_of(metadata: Option<&str>) -> PolarsResult<String> {
-        ExtensionMetadata::parse(metadata)?.crs()
+        ExtensionMetadata::parse(metadata)?.crs().map(str::to_owned)
     }
 
     fn with_crs(metadata: Option<&str>, crs: &str) -> Option<String> {

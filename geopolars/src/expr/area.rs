@@ -46,7 +46,7 @@ fn crs_of(field: &Field) -> PolarsResult<String> {
         geo.metadata.declares_crs(),
         SchemaMismatch: "the geometry declares no CRS, so there is no ellipsoid to measure on"
     );
-    geo.metadata.crs()
+    geo.metadata.crs().map(str::to_owned)
 }
 
 /// Only polygons and multipolygons enclose anything: other kinds are refused

@@ -45,7 +45,7 @@ fn crs(metadata: Option<&str>) -> PyResult<Option<String>> {
     }
     metadata
         .crs()
-        .map(Some)
+        .map(|crs| Some(crs.to_owned()))
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
@@ -69,7 +69,7 @@ fn longitude_turn(py: Python<'_>, metadata: Option<&str>) -> PyResult<Option<f64
     }
     metadata
         .crs()
-        .and_then(|crs| geoarrow::geodetic::longitude_turn(&crs))
+        .and_then(geoarrow::geodetic::longitude_turn)
         .map_err(|e| polars_exception(py, e))
 }
 
@@ -91,7 +91,7 @@ fn crs_bounds(
     metadata
         .crs()
         .and_then(|crs| {
-            geoarrow::geodetic::crs_bounds(&crs, allow_wrapped_longitude, within_area_of_use)
+            geoarrow::geodetic::crs_bounds(crs, allow_wrapped_longitude, within_area_of_use)
         })
         .map_err(|e| polars_exception(py, e))
 }
@@ -107,7 +107,7 @@ fn is_equal_area(py: Python<'_>, metadata: Option<&str>) -> PyResult<bool> {
     }
     metadata
         .crs()
-        .and_then(|crs| geoarrow::geodetic::is_equal_area(&crs))
+        .and_then(geoarrow::geodetic::is_equal_area)
         .map_err(|e| polars_exception(py, e))
 }
 
