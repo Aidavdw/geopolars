@@ -10,7 +10,7 @@ use geo_traits::{MultiPolygonTrait, PolygonTrait};
 
 use super::distance::GeodesicMetric;
 use crate::geoarrow::geotraits::{for_each_geometry, Geometry, LineString, Polygon};
-use crate::geoarrow::storage::{downcast, CoordsView};
+use crate::geoarrow::storage::{downcast, CoordsTrait, CoordsView};
 use crate::geoarrow::{describe, Kind};
 
 /// Twice the signed area of one closed ring, positive when it runs CCW.

@@ -69,6 +69,56 @@ impl<'a> ValidCoordsView<'a> {
     pub(crate) fn m(&self, i: usize) -> f64 {
         self.m[i]
     }
+
+    /// [`same_place`](CoordsTrait::same_place), comparing z only with `Z`.
+    fn same_place_in<const Z: bool>(&self, i: usize, j: usize) -> bool {
+        same_position(self.position::<Z>(i), self.position::<Z>(j))
+    }
+}
+
+/// What both [ValidCoordsView] and [CoordsView] offer.
+pub(crate) trait CoordsTrait {
+    /// How many coordinates there are.
+    fn len(&self) -> usize;
+
+    fn nth(&self, i: usize, n: usize) -> f64;
+
+    /// Whether coordinates `i` and `j` lie at almost the same place:
+    /// [`is_close`] in x, y and z. m is a measure rather than a position, so it is not compared.
+    fn same_place(&self, i: usize, j: usize) -> bool;
+
+    fn is_ring(&self, range: Range<usize>) -> bool;
+}
+
+impl CoordsTrait for ValidCoordsView<'_> {
+    fn len(&self) -> usize {
+        self.x.len()
+    }
+
+    fn nth(&self, i: usize, n: usize) -> f64 {
+        let values = match n {
+            0 => self.x,
+            1 => self.y,
+            2 if !self.z.is_empty() => self.z,
+            // Empty without an m, so indexing it panics.
+            2 | 3 => self.m,
+            _ => panic!("coordinate index {n} out of range"),
+        };
+        values[i]
+    }
+
+    fn same_place(&self, i: usize, j: usize) -> bool {
+        // Indexing `i` means the chunk is not empty, so an empty `z` means there is none.
+        if self.z.is_empty() {
+            self.same_place_in::<false>(i, j)
+        } else {
+            self.same_place_in::<true>(i, j)
+        }
+    }
+
+    fn is_ring(&self, range: Range<usize>) -> bool {
+        range.len() >= MIN_RING_VERTICES && self.same_place(range.start, range.end - 1)
+    }
 }
 
 /// Polars-backed coordinate data that might be potentially invalid.
@@ -140,11 +190,6 @@ impl<'a> CoordsView<'a> {
         })
     }
 
-    /// How many coordinates there are.
-    pub(crate) fn len(&self) -> usize {
-        self.axes.x.len()
-    }
-
     #[inline(always)]
     fn is_valid(&self, i: usize) -> bool {
         self.validity.is_none_or(|validity| validity.get_bit(i))
@@ -169,43 +214,30 @@ impl<'a> CoordsView<'a> {
         (!NULLS || self.is_valid(i)).then(|| self.axes.position::<Z>(i))
     }
 
-    /// Whether coordinates `i` and `j` lie at almost the same place:
-    /// [`is_close`] in x, y and z. m is a measure rather than a position, so it is not compared.
-    /// A missing coordinate is close to nothing.
-    pub(crate) fn same_place(&self, i: usize, j: usize) -> bool {
-        if self.dim.has_z() {
-            self.same_place_in::<true>(i, j)
-        } else {
-            self.same_place_in::<false>(i, j)
-        }
-    }
-
-    /// [`same_place`](Self::same_place), comparing z only with `Z`.
-    fn same_place_in<const Z: bool>(&self, i: usize, j: usize) -> bool {
-        matches!(
-            (self.position::<true, Z>(i), self.position::<true, Z>(j)),
-            (Some(a), Some(b)) if same_position(a, b)
-        )
-    }
-
-    pub(crate) fn is_ring(&self, range: Range<usize>) -> bool {
-        range.len() >= MIN_RING_VERTICES && self.same_place(range.start, range.end - 1)
-    }
-
     /// The dimension these coordinates carry.
     pub(crate) fn dim(&self) -> GeoDimension {
         self.dim
     }
+}
 
-    pub(crate) fn nth(&self, i: usize, n: usize) -> f64 {
-        let values = match n {
-            0 => self.axes.x,
-            1 => self.axes.y,
-            2 if !self.axes.z.is_empty() => self.axes.z,
-            // Empty without an m, so indexing it panics.
-            2 | 3 => self.axes.m,
-            _ => panic!("coordinate index {n} out of range"),
-        };
-        values[i]
+impl CoordsTrait for CoordsView<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.axes.len()
+    }
+
+    #[inline]
+    fn nth(&self, i: usize, n: usize) -> f64 {
+        self.axes.nth(i, n)
+    }
+
+    #[inline]
+    fn same_place(&self, i: usize, j: usize) -> bool {
+        self.axes.same_place(i, j)
+    }
+
+    #[inline]
+    fn is_ring(&self, range: Range<usize>) -> bool {
+        self.axes.is_ring(range)
     }
 }

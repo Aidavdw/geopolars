@@ -29,7 +29,7 @@ use rsgeo::proj::Proj;
 use serde::Deserialize;
 
 use crate::geoarrow::geodetic::GeodeticCrs;
-use crate::geoarrow::storage::CoordsView;
+use crate::geoarrow::storage::{CoordsTrait, CoordsView};
 use crate::geoarrow::{describe, Kind};
 
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.

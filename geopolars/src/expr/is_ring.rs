@@ -1,4 +1,4 @@
-//! Whether a linestring is a ring (see [`CoordsView::is_ring`]).
+//! Whether a linestring is a ring (see [`CoordsTrait::is_ring`]).
 //!
 //! A multilinestring gets a list, one per part.
 
@@ -10,7 +10,7 @@ use polars_arrow::datatypes::ArrowDataType;
 use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
-use crate::geoarrow::storage::{downcast, CoordsView};
+use crate::geoarrow::storage::{downcast, CoordsTrait, CoordsView};
 use crate::geoarrow::{describe, Kind};
 
 /// For [`is_ring`]:

@@ -13,7 +13,7 @@ use geo_traits::{
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray};
 
-use super::storage::{downcast, CoordsView};
+use super::storage::{downcast, CoordsTrait, CoordsView};
 use super::{GeoDimension, Kind};
 
 impl From<GeoDimension> for Dimensions {
