@@ -13,12 +13,10 @@
 use std::convert::Infallible;
 use std::fmt;
 
-use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
+use geographiclib_rs::{Geodesic, InverseGeodesic};
 use proj::{Proj, ProjError};
 
-use crate::{GeoArrowValidCoordsView, LineString};
-
-/// How a segment, or the area a ring encloses, is measured: on the plane, or along an ellipsoid.
+/// How a segment is measured: on the plane, or along an ellipsoid.
 /// Generic, so every metric and dimension gets a loop of its own.
 pub trait Metric {
     /// A vertex, ready to measure from (reprojected once, for the ellipsoid).
@@ -79,9 +77,6 @@ impl std::error::Error for ReprojectError {
 }
 
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
-///
-/// Kept apart from the kernels, so the distance between two points, the length of a linestring
-/// and the area of a polygon (all through [`Metric`]) can be measured with the same thing.
 pub struct GeodesicMetric {
     /// To the CRS's own longitude/latitude, so no datum is shifted.
     to_lonlat: Proj,

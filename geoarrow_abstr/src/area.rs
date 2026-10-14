@@ -1,4 +1,4 @@
-//! The area a polygon encloses, as a [Metric] measures it.
+//! The area a polygon encloses, as an [AreaMetric] measures it.
 
 use std::convert::Infallible;
 
@@ -7,11 +7,13 @@ use geographiclib_rs::{PolygonArea, Winding};
 use crate::arrays::per_row;
 use crate::{
     GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeodesicMetric, LineString, Metric, MultiPolygonArray, Planar, Polygon, PolygonArray,
-    ReprojectError,
+    GeodesicMetric, LineString, MultiPolygonArray, Planar, Polygon, PolygonArray, ReprojectError,
 };
 
-pub trait AreaMetric: Metric {
+/// How the area a ring encloses is measured
+pub trait AreaMetric {
+    /// Why a ring could not be measured (e.g. a failed reprojection).
+    type Error;
     /// The area the closed `ring` encloses, whichever way it winds. Its heights do not count.
     fn ring_area(
         &self,
@@ -20,6 +22,8 @@ pub trait AreaMetric: Metric {
 }
 
 impl AreaMetric for Planar {
+    type Error = Infallible;
+
     fn ring_area(
         &self,
         ring: &LineString<impl GeoArrowValidCoordsView>,
@@ -43,6 +47,8 @@ impl AreaMetric for Planar {
 }
 
 impl AreaMetric for GeodesicMetric {
+    type Error = ReprojectError;
+
     fn ring_area(
         &self,
         ring: &LineString<impl GeoArrowValidCoordsView>,
