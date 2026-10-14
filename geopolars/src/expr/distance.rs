@@ -22,7 +22,7 @@ use std::rc::Rc;
 use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView, Metric};
 use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
 use polars::prelude::*;
-use polars_arrow::array::{MutablePrimitiveArray, PrimitiveArray};
+use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
 use polars_core::utils::align_chunks_binary;
 use pyo3_polars::derive::polars_expr;
@@ -30,7 +30,7 @@ use rsgeo::proj::Proj;
 use serde::Deserialize;
 
 use crate::geoarrow::geodetic::GeodeticCrs;
-use crate::geoarrow::storage::CoordsView;
+use crate::geoarrow::storage::{CoordsView, F64Array};
 use crate::geoarrow::{describe, Kind};
 
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
@@ -257,57 +257,27 @@ fn kernel_output_type_distance(
 /// A point's `(x, y)` and its `z`, kept apart so the `(x, y)` can go to PROJ as is.
 pub type WithHeight = ((f64, f64), f64);
 
-/// The distance between the points of `a` and `b`
+/// [geoarrow_abstr::pairwise], into a polars array.
+/// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn pairwise<const Z: bool>(
     metric: &impl Metric<Error = PolarsError>,
     a: &CoordsView,
     b: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     polars_ensure!(a.len() == b.len(), ComputeError: "Chunks must be same size");
-    let mut distances = MutablePrimitiveArray::with_capacity(a.len());
-    for i in 0..a.len() {
-        // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
-        // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
-        // empty points are assumed rare enough not to warrant an extra check on every valid point.
-        match (a.position::<true, Z>(i), b.position::<true, Z>(i)) {
-            (Some(here), Some(there)) => distances
-                .push_value(metric.segment::<Z>(metric.vertex(here)?, metric.vertex(there)?)),
-            _ => distances.push(None),
-        }
-    }
-    Ok(distances.into())
+    let F64Array(distances) = geoarrow_abstr::pairwise::<Z, _, F64Array>(metric, a, b)?;
+    Ok(distances)
 }
 
-/// The distance between the single point at `one` and every point of `many`.
-/// `one` is prepared (reprojected) once, rather than on every row.
+/// [geoarrow_abstr::against_one], into a polars array.
+/// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn against_one<const Z: bool>(
     metric: &impl Metric<Error = PolarsError>,
     one: [f64; 3],
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    // If any of the 'one' is NaN, then everything will become NaN anyway,
-    // so we might as well exit early.
-    // Missing points stay missing.
-    if one[..if Z { 3 } else { 2 }]
-        .iter()
-        .any(|axis| axis.is_nan())
-    {
-        return Ok((0..many.len())
-            .map(|i| many.position::<true, Z>(i).map(|_| f64::NAN))
-            .collect());
-    }
-    let one = metric.vertex(one)?;
-    let mut distances = MutablePrimitiveArray::with_capacity(many.len());
-    for i in 0..many.len() {
-        // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
-        // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
-        // empty points are assumed rare enough not to warrant an extra check on every valid point.
-        match many.position::<true, Z>(i) {
-            Some(there) => distances.push_value(metric.segment::<Z>(one, metric.vertex(there)?)),
-            None => distances.push(None),
-        }
-    }
-    Ok(distances.into())
+    let F64Array(distances) = geoarrow_abstr::against_one::<Z, _, F64Array>(metric, one, many)?;
+    Ok(distances)
 }
 
 /// [`against_one`] for every chunk of `many`. Distance goes both ways,

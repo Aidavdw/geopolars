@@ -5,7 +5,7 @@ use geoarrow_abstr::{
     GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, GeoDimension,
 };
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
+use polars_arrow::array::{Array, ListArray, MutablePrimitiveArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::offset::OffsetsBuffer;
 
@@ -308,5 +308,19 @@ impl GeoArrowF64Array for F64Array {
 
     fn from_values(values: Vec<f64>, validity: Option<&Bitmap>) -> Self {
         Self(PrimitiveArray::from_vec(values).with_validity(validity.cloned()))
+    }
+
+    fn try_from_options<const STOP_ON_ERROR: bool, E>(
+        values: impl ExactSizeIterator<Item = Result<Option<f64>, E>>,
+    ) -> Result<Self, E> {
+        let mut array = MutablePrimitiveArray::with_capacity(values.len());
+        for value in values {
+            match value {
+                Ok(value) => array.push(value),
+                Err(e) if STOP_ON_ERROR => return Err(e),
+                Err(_) => array.push(None),
+            }
+        }
+        Ok(Self(array.into()))
     }
 }
