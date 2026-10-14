@@ -1,7 +1,4 @@
-//! Reading a geometry column's Arrow storage from inside a kernel.
-//!
-//! Kernels walk the storage in place: the list offsets of rings and parts,
-//! and the coordinates underneath them, without copying a row out first.
+//! See the expression implementation guide on Array abstractions for GeoArrow.
 
 use polars::prelude::*;
 use polars_arrow::array::{Array, PrimitiveArray, StructArray};
@@ -29,19 +26,12 @@ pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
     is_close(a[0], b[0]) && is_close(a[1], b[1]) && is_close(a[2], b[2])
 }
 
-/// The main helper for reading coordinates that are all assumed to be valid.
-/// A view (zero-allocation) of a chunk's coordinates as stored in the arrow array.
+/// Abstraction over Polars storage for coordinates that are all assumed to be valid.
+/// Use for coordinates that **cannot** include invalid coordinates (columns of Points).
+/// Otherwise, use [CoordsView].
 ///
-/// Arrow only has nulls at the outer level, so every coordinate that is used in a nested
-/// geometry (anything but a Point) has to be valid, so you don't need their validity bitmap.
-///
-/// Note that this does not mean that values inside here are all usable `f64`!
-/// Single NaN values, and *empty* points (all NaN) can still show up here to ruin the day.
-/// How you want to handle these is up to the kernel.
-///
-/// For coordinates that *can* include invalid coordinates (columns of Points),
-/// use [`CoordsView`].
-pub(crate) struct Axes<'a> {
+/// See the expression implementation guide for more details.
+pub(crate) struct ValidCoordsView<'a> {
     x: &'a [f64],
     y: &'a [f64],
     /// Empty for a dimension without a `z`.
@@ -50,12 +40,43 @@ pub(crate) struct Axes<'a> {
     m: &'a [f64],
 }
 
-/// Intermediate stage for coordinate data.
-/// Transformed into different things depending or whether or not you take these to be
-/// GeoArrow-correct coordinates, which would store validity on the outer struct, not the individual
-/// 'x' (or other column) values.
-/// - [CoordsView], if you assume they are all geoarrow-correct points (used in kernels)
-/// - [RawCoords] so you can also verify if it is valid geo-arrow (used in validation only)
+impl<'a> ValidCoordsView<'a> {
+    /// The axes, and the dimension they carry.
+    /// (An empty chunk has empty axes either way, so the dimension can't be read off them.)
+    pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, GeoDimension)> {
+        let coords: &StructArray = downcast(coords, "a coordinate struct")?;
+        let arrays = AxisArrays::new(coords)?;
+        let axis = |values: Option<&'a PrimitiveArray<f64>>| {
+            values.map_or(&[][..], |values| values.values().as_slice())
+        };
+        let axes = Self {
+            x: axis(Some(arrays.x)),
+            y: axis(Some(arrays.y)),
+            z: axis(arrays.z),
+            m: axis(arrays.m),
+        };
+        Ok((axes, arrays.dim()))
+    }
+
+    /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
+    #[inline(always)]
+    pub(crate) fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
+        [self.x[i], self.y[i], if Z { self.z[i] } else { 0.0 }]
+    }
+
+    /// The m of coordinate `i`. Only for a dimension with an `m`.
+    #[inline(always)]
+    pub(crate) fn m(&self, i: usize) -> f64 {
+        self.m[i]
+    }
+}
+
+/// Polars-backed coordinate data that might be potentially invalid.
+/// Considers validity of individual components of the coordinates
+/// ('x' may be valid, but 'y' may not be).
+/// Use this in validation only.
+///
+/// See the expression implementation guide for more details.
 pub(crate) struct AxisArrays<'a> {
     pub(crate) x: &'a PrimitiveArray<f64>,
     pub(crate) y: &'a PrimitiveArray<f64>,
@@ -97,58 +118,21 @@ impl<'a> AxisArrays<'a> {
     }
 }
 
-impl<'a> Axes<'a> {
-    /// The axes, and the dimension they carry.
-    /// (An empty chunk has empty axes either way, so the dimension can't be read off them.)
-    pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, GeoDimension)> {
-        let coords: &StructArray = downcast(coords, "a coordinate struct")?;
-        let arrays = AxisArrays::new(coords)?;
-        let axis = |values: Option<&'a PrimitiveArray<f64>>| {
-            values.map_or(&[][..], |values| values.values().as_slice())
-        };
-        let axes = Self {
-            x: axis(Some(arrays.x)),
-            y: axis(Some(arrays.y)),
-            z: axis(arrays.z),
-            m: axis(arrays.m),
-        };
-        Ok((axes, arrays.dim()))
-    }
-
-    /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
-    #[inline(always)]
-    pub(crate) fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
-        [self.x[i], self.y[i], if Z { self.z[i] } else { 0.0 }]
-    }
-
-    /// The m of coordinate `i`. Only for a dimension with an `m`.
-    #[inline(always)]
-    pub(crate) fn m(&self, i: usize) -> f64 {
-        self.m[i]
-    }
-}
-
-/// The main helper for reading coordinates, where individual coordinates can be missing.
-/// A view (zero-allocation) of a chunk's coordinates in the Arrow array.
+/// Abstraction over Polars storage for coordinates where individual coordinates can be invalid.
+/// Use for coordinates that **can** include invalid coordinates (columns of Points).
+/// Otherwise, use [ValidCoordsView].
 ///
-/// Arrow only has nulls at the outer level, so in practice this struct only makes sense to use
-/// for Points: a Point is missing where its struct is, and under a present one every axis is valid.
-/// For other geometries, it can be assumed all values are valid,
-/// making them faster to read through [`Axes`].
-///
-/// Note that present coordinates are not guaranteed to all be usable `f64`!
-/// Single NaN values, and *empty* points (all NaN) can still show up here to ruin the day.
-/// How you want to handle these is up to the kernel.
+/// See the expression implementation guide for more details.
 pub(crate) struct CoordsView<'a> {
     /// Which coordinates are there.
     validity: Option<&'a Bitmap>,
-    axes: Axes<'a>,
+    axes: ValidCoordsView<'a>,
     dim: GeoDimension,
 }
 
 impl<'a> CoordsView<'a> {
     pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<Self> {
-        let (axes, dim) = Axes::new(coords)?;
+        let (axes, dim) = ValidCoordsView::new(coords)?;
         Ok(Self {
             validity: coords.validity(),
             axes,

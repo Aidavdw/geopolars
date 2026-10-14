@@ -36,16 +36,35 @@ e.g. `#[polars_expr(output_type_func=kernel_output_type_area_planar)]`.
 These should always be named `kernel_output_type_*`.
 Functions that wrap these should be `kernel_output_type_wrapper_*`
 
-## Coordinate reading helpers
+## Array abstractions for GeoArrow
 
-In `../geopolars/src/geoarrow/storage.rs`, you will find two helpers for reading coordinates.
+In `../geopolars/src/geoarrow/storage.rs`, you will find abstractions over the
+Polars-representation of the GeoArrow data.
+These are all 'views', zero-allocation reference types to the underlying storage.
 They are split up based on the GeoArrow spec stating that validity shall always only be expressed
-at the outer level (e.g. a valid Polygon cannot have invalid coordinates).
+at the outer level.
+Some functions only run on nested types like Polygon, meaning that we don't need to account for
+validity if we assume that this is valid GeoArrow, which simplifies the code
+(e.g. a valid Polygon cannot have invalid coordinates).
 
-- *Axes*, which ignores the validity, assuming all to be valid (i.e. in polygon).
-- *CoordsView*, which considers validity (only for Points).
+In order from 'least valid' to 'most valid':
 
-Note that valid thins can still contain NaN values (and *Empty* points, represented as both NaN)
+- *AxisArrays*, which considers validity of individual components of the coordinates
+  ('x' may be valid, but 'y' may not be).
+  This used to validate that something is correct GeoArrow data only.
+- *CoordsView*, which considers validity of coordinates.
+  Use this only for operations that take Points.
+- *ValidCoordsView*, which ignores the validity of coordinates, assuming all to be valid.
+  Use this for operations that take nested geometry types like Polygon.
+  **Do not** use this for Points.
+
+An important note: **This does not shield you from NaNs!**
+These show up in two ways:
+
+- individual NaN values (e.g. `x = 32.1, y = NaN`)
+- *empty* points ( `x = NaN, y = NaN`) can still show up here to ruin the day.
+
+How you want to handle these is up to the kernel.
 
 ## Implementation tiers
 

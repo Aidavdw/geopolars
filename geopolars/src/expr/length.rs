@@ -10,7 +10,7 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::distance::{DistanceMethod, GeodesicMetric, Metric, Planar};
-use crate::geoarrow::storage::{downcast, Axes};
+use crate::geoarrow::storage::{downcast, ValidCoordsView};
 use crate::geoarrow::{describe, Kind};
 
 #[derive(Debug, Deserialize)]
@@ -69,7 +69,7 @@ fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> Po
 #[inline(always)]
 fn line_length<const Z: bool, const IGNORE_NAN: bool, M: Metric>(
     metric: &M,
-    axes: &Axes,
+    axes: &ValidCoordsView,
     vertices: Range<usize>,
 ) -> PolarsResult<f64> {
     let mut vertices = vertices
@@ -94,7 +94,7 @@ fn lengths<const Z: bool, const MULTI: bool, const IGNORE_NAN: bool>(
     metric: &impl Metric,
     rows: &ListArray<i64>,
     lines: &ListArray<i64>,
-    axes: &Axes,
+    axes: &ValidCoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let line = |i: usize| {
         let (start, end) = lines.offsets().start_end(i);
@@ -132,7 +132,7 @@ fn measure(metric: &impl Metric, geometries: &Series, ignore_nan: bool) -> Polar
         } else {
             rows
         };
-        let (axes, dim) = Axes::new(lines.values().as_ref())?;
+        let (axes, dim) = ValidCoordsView::new(lines.values().as_ref())?;
         with_const_flags!(lengths(metric, rows, lines, &axes); dim.has_z(), multi, ignore_nan)
     });
     Ok(Float64Chunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())

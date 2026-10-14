@@ -15,7 +15,7 @@ use polars_arrow::bitmap::MutableBitmap;
 use polars_arrow::datatypes::ArrowDataType;
 use pyo3_polars::derive::polars_expr;
 
-use crate::geoarrow::storage::{downcast, Axes};
+use crate::geoarrow::storage::{downcast, ValidCoordsView};
 use crate::geoarrow::{describe, Geo, GeoDimension, Kind};
 
 /// The point a `dtype` column's centroids are, and the kind of geometry they are of.
@@ -64,7 +64,7 @@ impl Moment {
 }
 
 #[inline(always)]
-fn vertex<const Z: bool, const M: bool>(axes: &Axes, i: usize) -> [f64; 4] {
+fn vertex<const Z: bool, const M: bool>(axes: &ValidCoordsView, i: usize) -> [f64; 4] {
     let [x, y, z] = axes.position::<Z>(i);
     [x, y, z, if M { axes.m(i) } else { 0.0 }]
 }
@@ -75,7 +75,7 @@ fn vertex<const Z: bool, const M: bool>(axes: &Axes, i: usize) -> [f64; 4] {
 #[inline(always)]
 fn add_line<const Z: bool, const M: bool>(
     moment: &mut Moment,
-    axes: &Axes,
+    axes: &ValidCoordsView,
     mut vertices: Range<usize>,
 ) {
     let Some(first) = vertices.next() else {
@@ -110,7 +110,7 @@ fn add_line<const Z: bool, const M: bool>(
 #[inline(always)]
 fn add_ring<const Z: bool, const M: bool>(
     moment: &mut Moment,
-    axes: &Axes,
+    axes: &ValidCoordsView,
     vertices: Range<usize>,
     sign: f64,
 ) {
@@ -145,7 +145,7 @@ fn add_ring<const Z: bool, const M: bool>(
 fn add_polygon<const Z: bool, const M: bool>(
     moment: &mut Moment,
     rings: &ListArray<i64>,
-    axes: &Axes,
+    axes: &ValidCoordsView,
     ring_range: Range<usize>,
 ) {
     let mut rings = ring_range.map(|ring| {
@@ -215,7 +215,7 @@ fn centroids<const MULTI: bool>(
 fn line_centroids<const Z: bool, const M: bool, const MULTI: bool>(
     rows: &ListArray<i64>,
     lines: &ListArray<i64>,
-    axes: &Axes,
+    axes: &ValidCoordsView,
     dim: GeoDimension,
 ) -> Box<dyn Array> {
     let dtype = lines.values().dtype().clone();
@@ -230,7 +230,7 @@ fn polygon_centroids<const Z: bool, const M: bool, const MULTI: bool>(
     rows: &ListArray<i64>,
     polygons: &ListArray<i64>,
     rings: &ListArray<i64>,
-    axes: &Axes,
+    axes: &ValidCoordsView,
     dim: GeoDimension,
 ) -> Box<dyn Array> {
     let dtype = rings.values().dtype().clone();
@@ -259,13 +259,13 @@ fn centroid(inputs: &[Series]) -> PolarsResult<Series> {
             };
             Ok(if polygons {
                 let rings: &ListArray<i64> = downcast(parts.values().as_ref(), "a list of rings")?;
-                let (axes, dim) = Axes::new(rings.values().as_ref())?;
+                let (axes, dim) = ValidCoordsView::new(rings.values().as_ref())?;
                 with_const_flags!(
                     polygon_centroids(rows, parts, rings, &axes, dim);
                     dim.has_z(), dim.has_m(), multi
                 )
             } else {
-                let (axes, dim) = Axes::new(parts.values().as_ref())?;
+                let (axes, dim) = ValidCoordsView::new(parts.values().as_ref())?;
                 with_const_flags!(
                     line_centroids(rows, parts, &axes, dim);
                     dim.has_z(), dim.has_m(), multi
