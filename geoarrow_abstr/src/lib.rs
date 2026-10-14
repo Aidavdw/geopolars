@@ -15,7 +15,7 @@ mod lists;
 mod metric;
 mod polygons;
 
-pub use area::{multi_polygon_areas, polygon_areas};
+pub use area::{multi_polygon_areas, polygon_areas, AreaMetric};
 pub use arrays::GeoArrowF64Array;
 pub use coords::{GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowValidCoordsView};
 pub use dimension::GeoDimension;

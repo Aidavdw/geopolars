@@ -4,7 +4,7 @@
 
 use std::fmt::Display;
 
-use geoarrow_abstr::{Metric, MultiPolygonArray, Planar, PolygonArray};
+use geoarrow_abstr::{AreaMetric, MultiPolygonArray, Planar, PolygonArray};
 use polars::prelude::*;
 use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
@@ -54,7 +54,7 @@ fn kernel_output_type_area_geodesic(input_fields: &[Field]) -> PolarsResult<Fiel
 }
 
 /// The area of every geometry in `geometries`, as `metric` measures it.
-fn measure(metric: &impl Metric<Error: Display>, geometries: &Series) -> PolarsResult<Series> {
+fn measure(metric: &impl AreaMetric<Error: Display>, geometries: &Series) -> PolarsResult<Series> {
     let multi = match describe(geometries.dtype())?.kind {
         Kind::Polygon => false,
         Kind::MultiPolygon => true,
