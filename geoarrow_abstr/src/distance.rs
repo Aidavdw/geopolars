@@ -73,6 +73,7 @@ pub fn pairwise<const Z: bool, M: DistanceMetric, O: GeoArrowF64Array>(
     a: &impl GeoArrowCoordsView,
     b: &impl GeoArrowCoordsView,
 ) -> Result<O, M::Error> {
+    debug_assert!(a.len() == b.len(), "Chunks must be the same size");
     O::try_from_options::<true, _>((0..a.len()).map(|i| {
         // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
         // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:

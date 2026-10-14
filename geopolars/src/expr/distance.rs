@@ -8,9 +8,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
 
-use geoarrow_abstr::{
-    DistanceMetric, GeoArrowCoordsShared, GeoArrowCoordsView, GeodesicMetric, Planar,
-};
+use geoarrow_abstr::{DistanceMetric, GeoArrowCoordsView, GeodesicMetric, Planar};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
@@ -156,8 +154,7 @@ fn pairwise<const Z: bool>(
     a: &CoordsView,
     b: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    polars_ensure!(a.len() == b.len(), ComputeError: "Chunks must be same size");
-    let F64Array(distances) = geoarrow_abstr::distance::pairwise::<Z, _, F64Array>(metric, a, b)
+    let F64Array(distances) = geoarrow_abstr::pairwise::<Z, _, F64Array>(metric, a, b)
         .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(distances)
 }
@@ -169,9 +166,8 @@ fn against_one<const Z: bool>(
     one: [f64; 3],
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(distances) =
-        geoarrow_abstr::distance::against_one::<Z, _, F64Array>(metric, one, many)
-            .map_err(|e| polars_err!(ComputeError: "{e}"))?;
+    let F64Array(distances) = geoarrow_abstr::against_one::<Z, _, F64Array>(metric, one, many)
+        .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(distances)
 }
 
