@@ -161,26 +161,29 @@ impl<'a> CoordsView<'a> {
         (!NULLS || self.is_valid(i)).then(|| (self.axes.x[i], self.axes.y[i]))
     }
 
-    /// The position of coordinate `i`: x, y, and z (0 without a z axis).
+    /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
     /// With `NULLS`, `None` if it is missing.
     /// Without, it assumes every coordinate is there.
     #[inline(always)]
-    pub(crate) fn position<const NULLS: bool>(&self, i: usize) -> Option<[f64; 3]> {
-        let (x, y) = self.xy_checking_nulls::<NULLS>(i)?;
-        let z = if self.axes.z.is_empty() {
-            0.0
-        } else {
-            self.axes.z[i]
-        };
-        Some([x, y, z])
+    pub(crate) fn position<const NULLS: bool, const Z: bool>(&self, i: usize) -> Option<[f64; 3]> {
+        (!NULLS || self.is_valid(i)).then(|| self.axes.position::<Z>(i))
     }
 
     /// Whether coordinates `i` and `j` lie at almost the same place:
     /// [`is_close`] in x, y and z. m is a measure rather than a position, so it is not compared.
     /// A missing coordinate is close to nothing.
     pub(crate) fn same_place(&self, i: usize, j: usize) -> bool {
+        if self.dim.has_z() {
+            self.same_place_in::<true>(i, j)
+        } else {
+            self.same_place_in::<false>(i, j)
+        }
+    }
+
+    /// [`same_place`](Self::same_place), comparing z only with `Z`.
+    fn same_place_in<const Z: bool>(&self, i: usize, j: usize) -> bool {
         matches!(
-            (self.position::<true>(i), self.position::<true>(j)),
+            (self.position::<true, Z>(i), self.position::<true, Z>(j)),
             (Some(a), Some(b)) if same_position(a, b)
         )
     }

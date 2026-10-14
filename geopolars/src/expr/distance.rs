@@ -277,7 +277,7 @@ fn pairwise<const Z: bool>(
         // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
         // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
         // empty points are assumed rare enough not to warrant an extra check on every valid point.
-        match (a.position::<true>(i), b.position::<true>(i)) {
+        match (a.position::<true, Z>(i), b.position::<true, Z>(i)) {
             (Some(here), Some(there)) => distances
                 .push_value(metric.segment::<Z>(metric.vertex(here)?, metric.vertex(there)?)),
             _ => distances.push(None),
@@ -301,7 +301,7 @@ fn against_one<const Z: bool>(
         .any(|axis| axis.is_nan())
     {
         return Ok((0..many.len())
-            .map(|i| many.position::<true>(i).map(|_| f64::NAN))
+            .map(|i| many.position::<true, Z>(i).map(|_| f64::NAN))
             .collect());
     }
     let one = metric.vertex(one)?;
@@ -310,7 +310,7 @@ fn against_one<const Z: bool>(
         // A invalid/null point can hold anything in its fields. Never hand that to PROJ.
         // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
         // empty points are assumed rare enough not to warrant an extra check on every valid point.
-        match many.position::<true>(i) {
+        match many.position::<true, Z>(i) {
             Some(there) => distances.push_value(metric.segment::<Z>(one, metric.vertex(there)?)),
             None => distances.push(None),
         }
@@ -320,25 +320,24 @@ fn against_one<const Z: bool>(
 
 /// [`against_one`] for every chunk of `many`. Distance goes both ways,
 /// so this serves a single point on either side.
-fn every_against_one(
+fn every_against_one<const Z: bool>(
     metric: &impl Metric,
     one: &StructChunked,
     many: &StructChunked,
-    z: bool,
 ) -> PolarsResult<Vec<PrimitiveArray<f64>>> {
     let one = one.rechunk();
     let one = one
         .downcast_iter()
         .next()
         .expect("a single point is one chunk");
-    let Some(one) = CoordsView::new(one)?.position::<true>(0) else {
+    let Some(one) = CoordsView::new(one)?.position::<true, Z>(0) else {
         return Ok(many
             .downcast_iter()
             .map(|many| PrimitiveArray::new_null(ArrowDataType::Float64, many.len()))
             .collect());
     };
     many.downcast_iter()
-        .map(|many| with_const_flags!(against_one(metric, one, &CoordsView::new(many)?); z))
+        .map(|many| against_one::<Z>(metric, one, &CoordsView::new(many)?))
         .collect()
 }
 
@@ -359,8 +358,8 @@ fn measure(metric: &impl Metric, inputs: &[Series]) -> PolarsResult<Series> {
                 })
                 .collect::<PolarsResult<Vec<_>>>()?
         }
-        (1, _) => every_against_one(metric, a, b, z)?,
-        (_, 1) => every_against_one(metric, b, a, z)?,
+        (1, _) => with_const_flags!(every_against_one(metric, a, b); z)?,
+        (_, 1) => with_const_flags!(every_against_one(metric, b, a); z)?,
         (n, m) => polars_bail!(ShapeMismatch: "cannot measure {n} points against {m}"),
     };
     Ok(Float64Chunked::from_chunk_iter(inputs[0].name().clone(), chunks).into_series())
