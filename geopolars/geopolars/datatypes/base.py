@@ -115,8 +115,12 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         return type(self).__name__
 
     def _string_repr(self) -> str:
-        # Shown as `ext[point[xyzm]]` in a DataFrame header
-        return f"{self._display}[{''.join(self._dimension)}]"
+        # This mirrors the rust `Geo::dyn_display`
+        dimension = "".join(self._dimension)
+        crs = _rust.crs_label(self.ext_metadata())
+        if crs is None:
+            return f"{self._display}[{dimension}]"
+        return f"{self._display}[{dimension}] {crs}]"
 
     @classmethod
     def of_dimension(cls, dimension: Dimension) -> type[GeoArrowType]:

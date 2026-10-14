@@ -34,6 +34,8 @@ pub struct ExtensionMetadata {
     crs: Result<String, String>,
     /// Cache of `map`: how the edges run, or why they are invalid.
     edges: Result<Option<Edges>, String>,
+    /// Cache of `map`: a short name for the CRS, to display. `None` without one.
+    crs_label: Option<String>,
 }
 
 impl PartialEq for ExtensionMetadata {
@@ -62,6 +64,7 @@ impl ExtensionMetadata {
         Self {
             crs: crs_of(&map),
             edges: edges_of(&map),
+            crs_label: crs_label_of(&map),
             map,
         }
     }
@@ -98,6 +101,12 @@ impl ExtensionMetadata {
         self.crs
             .as_deref()
             .map_err(|e| polars_err!(ComputeError: "{e}"))
+    }
+
+    /// A short name for the CRS, to display: a PROJJSON CRS by its id or name.
+    /// `None` if the metadata declares no CRS.
+    pub fn crs_label(&self) -> Option<&str> {
+        self.crs_label.as_deref()
     }
 
     /// Whether the metadata names a CRS at all (whether or not PROJ can use it).
@@ -179,6 +188,31 @@ fn crs_of(map: &Map<String, Value>) -> Result<String, String> {
         (Some(other), _) => Err(format!(
             "a CRS must be a PROJJSON object or a string, got: {other}"
         )),
+    }
+}
+
+/// What [`ExtensionMetadata::crs_label`] gives for `map`.
+/// Whether PROJ can use the CRS does not matter.
+fn crs_label_of(map: &Map<String, Value>) -> Option<String> {
+    match map.get("crs")? {
+        Value::Null => None,
+        Value::String(crs) => Some(crs.clone()),
+        Value::Object(projjson) => {
+            let id = projjson.get("id").and_then(|id| {
+                let authority = id.get("authority")?.as_str()?;
+                match id.get("code")? {
+                    Value::String(code) => Some(format!("{authority}:{code}")),
+                    code @ Value::Number(_) => Some(format!("{authority}:{code}")),
+                    _ => None,
+                }
+            });
+            let name = || projjson.get("name")?.as_str().map(str::to_owned);
+            Some(
+                id.or_else(name)
+                    .unwrap_or_else(|| Value::Object(projjson.clone()).to_string()),
+            )
+        }
+        other => Some(other.to_string()),
     }
 }
 

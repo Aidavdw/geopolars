@@ -34,6 +34,16 @@ fn declares_crs(metadata: Option<&str>) -> PyResult<bool> {
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
+/// See `GeoArrowType._string_repr`.
+/// Glue for using [geoarrow::crs::ExtensionMetadata::crs_label]
+#[pyfunction]
+#[pyo3(signature = (metadata))]
+fn crs_label(metadata: Option<&str>) -> PyResult<Option<String>> {
+    geoarrow::crs::ExtensionMetadata::parse(metadata)
+        .map(|metadata| metadata.crs_label().map(str::to_owned))
+        .map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
 /// See `GeoArrowType._crs`.
 #[pyfunction]
 #[pyo3(signature = (metadata))]
@@ -167,6 +177,7 @@ fn geopolars(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // that hook is already by calling the plugin functions.
     m.add_function(wrap_pyfunction!(extension_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(declares_crs, m)?)?;
+    m.add_function(wrap_pyfunction!(crs_label, m)?)?;
     m.add_function(wrap_pyfunction!(crs, m)?)?;
     m.add_function(wrap_pyfunction!(with_crs, m)?)?;
     m.add_function(wrap_pyfunction!(longitude_turn, m)?)?;
