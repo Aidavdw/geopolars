@@ -7,8 +7,8 @@ use crate::{GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView};
 
 /// One linestring: a run of coordinates.
 pub struct LineString<'a, C: GeoArrowValidCoordsView> {
-    coords: &'a C,
-    vertices: Range<usize>,
+    pub(crate) coords: &'a C,
+    pub(crate) vertices: Range<usize>,
 }
 
 impl<'a, C: GeoArrowValidCoordsView> LineString<'a, C> {
