@@ -4,7 +4,9 @@
 
 use std::fmt::Display;
 
-use geoarrow_abstr::{GeoArrowCoordsShared, LineStringArray, Metric, MultiLineStringArray, Planar};
+use geoarrow_abstr::{
+    GeoArrowCoordsShared, LengthMetric, LineStringArray, MultiLineStringArray, Planar,
+};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use pyo3_polars::derive::polars_expr;
@@ -68,7 +70,7 @@ fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> Po
 /// [geoarrow_abstr::line_string_lengths], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
-    metric: &impl Metric<Error: Display>,
+    metric: &impl LengthMetric<Error: Display>,
     array: &LineStringArray<ListView, ValidCoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(lengths) =
@@ -80,7 +82,7 @@ fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
 /// [geoarrow_abstr::multi_line_string_lengths], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn multi_line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
-    metric: &impl Metric<Error: Display>,
+    metric: &impl LengthMetric<Error: Display>,
     array: &MultiLineStringArray<ListView, ValidListView, ValidCoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(lengths) =
@@ -91,7 +93,7 @@ fn multi_line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
 
 /// The length of every geometry in `geometries`, as `metric` measures it.
 fn measure(
-    metric: &impl Metric<Error: Display>,
+    metric: &impl LengthMetric<Error: Display>,
     geometries: &Series,
     ignore_nan: bool,
 ) -> PolarsResult<Series> {

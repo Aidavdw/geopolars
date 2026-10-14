@@ -6,12 +6,12 @@ use geographiclib_rs::{PolygonArea, Winding};
 
 use crate::arrays::per_row;
 use crate::{
-    GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
+    BaseMetric, GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
     GeodesicMetric, LineString, MultiPolygonArray, Planar, Polygon, PolygonArray, ReprojectError,
 };
 
 /// How the area a ring encloses is measured
-pub trait AreaMetric {
+pub trait AreaMetric: BaseMetric {
     /// Why a ring could not be measured (e.g. a failed reprojection).
     type Error;
     /// The area the closed `ring` encloses, whichever way it winds. Its heights do not count.

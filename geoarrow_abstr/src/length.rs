@@ -1,15 +1,23 @@
-//! How long a linestring is, as a [Metric] measures it.
+//! How long a linestring is, as a [LengthMetric] measures it.
 
 use crate::arrays::per_row;
 use crate::{
-    GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, LineString,
-    LineStringArray, Metric, MultiLineStringArray,
+    DistanceMetric, GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView,
+    GeoArrowValidListView, GeodesicMetric, LineString, LineStringArray, MultiLineStringArray,
+    Planar,
 };
+
+/// A [`DistanceMetric`] that can also measure how long a linestring is, segment by segment.
+pub trait LengthMetric: DistanceMetric {}
+
+impl LengthMetric for Planar {}
+
+impl LengthMetric for GeodesicMetric {}
 
 /// The length of `line`: fewer than two vertices have a length of `0.0`.
 /// With `IGNORE_NAN`, a vertex with a NaN is skipped, so the line runs on to the next one.
 #[inline(always)]
-fn line_length<const Z: bool, const IGNORE_NAN: bool, M: Metric>(
+fn line_length<const Z: bool, const IGNORE_NAN: bool, M: LengthMetric>(
     metric: &M,
     line: &LineString<impl GeoArrowValidCoordsView>,
 ) -> Result<f64, M::Error> {
@@ -33,7 +41,7 @@ fn line_length<const Z: bool, const IGNORE_NAN: bool, M: Metric>(
 pub fn line_string_lengths<
     const Z: bool,
     const IGNORE_NAN: bool,
-    M: Metric,
+    M: LengthMetric,
     O: GeoArrowF64Array,
 >(
     metric: &M,
@@ -51,7 +59,7 @@ pub fn line_string_lengths<
 pub fn multi_line_string_lengths<
     const Z: bool,
     const IGNORE_NAN: bool,
-    M: Metric,
+    M: LengthMetric,
     O: GeoArrowF64Array,
 >(
     metric: &M,

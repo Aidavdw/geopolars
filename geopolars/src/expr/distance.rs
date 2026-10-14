@@ -1,5 +1,5 @@
 //! How far apart points are.
-//! Uses [Metric] to choose the how to measure distance (Planar/geodesic etc)
+//! Uses [DistanceMetric] to choose the how to measure distance (Planar/geodesic etc)
 //! Wraps functions from [geoarrow_abstr::distance]
 //!
 
@@ -8,7 +8,9 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
 
-use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView, GeodesicMetric, Metric, Planar};
+use geoarrow_abstr::{
+    DistanceMetric, GeoArrowCoordsShared, GeoArrowCoordsView, GeodesicMetric, Planar,
+};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
@@ -150,7 +152,7 @@ fn kernel_output_type_distance(
 /// [geoarrow_abstr::pairwise], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn pairwise<const Z: bool>(
-    metric: &impl Metric<Error: Display>,
+    metric: &impl DistanceMetric<Error: Display>,
     a: &CoordsView,
     b: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
@@ -163,7 +165,7 @@ fn pairwise<const Z: bool>(
 /// [geoarrow_abstr::against_one], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn against_one<const Z: bool>(
-    metric: &impl Metric<Error: Display>,
+    metric: &impl DistanceMetric<Error: Display>,
     one: [f64; 3],
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
@@ -176,7 +178,7 @@ fn against_one<const Z: bool>(
 /// [`against_one`] for every chunk of `many`. Distance goes both ways,
 /// so this serves a single point on either side.
 fn every_against_one<const Z: bool>(
-    metric: &impl Metric<Error: Display>,
+    metric: &impl DistanceMetric<Error: Display>,
     one: &StructChunked,
     many: &StructChunked,
 ) -> PolarsResult<Vec<PrimitiveArray<f64>>> {
@@ -197,7 +199,10 @@ fn every_against_one<const Z: bool>(
 }
 
 /// The distance between the points of `inputs[0]` and `inputs[1]`, measured with `metric`.
-fn measure(metric: &impl Metric<Error: Display>, inputs: &[Series]) -> PolarsResult<Series> {
+fn measure(
+    metric: &impl DistanceMetric<Error: Display>,
+    inputs: &[Series],
+) -> PolarsResult<Series> {
     let z = describe(inputs[0].dtype())?.dim.has_z() && describe(inputs[1].dtype())?.dim.has_z();
 
     let a = inputs[0].ext()?.storage().struct_()?;
