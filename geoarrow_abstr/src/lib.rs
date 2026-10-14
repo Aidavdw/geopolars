@@ -21,4 +21,4 @@ pub use length::{line_string_lengths, multi_line_string_lengths};
 pub use linestrings::{LineString, LineStringArray, MultiLineString, MultiLineStringArray};
 pub use lists::{GeoArrowListShared, GeoArrowListView, GeoArrowValidListView};
 pub use metric::{GeodesicMetric, Metric, Planar, ReprojectError, WithHeight};
-pub use polygons::{Polygon, PolygonArray};
+pub use polygons::{MultiPolygon, MultiPolygonArray, Polygon, PolygonArray};

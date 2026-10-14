@@ -42,3 +42,62 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
         }
     }
 }
+
+/// One multipolygon: a run of polygons.
+pub struct MultiPolygon<
+    'a,
+    P: GeoArrowValidListView,
+    L: GeoArrowValidListView,
+    C: GeoArrowValidCoordsView,
+> {
+    polygons: &'a P,
+    rings: &'a L,
+    coords: &'a C,
+    parts: Range<usize>,
+}
+
+impl<'a, P: GeoArrowValidListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
+    MultiPolygon<'a, P, L, C>
+{
+    /// Its polygons, in order.
+    pub fn polygons(&self) -> impl Iterator<Item = Polygon<'a, L, C>> + 'a {
+        let (polygons, rings, coords) = (self.polygons, self.rings, self.coords);
+        self.parts.clone().map(move |j| Polygon {
+            rings,
+            coords,
+            parts: polygons.range(j),
+        })
+    }
+}
+
+/// A column of multipolygons: rows of polygons of rings of coordinates.
+pub struct MultiPolygonArray<
+    R: GeoArrowListView,
+    P: GeoArrowValidListView,
+    L: GeoArrowValidListView,
+    C: GeoArrowValidCoordsView,
+> {
+    pub rows: R,
+    pub polygons: P,
+    pub rings: L,
+    pub coords: C,
+}
+
+impl<
+        R: GeoArrowListView,
+        P: GeoArrowValidListView,
+        L: GeoArrowValidListView,
+        C: GeoArrowValidCoordsView,
+    > MultiPolygonArray<R, P, L, C>
+{
+    /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
+    #[inline(always)]
+    pub fn get(&self, i: usize) -> MultiPolygon<'_, P, L, C> {
+        MultiPolygon {
+            polygons: &self.polygons,
+            rings: &self.rings,
+            coords: &self.coords,
+            parts: self.rows.range(i),
+        }
+    }
+}
