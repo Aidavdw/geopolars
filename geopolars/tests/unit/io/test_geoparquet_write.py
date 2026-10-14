@@ -41,6 +41,18 @@ def _point(metadata: str) -> PolarsDataType:
     )
 
 
+def _write(df: pl.DataFrame, path: Path, *, covering: bool = False) -> None:
+    if covering:
+        df = df.pipe(gpl.with_covering)
+    df.write_parquet(path, metadata=gpl.geoparquet_metadata(df, covering=covering))
+
+
+def _sink(lf: pl.LazyFrame, path: Path, *, covering: bool = False) -> None:
+    if covering:
+        lf = lf.pipe(gpl.with_covering)
+    lf.sink_parquet(path, metadata=gpl.geoparquet_metadata(lf, covering=covering))
+
+
 def _geo_of(path: Path) -> dict[str, Any]:
     return json.loads(pl.read_parquet_metadata(path)["geo"])
 
@@ -48,7 +60,7 @@ def _geo_of(path: Path) -> dict[str, Any]:
 def _written(tmp_path: Path, dtype: PolarsDataType) -> dict[str, Any]:
     """The `geo` metadata written for a `geometry` column of `dtype`."""
     path = tmp_path / "written.parquet"
-    gpl.write_parquet(pl.DataFrame(schema={"geometry": dtype}), path)
+    _write(pl.DataFrame(schema={"geometry": dtype}), path)
     return _geo_of(path)["columns"]["geometry"]
 
 
@@ -57,7 +69,7 @@ def test_writes_a_native_column(tmp_path: Path) -> None:
     df = pl.DataFrame({"geometry": XY}).select(
         pl.col("geometry").ext.to(PointXY(crs="EPSG:4326"))
     )
-    gpl.write_parquet(df, path)
+    _write(df, path)
     geo = _geo_of(path)
 
     assert geo["version"] == "1.1.0"
@@ -123,26 +135,22 @@ def test_refuses_what_geoparquet_cannot_hold(
 ) -> None:
     path = tmp_path / "refused.parquet"
     with pytest.raises(error, match=match):
-        gpl.write_parquet(pl.DataFrame(schema={"geometry": dtype}), path)
+        _write(pl.DataFrame(schema={"geometry": dtype}), path)
     assert not path.exists()
 
 
 def test_describes_every_geometry_column(tmp_path: Path) -> None:
     path = tmp_path / "columns.parquet"
     schema = {"id": pl.Int64, "a": PointXY(), "name": pl.String, "b": Wkb()}
-    gpl.write_parquet(pl.DataFrame(schema=schema), path)
+    _write(pl.DataFrame(schema=schema), path)
     geo = _geo_of(path)
 
     assert geo["primary_column"] == "a"
     assert list(geo["columns"]) == ["a", "b"]
 
 
-def test_a_frame_without_geometry_is_plain_parquet(tmp_path: Path) -> None:
-    path = tmp_path / "plain.parquet"
-    gpl.write_parquet(pl.DataFrame({"id": [1]}), path, metadata={"a": "b"})
-    metadata = pl.read_parquet_metadata(path)
-    assert metadata["a"] == "b"
-    assert "geo" not in metadata
+def test_a_frame_without_geometry_has_no_metadata() -> None:
+    assert gpl.geoparquet_metadata(pl.DataFrame({"id": [1]})) == {}
 
 
 def _frames() -> list[pl.DataFrame]:
@@ -167,7 +175,7 @@ def _frames() -> list[pl.DataFrame]:
 @pytest.mark.parametrize("df", _frames())
 def test_round_trips(tmp_path: Path, df: pl.DataFrame) -> None:
     path = tmp_path / "round_trip.parquet"
-    gpl.write_parquet(df, path)
+    _write(df, path)
     assert_frame_equal(pl.read_parquet(path), df)
 
 
@@ -177,7 +185,7 @@ def test_a_crs_comes_back_as_projjson(tmp_path: Path) -> None:
     df = pl.DataFrame({"geometry": XY}).select(
         pl.col("geometry").ext.to(PointXY(crs="EPSG:4326"))
     )
-    gpl.write_parquet(df, path)
+    _write(df, path)
     back = _read(path).schema["geometry"]
 
     assert back != df.schema["geometry"]
@@ -192,7 +200,7 @@ def test_the_spec_test_data_round_trips(
 ) -> None:
     df = _read(DATA / f"data-{name}-encoding_{encoding}.parquet")
     path = tmp_path / "rewritten.parquet"
-    gpl.write_parquet(df, path)
+    _write(df, path)
     assert_frame_equal(pl.read_parquet(path), df)
 
 
@@ -201,46 +209,17 @@ def test_sink_writes_the_same_metadata(tmp_path: Path) -> None:
         pl.col("geometry").ext.to(PointXY(crs=CRS84))
     )
     written, sunk = tmp_path / "written.parquet", tmp_path / "sunk.parquet"
-    gpl.write_parquet(df, written)
-
-    lf = gpl.sink_parquet(df.lazy(), sunk, lazy=True)
-    assert isinstance(lf, pl.LazyFrame)
-    assert not sunk.exists()
-    lf.collect()
+    _write(df, written)
+    _sink(df.lazy(), sunk)
 
     assert _geo_of(sunk) == _geo_of(written)
     assert_frame_equal(pl.read_parquet(sunk), df)
 
 
-def test_sink_refuses_before_writing(tmp_path: Path) -> None:
-    path = tmp_path / "refused.parquet"
+def test_a_lazy_frame_is_refused_before_it_runs() -> None:
     lf = pl.LazyFrame(schema={"geometry": PointXYM()})
     with pytest.raises(pl.exceptions.SchemaError, match="M values"):
-        gpl.sink_parquet(lf, path)
-    assert not path.exists()
-
-
-def test_keeps_the_users_own_metadata(tmp_path: Path) -> None:
-    df = pl.DataFrame(schema={"geometry": PointXY()})
-    by_dict, by_callback = tmp_path / "dict.parquet", tmp_path / "callback.parquet"
-    gpl.write_parquet(df, by_dict, metadata={"owner": "me"})
-    gpl.write_parquet(df, by_callback, metadata=lambda _: {"owner": "me"})
-
-    for path in [by_dict, by_callback]:
-        metadata = pl.read_parquet_metadata(path)
-        assert metadata["owner"] == "me"
-        assert "geo" in metadata
-
-
-def test_refuses_the_users_own_geo_key(tmp_path: Path) -> None:
-    df = pl.DataFrame(schema={"geometry": PointXY()})
-    with pytest.raises(ValueError, match="`geo`"):
-        gpl.write_parquet(df, tmp_path / "dict.parquet", metadata={"geo": "{}"})
-    # A callback only runs while writing, and Polars wraps what it raises.
-    with pytest.raises(pl.exceptions.ComputeError, match="`geo`"):
-        gpl.write_parquet(
-            df, tmp_path / "callback.parquet", metadata=lambda _: {"geo": "{}"}
-        )
+        gpl.geoparquet_metadata(lf)
 
 
 def _lines(crs: str | None = None) -> pl.DataFrame:
@@ -253,7 +232,7 @@ def _lines(crs: str | None = None) -> pl.DataFrame:
 def test_a_covering_is_the_bounds_of_every_geometry(tmp_path: Path) -> None:
     path = tmp_path / "covered.parquet"
     df = _lines()
-    gpl.write_parquet(df, path, covering=True)
+    _write(df, path, covering=True)
     back = pl.read_parquet(path)
 
     assert back.columns == ["geometry", "geometry_bbox"]
@@ -271,13 +250,13 @@ def test_a_covering_is_the_bounds_of_every_geometry(tmp_path: Path) -> None:
 
 def test_a_covering_keeps_the_geometrys_crs(tmp_path: Path) -> None:
     path = tmp_path / "covered.parquet"
-    gpl.write_parquet(_lines(crs=CRS84), path, covering=True)
+    _write(_lines(crs=CRS84), path, covering=True)
     assert pl.read_parquet(path).schema["geometry_bbox"] == BoxXY(crs=CRS84)
 
 
 def test_a_covering_crosses_the_antimeridian(tmp_path: Path) -> None:
     path = tmp_path / "covered.parquet"
-    gpl.write_parquet(_lines(crs=CRS84), path, covering=True)
+    _write(_lines(crs=CRS84), path, covering=True)
     boxes = pl.read_parquet(path)["geometry_bbox"].ext.storage().to_list()
 
     assert boxes == [
@@ -292,7 +271,7 @@ def test_a_covering_with_z_bounds_z(tmp_path: Path) -> None:
     df = pl.DataFrame({"x": [1.0], "y": [2.0], "z": [3.0]}).select(
         geo.point("x", "y", z="z").alias("geometry")
     )
-    gpl.write_parquet(df, path, covering=True)
+    _write(df, path, covering=True)
 
     bbox = _geo_of(path)["columns"]["geometry"]["covering"]["bbox"]
     assert list(bbox) == ["xmin", "ymin", "zmin", "xmax", "ymax", "zmax"]
@@ -306,7 +285,7 @@ def test_a_multigeometry_gets_one_box_around_all_its_parts(tmp_path: Path) -> No
     df = pl.DataFrame({"x": [[0.0, 5.0]], "y": [[1.0, -1.0]]}).select(
         geo.multi_point("x", "y").alias("geometry")
     )
-    gpl.write_parquet(df, path, covering=True)
+    _write(df, path, covering=True)
 
     assert pl.read_parquet(path)["geometry_bbox"].ext.storage().to_list() == [
         {"xmin": 0.0, "ymin": -1.0, "xmax": 5.0, "ymax": 1.0}
@@ -316,7 +295,7 @@ def test_a_multigeometry_gets_one_box_around_all_its_parts(tmp_path: Path) -> No
 def test_every_geometry_column_gets_its_own_covering(tmp_path: Path) -> None:
     path = tmp_path / "covered.parquet"
     df = _lines().with_columns(pl.col("geometry").alias("other"))
-    gpl.write_parquet(df, path, covering=True)
+    _write(df, path, covering=True)
 
     assert pl.read_parquet(path).columns == [
         "geometry",
@@ -330,7 +309,7 @@ def test_every_geometry_column_gets_its_own_covering(tmp_path: Path) -> None:
 
 def test_no_covering_unless_asked(tmp_path: Path) -> None:
     path = tmp_path / "plain.parquet"
-    gpl.write_parquet(_lines(), path)
+    _write(_lines(), path)
 
     assert pl.read_parquet(path).columns == ["geometry"]
     assert "covering" not in _geo_of(path)["columns"]["geometry"]
@@ -338,26 +317,27 @@ def test_no_covering_unless_asked(tmp_path: Path) -> None:
 
 def test_sink_writes_the_same_covering(tmp_path: Path) -> None:
     written, sunk = tmp_path / "written.parquet", tmp_path / "sunk.parquet"
-    gpl.write_parquet(_lines(crs=CRS84), written, covering=True)
-    gpl.sink_parquet(_lines(crs=CRS84).lazy(), sunk, covering=True)
+    _write(_lines(crs=CRS84), written, covering=True)
+    _sink(_lines(crs=CRS84).lazy(), sunk, covering=True)
 
     assert _geo_of(sunk) == _geo_of(written)
     assert_frame_equal(pl.read_parquet(sunk), pl.read_parquet(written))
 
 
-def test_a_covering_refuses_wkb(tmp_path: Path) -> None:
-    path = tmp_path / "refused.parquet"
+def test_a_covering_refuses_wkb() -> None:
     df = pl.DataFrame(schema={"geometry": Wkb()})
     with pytest.raises(pl.exceptions.SchemaError, match="from_wkb"):
-        gpl.write_parquet(df, path, covering=True)
+        gpl.with_covering(df)
     with pytest.raises(pl.exceptions.SchemaError, match="from_wkb"):
-        gpl.sink_parquet(df.lazy(), path, covering=True)
-    assert not path.exists()
+        gpl.geoparquet_metadata(df, covering=True)
 
 
-def test_a_covering_refuses_a_taken_name(tmp_path: Path) -> None:
-    path = tmp_path / "refused.parquet"
+def test_a_covering_refuses_a_taken_name() -> None:
     df = _lines().with_columns(geometry_bbox=pl.lit(1))
     with pytest.raises(pl.exceptions.DuplicateError, match="geometry_bbox"):
-        gpl.write_parquet(df, path, covering=True)
-    assert not path.exists()
+        gpl.with_covering(df)
+
+
+def test_a_covering_has_to_be_added_to_be_described() -> None:
+    with pytest.raises(pl.exceptions.SchemaError, match="geometry_bbox"):
+        gpl.geoparquet_metadata(_lines(), covering=True)

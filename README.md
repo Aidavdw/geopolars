@@ -82,6 +82,5 @@ To look into:
 how does geopandas/shapely/ link to geos?
 
 - We can't ship GEOS as statci lib, can we do it as so/dll?
-- delete my scan parquet wrapper
 - Show the metadata/crs in the long name
 - crs must be present in the python data type, not just in the metadata of a column
