@@ -114,7 +114,6 @@ def test_a_missing_or_not_finite_vertex_gives_missing() -> None:
         "line",
         [
             [{"x": 0.0, "y": 0.0}, None, {"x": 1.0, "y": 1.0}],
-            [{"x": 0.0, "y": None}, {"x": 1.0, "y": 1.0}],
             _line((0, 0), (nan, 1), (1, 1)),
             _line((0, 0), (inf, 1), (1, 1)),
         ],
@@ -122,7 +121,7 @@ def test_a_missing_or_not_finite_vertex_gives_missing() -> None:
     )
     df = pl.DataFrame(storage.ext.to(LineStringXY()))
 
-    assert df.select(geo.self_intersects("line"))["line"].to_list() == [None] * 4
+    assert df.select(geo.self_intersects("line"))["line"].to_list() == [None] * 3
 
 
 def test_z_does_not_count() -> None:

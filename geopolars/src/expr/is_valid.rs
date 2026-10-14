@@ -14,7 +14,7 @@ use std::mem;
 use std::ops::Range;
 
 use polars::prelude::*;
-use polars_arrow::array::{Array, BooleanArray, ListArray};
+use polars_arrow::array::{Array, BooleanArray, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::datatypes::ArrowDataType;
 use pyo3_polars::derive::polars_expr;
@@ -26,7 +26,7 @@ use serde::Deserialize;
 
 use super::coords::kernel_output_type_same_geometry;
 use super::self_intersects::vertices_self_intersect;
-use crate::geoarrow::storage::{downcast, same_position, CoordsView};
+use crate::geoarrow::storage::{downcast, same_position, AxisArrays, MIN_RING_VERTICES};
 use crate::geoarrow::{describe, Kind};
 
 /// Where `x` and `y` may lie, as `[xmin, ymin, xmax, ymax]`, ends included.
@@ -65,13 +65,97 @@ impl Default for IsValidKwargs {
     }
 }
 
+/// A chunk's coordinates as stored, nulls and all.
+///
+/// [`CoordsView`](crate::geoarrow::storage::CoordsView) is for kernels, which can assume
+/// valid GeoArrow: nulls only on the struct. This kernel checks that, so it reads the struct's
+/// validity and every axis's own.
+struct RawCoords<'a> {
+    coords: &'a StructArray,
+    arrays: AxisArrays<'a>,
+}
+
+impl<'a> RawCoords<'a> {
+    fn new(coords: &'a dyn Array) -> PolarsResult<Self> {
+        let coords: &StructArray = downcast(coords, "a coordinate struct")?;
+        let arrays = AxisArrays::new(coords)?;
+        Ok(Self { coords, arrays })
+    }
+
+    /// Whether coordinate `i` is there, with every one of its axes.
+    fn present(&self, i: usize) -> bool {
+        self.coords.is_valid(i) && self.axes().all(|axis| axis.is_valid(i))
+    }
+
+    /// Every axis of coordinate `i`, in x, y, z, m order.
+    /// Only meaningful where it is [`present`](Self::present).
+    fn values(&self, i: usize) -> impl Iterator<Item = f64> + '_ {
+        self.axes().map(move |axis| axis.value(i))
+    }
+
+    fn axes(&self) -> impl Iterator<Item = &'a PrimitiveArray<f64>> {
+        [
+            Some(self.arrays.x),
+            Some(self.arrays.y),
+            self.arrays.z,
+            self.arrays.m,
+        ]
+        .into_iter()
+        .flatten()
+    }
+
+    /// Whether any coordinate, or any axis of one, is missing.
+    /// Without any, the `NULLS = false` readers below can skip every validity lookup.
+    fn has_missing_values(&self) -> bool {
+        self.coords.null_count() > 0 || self.axes().any(|axis| axis.null_count() > 0)
+    }
+
+    /// The x and y of coordinate `i`, checking whether it is missing only with `NULLS`.
+    /// Without, it assumes there are [no missing values](Self::has_missing_values).
+    #[inline(always)]
+    fn xy_checking_nulls<const NULLS: bool>(&self, i: usize) -> Option<(f64, f64)> {
+        let present = !NULLS
+            || (self.coords.is_valid(i) && self.arrays.x.is_valid(i) && self.arrays.y.is_valid(i));
+        present.then(|| (self.arrays.x.value(i), self.arrays.y.value(i)))
+    }
+
+    /// The position of coordinate `i`: x, y, and z (0 without a z axis).
+    /// With `NULLS`, `None` if one of those is missing.
+    /// Without, it assumes there are [no missing values](Self::has_missing_values).
+    #[inline(always)]
+    fn position<const NULLS: bool>(&self, i: usize) -> Option<[f64; 3]> {
+        let (x, y) = self.xy_checking_nulls::<NULLS>(i)?;
+        let z = match self.arrays.z {
+            Some(z) if NULLS && !z.is_valid(i) => return None,
+            Some(z) => z.value(i),
+            None => 0.0,
+        };
+        Some([x, y, z])
+    }
+
+    /// Whether coordinates `i` and `j` lie at almost the same place:
+    /// [`is_close`](crate::geoarrow::coord::is_close) in x, y and z.
+    /// m is a measure rather than a position, so it is not compared.
+    /// A missing coordinate is close to nothing.
+    fn same_place(&self, i: usize, j: usize) -> bool {
+        matches!(
+            (self.position::<true>(i), self.position::<true>(j)),
+            (Some(a), Some(b)) if same_position(a, b)
+        )
+    }
+
+    fn is_ring(&self, range: Range<usize>) -> bool {
+        range.len() >= MIN_RING_VERTICES && self.same_place(range.start, range.end - 1)
+    }
+}
+
 /// The coordinates of one chunk, and the checks they get.
 ///
 /// Only what is read for every vertex is a const flag (see [`chunk_is_valid`]).
 /// What is read once per ring or polygon, or only for a missing coordinate,
 /// is read from `kwargs` instead: there, branching costs next to nothing.
 struct Coords<'a> {
-    view: CoordsView<'a>,
+    view: RawCoords<'a>,
     /// Only read with `BOUNDS`.
     bounds: Bounds,
     kwargs: &'a IsValidKwargs,
@@ -90,7 +174,7 @@ struct Scratch {
 impl<'a> Coords<'a> {
     fn new(coords: &'a dyn Array, kwargs: &'a IsValidKwargs) -> PolarsResult<Self> {
         Ok(Self {
-            view: CoordsView::new(coords)?,
+            view: RawCoords::new(coords)?,
             bounds: kwargs.bounds.unwrap_or_default(),
             kwargs,
         })
@@ -470,7 +554,7 @@ fn multi_polygons_are_valid<
 /// [`are_valid`] for one chunk of the storage of a `kind`.
 ///
 /// The flags every kernel takes first (through [`with_const_flags!`]), in this order:
-/// - `NULLS`: whether the chunk has a missing coordinate or axis at all ([`CoordsView::has_missing_values`]).
+/// - `NULLS`: whether the chunk has a missing coordinate or axis at all ([`RawCoords::has_missing_values`]).
 /// - `FINITE`: whether every axis has to be finite.
 /// - `BOUNDS`: whether x and y have to lie inside [`Coords::bounds`].
 ///

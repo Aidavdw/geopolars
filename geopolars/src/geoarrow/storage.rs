@@ -50,12 +50,69 @@ pub(crate) struct Axes<'a> {
     m: &'a [f64],
 }
 
+/// Intermediate stage for coordinate data.
+/// Transformed into different things depending or whether or not you take these to be
+/// GeoArrow-correct coordinates, which would store validity on the outer struct, not the individual
+/// 'x' (or other column) values.
+/// - [CoordsView], if you assume they are all geoarrow-correct points (used in kernels)
+/// - [RawCoords] so you can also verify if it is valid geo-arrow (used in validation only)
+pub(crate) struct AxisArrays<'a> {
+    pub(crate) x: &'a PrimitiveArray<f64>,
+    pub(crate) y: &'a PrimitiveArray<f64>,
+    /// `None` for a dimension without a `z`.
+    pub(crate) z: Option<&'a PrimitiveArray<f64>>,
+    /// `None` for a dimension without an `m`.
+    pub(crate) m: Option<&'a PrimitiveArray<f64>>,
+}
+
+impl<'a> AxisArrays<'a> {
+    pub(crate) fn new(coords: &'a StructArray) -> PolarsResult<Self> {
+        // `coord::dimension_of` fixes the field order, so x and y always come first.
+        let x = downcast(coords.values()[0].as_ref(), "f64 `x` coordinates")?;
+        let y = downcast(coords.values()[1].as_ref(), "f64 `y` coordinates")?;
+        let field = |name: &str| {
+            coords
+                .fields()
+                .iter()
+                .position(|field| field.name.as_str() == name)
+                .map(|i| downcast(coords.values()[i].as_ref(), "f64 coordinates"))
+                .transpose()
+        };
+        Ok(Self {
+            x,
+            y,
+            z: field("z")?,
+            m: field("m")?,
+        })
+    }
+
+    /// The dimension these axes carry.
+    pub(crate) fn dim(&self) -> GeoDimension {
+        match (self.z.is_some(), self.m.is_some()) {
+            (false, false) => GeoDimension::XY,
+            (true, false) => GeoDimension::XYZ,
+            (false, true) => GeoDimension::XYM,
+            (true, true) => GeoDimension::XYZM,
+        }
+    }
+}
+
 impl<'a> Axes<'a> {
     /// The axes, and the dimension they carry.
     /// (An empty chunk has empty axes either way, so the dimension can't be read off them.)
     pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, GeoDimension)> {
-        let view = CoordsView::new(coords)?;
-        Ok((Self::from(&view), view.dim()))
+        let coords: &StructArray = downcast(coords, "a coordinate struct")?;
+        let arrays = AxisArrays::new(coords)?;
+        let axis = |values: Option<&'a PrimitiveArray<f64>>| {
+            values.map_or(&[][..], |values| values.values().as_slice())
+        };
+        let axes = Self {
+            x: axis(Some(arrays.x)),
+            y: axis(Some(arrays.y)),
+            z: axis(arrays.z),
+            m: axis(arrays.m),
+        };
+        Ok((axes, arrays.dim()))
     }
 
     /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
@@ -71,83 +128,37 @@ impl<'a> Axes<'a> {
     }
 }
 
-/// The axes of `view`, without their validity.
-/// Under a missing Point, its values can be anything:
-/// the caller gates on the Point's validity before reading them.
-impl<'a> From<&CoordsView<'a>> for Axes<'a> {
-    fn from(view: &CoordsView<'a>) -> Self {
-        let axis = |values: Option<&'a PrimitiveArray<f64>>| {
-            values.map_or(&[][..], |values| values.values().as_slice())
-        };
-        Self {
-            x: axis(Some(view.x)),
-            y: axis(Some(view.y)),
-            z: axis(view.z),
-            m: axis(view.m),
-        }
-    }
-}
-
-/// The main helper for reading coordinates, where individual coordinates can be invalid.
-/// a view (zero-allocation) of a chunk's coordinates in the Arrow array.
+/// The main helper for reading coordinates, where individual coordinates can be missing.
+/// A view (zero-allocation) of a chunk's coordinates in the Arrow array.
 ///
 /// Arrow only has nulls at the outer level, so in practice this struct only makes sense to use
-/// for Points.
+/// for Points: a Point is missing where its struct is, and under a present one every axis is valid.
 /// For other geometries, it can be assumed all values are valid,
 /// making them faster to read through [`Axes`].
 ///
-/// In addition to being marked invalid,
-/// individual coordinates are not guaranteed to all be usable `f64`!
+/// Note that present coordinates are not guaranteed to all be usable `f64`!
 /// Single NaN values, and *empty* points (all NaN) can still show up here to ruin the day.
 /// How you want to handle these is up to the kernel.
 pub(crate) struct CoordsView<'a> {
+    /// Which coordinates are there.
     validity: Option<&'a Bitmap>,
-    x: &'a PrimitiveArray<f64>,
-    y: &'a PrimitiveArray<f64>,
-    z: Option<&'a PrimitiveArray<f64>>,
-    m: Option<&'a PrimitiveArray<f64>>,
+    axes: Axes<'a>,
+    dim: GeoDimension,
 }
 
 impl<'a> CoordsView<'a> {
     pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<Self> {
-        let coords: &StructArray = downcast(coords, "a coordinate struct")?;
-        // `coord::dimension_of` fixes the field order, so x and y always come first.
-        let x = downcast(coords.values()[0].as_ref(), "f64 `x` coordinates")?;
-        let y = downcast(coords.values()[1].as_ref(), "f64 `y` coordinates")?;
-        let field = |name: &str| {
-            coords
-                .fields()
-                .iter()
-                .position(|field| field.name.as_str() == name)
-                .map(|i| downcast(coords.values()[i].as_ref(), "f64 coordinates"))
-                .transpose()
-        };
-        let z = field("z")?;
-        let m = field("m")?;
-        let validity = coords.validity();
+        let (axes, dim) = Axes::new(coords)?;
         Ok(Self {
-            validity,
-            x,
-            y,
-            z,
-            m,
+            validity: coords.validity(),
+            axes,
+            dim,
         })
     }
 
     /// How many coordinates there are.
     pub(crate) fn len(&self) -> usize {
-        self.x.len()
-    }
-
-    /// Whether coordinate `i` is there, with every one of its axes.
-    pub(crate) fn present(&self, i: usize) -> bool {
-        self.is_valid(i) && self.axes().all(|axis| axis.is_valid(i))
-    }
-
-    /// Every axis of coordinate `i`, in x, y, z, m order.
-    /// Only meaningful where it is [`present`](Self::present).
-    pub(crate) fn values(&self, i: usize) -> impl Iterator<Item = f64> + '_ {
-        self.axes().map(move |axis| axis.value(i))
+        self.axes.x.len()
     }
 
     #[inline(always)]
@@ -155,42 +166,27 @@ impl<'a> CoordsView<'a> {
         self.validity.is_none_or(|validity| validity.get_bit(i))
     }
 
-    fn axes(&self) -> impl Iterator<Item = &'a PrimitiveArray<f64>> {
-        [Some(self.x), Some(self.y), self.z, self.m]
-            .into_iter()
-            .flatten()
-    }
-
-    /// Whether any coordinate, or any axis of one, is missing.
-    /// Without any, the `NULLS = false` readers below can skip every validity lookup.
-    pub(crate) fn has_missing_values(&self) -> bool {
-        self.validity
-            .is_some_and(|validity| validity.unset_bits() > 0)
-            || self.axes().any(|axis| axis.null_count() > 0)
-    }
-
     pub(crate) fn xy(&self, i: usize) -> Option<(f64, f64)> {
         self.xy_checking_nulls::<true>(i)
     }
 
     /// [`xy`](Self::xy), checking whether it is missing only with `NULLS`.
-    /// Without, it assumes there are [no missing values](Self::has_missing_values).
+    /// Without, it assumes every coordinate is there.
     #[inline(always)]
     pub(crate) fn xy_checking_nulls<const NULLS: bool>(&self, i: usize) -> Option<(f64, f64)> {
-        let present = !NULLS || (self.is_valid(i) && self.x.is_valid(i) && self.y.is_valid(i));
-        present.then(|| (self.x.value(i), self.y.value(i)))
+        (!NULLS || self.is_valid(i)).then(|| (self.axes.x[i], self.axes.y[i]))
     }
 
     /// The position of coordinate `i`: x, y, and z (0 without a z axis).
-    /// With `NULLS`, `None` if one of those is missing.
-    /// Without, it assumes there are [no missing values](Self::has_missing_values).
+    /// With `NULLS`, `None` if it is missing.
+    /// Without, it assumes every coordinate is there.
     #[inline(always)]
     pub(crate) fn position<const NULLS: bool>(&self, i: usize) -> Option<[f64; 3]> {
         let (x, y) = self.xy_checking_nulls::<NULLS>(i)?;
-        let z = match self.z {
-            Some(z) if NULLS && !z.is_valid(i) => return None,
-            Some(z) => z.value(i),
-            None => 0.0,
+        let z = if self.axes.z.is_empty() {
+            0.0
+        } else {
+            self.axes.z[i]
         };
         Some([x, y, z])
     }
@@ -211,22 +207,18 @@ impl<'a> CoordsView<'a> {
 
     /// The dimension these coordinates carry.
     pub(crate) fn dim(&self) -> GeoDimension {
-        match (self.z.is_some(), self.m.is_some()) {
-            (false, false) => GeoDimension::XY,
-            (true, false) => GeoDimension::XYZ,
-            (false, true) => GeoDimension::XYM,
-            (true, true) => GeoDimension::XYZM,
-        }
+        self.dim
     }
 
     pub(crate) fn nth(&self, i: usize, n: usize) -> f64 {
-        let values = match (n, self.z) {
-            (0, _) => self.x,
-            (1, _) => self.y,
-            (2, Some(z)) => z,
-            (2 | 3, _) => self.m.expect("coordinate index out of range"),
+        let values = match n {
+            0 => self.axes.x,
+            1 => self.axes.y,
+            2 if !self.axes.z.is_empty() => self.axes.z,
+            // Empty without an m, so indexing it panics.
+            2 | 3 => self.axes.m,
             _ => panic!("coordinate index {n} out of range"),
         };
-        values.value(i)
+        values[i]
     }
 }
