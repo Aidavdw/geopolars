@@ -34,26 +34,22 @@ pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
 pub(crate) struct ValidCoordsView<'a> {
     x: &'a [f64],
     y: &'a [f64],
-    /// Empty for a dimension without a `z`.
-    z: &'a [f64],
-    /// Empty for a dimension without an `m`.
-    m: &'a [f64],
+    /// `None` for a dimension without a `z`.
+    z: Option<&'a [f64]>,
+    /// `None` for a dimension without an `m`.
+    m: Option<&'a [f64]>,
 }
 
 impl<'a> ValidCoordsView<'a> {
     /// The axes, and the dimension they carry.
-    /// (An empty chunk has empty axes either way, so the dimension can't be read off them.)
     pub(crate) fn new(coords: &'a dyn Array) -> PolarsResult<(Self, GeoDimension)> {
         let coords: &StructArray = downcast(coords, "a coordinate struct")?;
         let arrays = AxisArrays::new(coords)?;
-        let axis = |values: Option<&'a PrimitiveArray<f64>>| {
-            values.map_or(&[][..], |values| values.values().as_slice())
-        };
         let axes = Self {
-            x: axis(Some(arrays.x)),
-            y: axis(Some(arrays.y)),
-            z: axis(arrays.z),
-            m: axis(arrays.m),
+            x: arrays.x.values().as_slice(),
+            y: arrays.y.values().as_slice(),
+            z: arrays.z.map(|z| z.values().as_slice()),
+            m: arrays.m.map(|m| m.values().as_slice()),
         };
         Ok((axes, arrays.dim()))
     }
@@ -61,13 +57,13 @@ impl<'a> ValidCoordsView<'a> {
     /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
     #[inline(always)]
     pub(crate) fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
-        [self.x[i], self.y[i], if Z { self.z[i] } else { 0.0 }]
+        [self.x[i], self.y[i], if Z { self.z.unwrap()[i] } else { 0.0 }]
     }
 
     /// The m of coordinate `i`. Only for a dimension with an `m`.
     #[inline(always)]
     pub(crate) fn m(&self, i: usize) -> f64 {
-        self.m[i]
+        self.m.unwrap()[i]
     }
 
     /// [`same_place`](CoordsTrait::same_place), comparing z only with `Z`.
@@ -97,19 +93,17 @@ impl CoordsTrait for ValidCoordsView<'_> {
 
     fn nth(&self, i: usize, n: usize) -> f64 {
         let values = match n {
-            0 => self.x,
-            1 => self.y,
-            2 if !self.z.is_empty() => self.z,
-            // Empty without an m, so indexing it panics.
-            2 | 3 => self.m,
-            _ => panic!("coordinate index {n} out of range"),
+            0 => Some(self.x),
+            1 => Some(self.y),
+            2 => self.z.or(self.m),
+            3 => self.m,
+            _ => None,
         };
-        values[i]
+        values.unwrap_or_else(|| panic!("coordinate index {n} out of range"))[i]
     }
 
     fn same_place(&self, i: usize, j: usize) -> bool {
-        // Indexing `i` means the chunk is not empty, so an empty `z` means there is none.
-        if self.z.is_empty() {
+        if self.z.is_none() {
             self.same_place_in::<false>(i, j)
         } else {
             self.same_place_in::<true>(i, j)
