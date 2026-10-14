@@ -1,6 +1,6 @@
 SHELL=/bin/bash
 
-.PHONY: install install-release polars-src run-geo run-line run-mean-coordinate run-mean-coordinate-manual run-crs rebuild test test-rust test-python clean
+.PHONY: install install-release polars-src run-geo run-line run-mean-coordinate run-mean-coordinate-manual run-crs run-parquet rebuild test test-rust test-python clean
 
 # The polars commit we build against. Cargo.toml is the source of truth;
 # this checks out the same commit for uv to build Python polars from.
@@ -65,6 +65,10 @@ run-line: install
 ## Run the CRS reprojection example, for points and lines.
 run-crs: install
 	uv run examples/run_crs.py
+
+## Run the GeoParquet reading and writing example.
+run-parquet: install
+	uv run examples/run_parquet.py
 
 ## Run the mean coordinate proof of concept.
 run-mean-coordinate: install
