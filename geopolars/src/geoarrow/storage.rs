@@ -1,8 +1,8 @@
 //! See the expression implementation guide on Array abstractions for GeoArrow.
 
 use geoarrow_abstr::{
-    GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowListShared, GeoArrowListView,
-    GeoArrowValidCoordsView, GeoArrowValidListView, GeoDimension,
+    GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowF64Array, GeoArrowListShared,
+    GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, GeoDimension,
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
@@ -296,5 +296,17 @@ impl GeoArrowListView for ListView<'_> {
     #[inline]
     fn validity(&self) -> Option<&Bitmap> {
         self.validity
+    }
+}
+
+/// [GeoArrowF64Array] for Polars.
+/// A newtype, because the orphan rule forbids implementing the trait for `PrimitiveArray<f64>` here.
+pub(crate) struct F64Array(pub(crate) PrimitiveArray<f64>);
+
+impl GeoArrowF64Array for F64Array {
+    type Validity = Bitmap;
+
+    fn from_values(values: Vec<f64>, validity: Option<&Bitmap>) -> Self {
+        Self(PrimitiveArray::from_vec(values).with_validity(validity.cloned()))
     }
 }

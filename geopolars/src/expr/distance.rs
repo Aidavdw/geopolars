@@ -19,7 +19,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView};
+use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView, Metric};
 use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
 use polars::prelude::*;
 use polars_arrow::array::{MutablePrimitiveArray, PrimitiveArray};
@@ -125,22 +125,12 @@ impl GeodesicMetric {
     }
 }
 
-/// How a segment is measured: on the plane, or along an ellipsoid.
-/// Generic, so every metric and dimension gets a loop of its own.
-pub(crate) trait Metric {
-    /// A vertex, ready to measure from (reprojected once, for the ellipsoid).
-    type Vertex: Copy;
-    /// The vertex at `position`. Its height only counts in [`segment`](Self::segment) with `Z`.
-    fn vertex(&self, position: [f64; 3]) -> PolarsResult<Self::Vertex>;
-    /// How long the segment `ab` is.
-    fn segment<const Z: bool>(&self, a: Self::Vertex, b: Self::Vertex) -> f64;
-}
-
 /// In the space the coordinates lie in, by Pythagoras.
 pub(crate) struct Planar;
 
 impl Metric for Planar {
     type Vertex = [f64; 3];
+    type Error = PolarsError;
 
     #[inline(always)]
     fn vertex(&self, position: [f64; 3]) -> PolarsResult<[f64; 3]> {
@@ -163,6 +153,7 @@ impl Metric for Planar {
 /// each segment is its geodesic and its difference in height, by Pythagoras.
 impl Metric for GeodesicMetric {
     type Vertex = WithHeight;
+    type Error = PolarsError;
 
     #[inline(always)]
     fn vertex(&self, [x, y, z]: [f64; 3]) -> PolarsResult<WithHeight> {
@@ -268,7 +259,7 @@ pub type WithHeight = ((f64, f64), f64);
 
 /// The distance between the points of `a` and `b`
 fn pairwise<const Z: bool>(
-    metric: &impl Metric,
+    metric: &impl Metric<Error = PolarsError>,
     a: &CoordsView,
     b: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
@@ -290,7 +281,7 @@ fn pairwise<const Z: bool>(
 /// The distance between the single point at `one` and every point of `many`.
 /// `one` is prepared (reprojected) once, rather than on every row.
 fn against_one<const Z: bool>(
-    metric: &impl Metric,
+    metric: &impl Metric<Error = PolarsError>,
     one: [f64; 3],
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
@@ -322,7 +313,7 @@ fn against_one<const Z: bool>(
 /// [`against_one`] for every chunk of `many`. Distance goes both ways,
 /// so this serves a single point on either side.
 fn every_against_one<const Z: bool>(
-    metric: &impl Metric,
+    metric: &impl Metric<Error = PolarsError>,
     one: &StructChunked,
     many: &StructChunked,
 ) -> PolarsResult<Vec<PrimitiveArray<f64>>> {
@@ -343,7 +334,7 @@ fn every_against_one<const Z: bool>(
 }
 
 /// The distance between the points of `inputs[0]` and `inputs[1]`, measured with `metric`.
-fn measure(metric: &impl Metric, inputs: &[Series]) -> PolarsResult<Series> {
+fn measure(metric: &impl Metric<Error = PolarsError>, inputs: &[Series]) -> PolarsResult<Series> {
     let z = describe(inputs[0].dtype())?.dim.has_z() && describe(inputs[1].dtype())?.dim.has_z();
 
     let a = inputs[0].ext()?.storage().struct_()?;
