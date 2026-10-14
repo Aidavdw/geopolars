@@ -2,14 +2,14 @@
 //! - on the plane its coordinates lie in ([`area_planar`]),
 //! - along the ellipsoid of its CRS ([`area_geodesic`]).
 
-use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView};
+use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView, GeodesicMetric};
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
 
 use geo_traits::{MultiPolygonTrait, PolygonTrait};
 
-use super::distance::GeodesicMetric;
+use super::distance::geodesic_metric;
 use crate::geoarrow::geotraits::{for_each_geometry, Geometry, LineString, Polygon};
 use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
@@ -76,7 +76,7 @@ fn kernel_output_type_area_planar(input_fields: &[Field]) -> PolarsResult<Field>
 /// For [`area_geodesic`]: in the unit of the CRS squared.
 fn kernel_output_type_area_geodesic(input_fields: &[Field]) -> PolarsResult<Field> {
     // Check if the CRS can be used by PROJ. If not, raise error at plan time rather than at runtime.
-    GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
+    geodesic_metric(&crs_of(&input_fields[0])?)?;
     area_dtype(&input_fields[0])
 }
 
@@ -140,7 +140,9 @@ impl<'a> Polygons<'a> {
             return Ok(None);
         }
         let (start, end) = self.rings.offsets().start_end(ring);
-        metric.ring_area((start..end).map(|i| self.coords.xy(i)))
+        metric
+            .ring_area((start..end).map(|i| self.coords.xy(i)))
+            .map_err(|e| polars_err!(ComputeError: "{e}"))
     }
 
     /// The area of polygon `i`: its exterior ring, less the holes inside it.
@@ -207,8 +209,8 @@ fn area_geodesic(inputs: &[Series]) -> PolarsResult<Series> {
     let storage = inputs[0].ext()?.storage();
 
     let out = match describe(inputs[0].dtype())?.kind {
-        Kind::Polygon => polygons(storage, &*GeodesicMetric::of(&crs)?)?.into_series(),
-        Kind::MultiPolygon => multipolygons(storage, &*GeodesicMetric::of(&crs)?)?.into_series(),
+        Kind::Polygon => polygons(storage, &*geodesic_metric(&crs)?)?.into_series(),
+        Kind::MultiPolygon => multipolygons(storage, &*geodesic_metric(&crs)?)?.into_series(),
         kind @ (Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString) => {
             return Err(encloses_nothing(kind))
         }

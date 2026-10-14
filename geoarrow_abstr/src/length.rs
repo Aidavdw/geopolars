@@ -2,20 +2,9 @@
 
 use std::ops::Range;
 
-use crate::{GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView};
-
-/// How a segment is measured: on the plane, or along an ellipsoid.
-/// Generic, so every metric and dimension gets a loop of its own.
-pub trait Metric {
-    /// A vertex, ready to measure from (reprojected once, for the ellipsoid).
-    type Vertex: Copy;
-    /// Why a vertex could not be prepared (e.g. a failed reprojection).
-    type Error;
-    /// The vertex at `position`. Its height only counts in [`segment`](Self::segment) with `Z`.
-    fn vertex(&self, position: [f64; 3]) -> Result<Self::Vertex, Self::Error>;
-    /// How long the segment `ab` is.
-    fn segment<const Z: bool>(&self, a: Self::Vertex, b: Self::Vertex) -> f64;
-}
+use crate::{
+    GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, Metric,
+};
 
 /// The length of the line through `vertices`: fewer than two have a length of `0.0`.
 /// With `IGNORE_NAN`, a vertex with a NaN is skipped, so the line runs on to the next one.

@@ -41,10 +41,6 @@ proj = { version = "0.31", features = ["bundled_proj"] }
 # Used for what it does not expose (e.g. a CRS's ellipsoid).
 # Must match the version `proj` pins, so both link the same bundled PROJ.
 proj-sys = "0.27"
-# rsgeo uses this for its `Geodesic` suite.
-# rsgeo does not re-export it, but we need it for CRS ellipsoid distance measuring.
-# Keep on the version and features rsgeo pulls in.
-geographiclib-rs = { version = "0.2.7", default-features = false }
 geoarrow-schema = "0.9.0"
 # Our storage-agnostic GeoArrow coordinate traits and `GeoDimension`.
 geoarrow_abstr = { path = "../geoarrow_abstr" }

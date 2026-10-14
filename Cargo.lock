@@ -856,6 +856,8 @@ name = "geoarrow_abstr"
 version = "0.1.0"
 dependencies = [
  "geo-traits",
+ "geographiclib-rs",
+ "proj",
 ]
 
 [[package]]
@@ -875,7 +877,6 @@ dependencies = [
  "geo-traits",
  "geoarrow-schema",
  "geoarrow_abstr",
- "geographiclib-rs",
  "indexmap",
  "polars",
  "polars-arrow",

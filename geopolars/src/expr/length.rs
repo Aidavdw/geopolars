@@ -2,13 +2,15 @@
 //! - in the space its coordinates lie in ([`DistanceMethod::Planar`]),
 //! - along the ellipsoid of its CRS ([`DistanceMethod::Geodesic`]).
 
-use geoarrow_abstr::{GeoArrowCoordsShared, Metric};
+use std::fmt::Display;
+
+use geoarrow_abstr::{GeoArrowCoordsShared, Metric, Planar};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::distance::{DistanceMethod, GeodesicMetric, Planar};
+use super::distance::{geodesic_metric, DistanceMethod};
 use crate::geoarrow::storage::{downcast, F64Array, ListView, ValidCoordsView, ValidListView};
 use crate::geoarrow::{describe, Kind};
 
@@ -58,7 +60,7 @@ fn length_dtype(field: &Field) -> PolarsResult<Field> {
 fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> PolarsResult<Field> {
     if let DistanceMethod::Geodesic = kwargs.method {
         // So a CRS PROJ cannot measure in fails while the plan is built.
-        GeodesicMetric::of(&crs_of(&input_fields[0])?)?;
+        geodesic_metric(&crs_of(&input_fields[0])?)?;
     }
     length_dtype(&input_fields[0])
 }
@@ -66,19 +68,20 @@ fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> Po
 /// [geoarrow_abstr::lengths], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn lengths<const Z: bool, const MULTI: bool, const IGNORE_NAN: bool>(
-    metric: &impl Metric<Error = PolarsError>,
+    metric: &impl Metric<Error: Display>,
     rows: &ListView,
     lines: &ValidListView,
     axes: &ValidCoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(lengths) =
-        geoarrow_abstr::lengths::<Z, MULTI, IGNORE_NAN, _, F64Array>(metric, rows, lines, axes)?;
+        geoarrow_abstr::lengths::<Z, MULTI, IGNORE_NAN, _, F64Array>(metric, rows, lines, axes)
+            .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(lengths)
 }
 
 /// The length of every geometry in `geometries`, as `metric` measures it.
 fn measure(
-    metric: &impl Metric<Error = PolarsError>,
+    metric: &impl Metric<Error: Display>,
     geometries: &Series,
     ignore_nan: bool,
 ) -> PolarsResult<Series> {
@@ -110,7 +113,7 @@ fn length(inputs: &[Series], kwargs: LengthKwargs) -> PolarsResult<Series> {
     match kwargs.method {
         DistanceMethod::Planar => measure(&Planar, &inputs[0], kwargs.ignore_nan),
         DistanceMethod::Geodesic => {
-            let metric = GeodesicMetric::of(&crs_of(&inputs[0].field())?)?;
+            let metric = geodesic_metric(&crs_of(&inputs[0].field())?)?;
             measure(&*metric, &inputs[0], kwargs.ignore_nan)
         }
     }

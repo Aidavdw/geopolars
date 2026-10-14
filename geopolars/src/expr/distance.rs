@@ -17,10 +17,10 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::rc::Rc;
 
-use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView, Metric};
-use geographiclib_rs::{Geodesic, InverseGeodesic, PolygonArea, Winding};
+use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowCoordsView, GeodesicMetric, Metric, Planar};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
@@ -32,16 +32,6 @@ use serde::Deserialize;
 use crate::geoarrow::geodetic::GeodeticCrs;
 use crate::geoarrow::storage::{CoordsView, F64Array};
 use crate::geoarrow::{describe, Kind};
-
-/// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
-///
-/// Kept apart from the expression, so the distance between two points, the length of a linestring
-/// (both through [`Metric`]) and the area of a polygon can be measured with the same thing.
-pub struct GeodesicMetric {
-    /// To the CRS's own longitude/latitude, so no datum is shifted.
-    to_lonlat: Proj,
-    ellipsoid: Geodesic,
-}
 
 /// How many CRSes to keep in cache.
 /// If more are used, it will start over.
@@ -55,120 +45,35 @@ thread_local! {
     static METRICS: RefCell<HashMap<String, Rc<GeodesicMetric>>> = RefCell::new(HashMap::new());
 }
 
-impl GeodesicMetric {
-    /// Populates or gets the metric for `crs` from the cache.
-    ///
-    /// `crs` is anything PROJ accepts, as [`ExtensionMetadata::crs`](crate::geoarrow::crs::ExtensionMetadata::crs) gives it.
-    pub fn of(crs: &str) -> PolarsResult<Rc<Self>> {
-        // A CRS that fails to build is not cached, and fails again the next time.
-        if let Some(metric) = METRICS.with_borrow(|metrics| metrics.get(crs).cloned()) {
-            return Ok(metric);
+/// Populates or gets the metric for `crs` from the cache.
+///
+/// `crs` is anything PROJ accepts, as [`ExtensionMetadata::crs`](crate::geoarrow::crs::ExtensionMetadata::crs) gives it.
+pub fn geodesic_metric(crs: &str) -> PolarsResult<Rc<GeodesicMetric>> {
+    // A CRS that fails to build is not cached, and fails again the next time.
+    if let Some(metric) = METRICS.with_borrow(|metrics| metrics.get(crs).cloned()) {
+        return Ok(metric);
+    }
+    // Built outside the borrow, so nothing is held while PROJ runs.
+    let metric = Rc::new(build(crs)?);
+    METRICS.with_borrow_mut(|metrics| {
+        if metrics.len() >= CACHED_CRSS {
+            metrics.clear();
         }
-        // Built outside the borrow, so nothing is held while PROJ runs.
-        let metric = Rc::new(Self::new(crs)?);
-        METRICS.with_borrow_mut(|metrics| {
-            if metrics.len() >= CACHED_CRSS {
-                metrics.clear();
-            }
-            metrics.insert(crs.to_owned(), Rc::clone(&metric));
-        });
-        Ok(metric)
-    }
-
-    fn new(crs: &str) -> PolarsResult<Self> {
-        let geodetic = GeodeticCrs::of(crs)?;
-        let to_lonlat = Proj::new_known_crs(crs, &geodetic.definition, None).map_err(
-            |e| polars_err!(ComputeError: "cannot measure along the ellipsoid in {crs}: {e}"),
-        )?;
-        let ellipsoid = Geodesic::new(geodetic.semi_major, geodetic.flattening);
-        Ok(Self {
-            to_lonlat,
-            ellipsoid,
-        })
-    }
-
-    /// `(lon, lat)` in degrees, on this CRS's own datum.
-    ///
-    /// Reprojecting is the expensive part of measuring,
-    /// so something measuring many segments should do this once per vertex.
-    pub fn lonlat(&self, (x, y): (f64, f64)) -> PolarsResult<(f64, f64)> {
-        self.to_lonlat
-            .convert((x, y))
-            .map_err(|e| polars_err!(ComputeError: "failed to reproject ({x}, {y}): {e}"))
-    }
-
-    /// The geodesic distance between two coordinates already in [`lonlat`](Self::lonlat),
-    /// in the unit of the CRS's `x` and `y` (metres if those are degrees),
-    /// which is the unit [`GeodeticCrs::semi_major`] gives the ellipsoid in.
-    pub fn between(&self, (lon_a, lat_a): (f64, f64), (lon_b, lat_b): (f64, f64)) -> f64 {
-        self.ellipsoid.inverse(lat_a, lon_a, lat_b, lon_b)
-    }
-
-    /// The area the closed ring through `coords` encloses on the ellipsoid,
-    /// in the CRS's unit squared, like [`between`](Self::between).
-    /// Based on `geographiclib_rs`
-    pub fn ring_area(
-        &self,
-        coords: impl IntoIterator<Item = Option<(f64, f64)>>,
-    ) -> PolarsResult<Option<f64>> {
-        let mut ring = PolygonArea::new(&self.ellipsoid, Winding::CounterClockwise);
-        for coord in coords {
-            let Some(coord) = coord else { return Ok(None) };
-            let (lon, lat) = self.lonlat(coord)?;
-            // The repeated closing vertex adds an edge of length zero, which encloses nothing.
-            ring.add_point(lat, lon);
-        }
-        // Signed, then made positive: unsigned would take a clockwise ring
-        // to enclose everything outside of it.
-        let (_perimeter, area, _vertices) = ring.compute(true);
-        Ok(Some(area.abs()))
-    }
+        metrics.insert(crs.to_owned(), Rc::clone(&metric));
+    });
+    Ok(metric)
 }
 
-/// In the space the coordinates lie in, by Pythagoras.
-pub(crate) struct Planar;
-
-impl Metric for Planar {
-    type Vertex = [f64; 3];
-    type Error = PolarsError;
-
-    #[inline(always)]
-    fn vertex(&self, position: [f64; 3]) -> PolarsResult<[f64; 3]> {
-        Ok(position)
-    }
-
-    #[inline(always)]
-    fn segment<const Z: bool>(&self, [ax, ay, az]: [f64; 3], [bx, by, bz]: [f64; 3]) -> f64 {
-        let (dx, dy) = (bx - ax, by - ay);
-        if Z {
-            let dz = bz - az;
-            (dx * dx + dy * dy + dz * dz).sqrt()
-        } else {
-            dx.hypot(dy)
-        }
-    }
-}
-
-/// Along the ellipsoid, climbing and descending with `z`:
-/// each segment is its geodesic and its difference in height, by Pythagoras.
-impl Metric for GeodesicMetric {
-    type Vertex = WithHeight;
-    type Error = PolarsError;
-
-    #[inline(always)]
-    fn vertex(&self, [x, y, z]: [f64; 3]) -> PolarsResult<WithHeight> {
-        Ok((self.lonlat((x, y))?, z))
-    }
-
-    #[inline(always)]
-    fn segment<const Z: bool>(&self, (a, z_a): WithHeight, (b, z_b): WithHeight) -> f64 {
-        let along = self.between(a, b);
-        if Z {
-            along.hypot(z_b - z_a)
-        } else {
-            along
-        }
-    }
+fn build(crs: &str) -> PolarsResult<GeodesicMetric> {
+    let geodetic = GeodeticCrs::of(crs)?;
+    let to_lonlat = Proj::new_known_crs(crs, &geodetic.definition, None).map_err(
+        |e| polars_err!(ComputeError: "cannot measure along the ellipsoid in {crs}: {e}"),
+    )?;
+    Ok(GeodesicMetric::new(
+        to_lonlat,
+        geodetic.semi_major,
+        geodetic.flattening,
+    ))
 }
 
 /// How `distance` measures, as passed from Python.
@@ -245,7 +150,7 @@ fn kernel_output_type_distance(
         }
         DistanceMethod::Geodesic => {
             // So a CRS PROJ cannot measure in fails while the plan is built.
-            GeodesicMetric::of(&geodesic_crs(input_fields)?)?;
+            geodesic_metric(&geodesic_crs(input_fields)?)?;
         }
     }
     Ok(Field::new(
@@ -254,36 +159,35 @@ fn kernel_output_type_distance(
     ))
 }
 
-/// A point's `(x, y)` and its `z`, kept apart so the `(x, y)` can go to PROJ as is.
-pub type WithHeight = ((f64, f64), f64);
-
 /// [geoarrow_abstr::pairwise], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn pairwise<const Z: bool>(
-    metric: &impl Metric<Error = PolarsError>,
+    metric: &impl Metric<Error: Display>,
     a: &CoordsView,
     b: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     polars_ensure!(a.len() == b.len(), ComputeError: "Chunks must be same size");
-    let F64Array(distances) = geoarrow_abstr::pairwise::<Z, _, F64Array>(metric, a, b)?;
+    let F64Array(distances) = geoarrow_abstr::pairwise::<Z, _, F64Array>(metric, a, b)
+        .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(distances)
 }
 
 /// [geoarrow_abstr::against_one], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn against_one<const Z: bool>(
-    metric: &impl Metric<Error = PolarsError>,
+    metric: &impl Metric<Error: Display>,
     one: [f64; 3],
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(distances) = geoarrow_abstr::against_one::<Z, _, F64Array>(metric, one, many)?;
+    let F64Array(distances) = geoarrow_abstr::against_one::<Z, _, F64Array>(metric, one, many)
+        .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(distances)
 }
 
 /// [`against_one`] for every chunk of `many`. Distance goes both ways,
 /// so this serves a single point on either side.
 fn every_against_one<const Z: bool>(
-    metric: &impl Metric<Error = PolarsError>,
+    metric: &impl Metric<Error: Display>,
     one: &StructChunked,
     many: &StructChunked,
 ) -> PolarsResult<Vec<PrimitiveArray<f64>>> {
@@ -304,7 +208,7 @@ fn every_against_one<const Z: bool>(
 }
 
 /// The distance between the points of `inputs[0]` and `inputs[1]`, measured with `metric`.
-fn measure(metric: &impl Metric<Error = PolarsError>, inputs: &[Series]) -> PolarsResult<Series> {
+fn measure(metric: &impl Metric<Error: Display>, inputs: &[Series]) -> PolarsResult<Series> {
     let z = describe(inputs[0].dtype())?.dim.has_z() && describe(inputs[1].dtype())?.dim.has_z();
 
     let a = inputs[0].ext()?.storage().struct_()?;
@@ -339,7 +243,7 @@ fn distance(inputs: &[Series], kwargs: DistanceKwargs) -> PolarsResult<Series> {
             shared_crs(&fields)?;
             measure(&Planar, inputs)
         }
-        DistanceMethod::Geodesic => measure(&*GeodesicMetric::of(&geodesic_crs(&fields)?)?, inputs),
+        DistanceMethod::Geodesic => measure(&*geodesic_metric(&geodesic_crs(&fields)?)?, inputs),
     }
 }
 
@@ -351,28 +255,22 @@ mod tests {
 
     #[test]
     fn a_thread_builds_the_metric_for_a_crs_once() {
-        let first = GeodesicMetric::of("EPSG:4326").unwrap();
+        let first = geodesic_metric("EPSG:4326").unwrap();
 
-        assert!(Rc::ptr_eq(
-            &first,
-            &GeodesicMetric::of("EPSG:4326").unwrap()
-        ));
-        assert!(!Rc::ptr_eq(
-            &first,
-            &GeodesicMetric::of("EPSG:4289").unwrap()
-        ));
+        assert!(Rc::ptr_eq(&first, &geodesic_metric("EPSG:4326").unwrap()));
+        assert!(!Rc::ptr_eq(&first, &geodesic_metric("EPSG:4289").unwrap()));
     }
 
     #[test]
     fn a_crs_that_fails_is_not_cached() {
-        assert!(GeodesicMetric::of("EPSG:4978").is_err());
-        assert!(GeodesicMetric::of("EPSG:4978").is_err());
+        assert!(geodesic_metric("EPSG:4978").is_err());
+        assert!(geodesic_metric("EPSG:4978").is_err());
     }
 
     #[test]
     fn the_cache_starts_over_rather_than_growing() {
         for zone in 1..=CACHED_CRSS + 1 {
-            GeodesicMetric::of(&format!("EPSG:{}", 32600 + zone)).unwrap();
+            geodesic_metric(&format!("EPSG:{}", 32600 + zone)).unwrap();
         }
 
         assert!(METRICS.with_borrow(|metrics| metrics.len()) <= CACHED_CRSS);
