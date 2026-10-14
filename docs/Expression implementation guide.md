@@ -59,6 +59,13 @@ In order from 'least valid' to 'most valid':
   Use this for operations that take nested geometry types like Polygon.
   **Do not** use this for Points.
 
+The list levels above the coordinates are split the same way:
+
+- *ListView*, which considers validity of lists.
+  Use this for the outer level of a geometry column.
+- *ValidListView*, which assumes every list is valid.
+  Use this for the inner levels of a nested geometry (the linestrings of a multilinestring).
+
 An important note: **This does not shield you from NaNs!**
 These show up in two ways:
 

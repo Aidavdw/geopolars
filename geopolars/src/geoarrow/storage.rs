@@ -1,11 +1,13 @@
 //! See the expression implementation guide on Array abstractions for GeoArrow.
 
 use geoarrow_abstr::{
-    GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowValidCoordsView, GeoDimension,
+    GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowListShared, GeoArrowListView,
+    GeoArrowValidCoordsView, GeoArrowValidListView, GeoDimension,
 };
 use polars::prelude::*;
-use polars_arrow::array::{Array, PrimitiveArray, StructArray};
+use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
+use polars_arrow::offset::OffsetsBuffer;
 
 use std::ops::Range;
 
@@ -216,5 +218,83 @@ impl GeoArrowCoordsShared for CoordsView<'_> {
     #[inline]
     fn dim(&self) -> GeoDimension {
         self.axes.dim()
+    }
+}
+
+/// Abstraction over Polars storage for lists that are all assumed to be valid:
+/// the inner levels of a nested geometry (the linestrings of a multilinestring).
+/// Otherwise, use [ListView].
+///
+/// See the expression implementation guide for more details.
+pub(crate) struct ValidListView<'a> {
+    offsets: &'a OffsetsBuffer<i64>,
+}
+
+impl<'a> ValidListView<'a> {
+    pub(crate) fn new(list: &'a ListArray<i64>) -> Self {
+        Self {
+            offsets: list.offsets(),
+        }
+    }
+}
+
+impl GeoArrowListShared for ValidListView<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.offsets.len_proxy()
+    }
+
+    #[inline(always)]
+    fn range(&self, i: usize) -> Range<usize> {
+        let (start, end) = self.offsets.start_end(i);
+        start..end
+    }
+}
+
+impl GeoArrowValidListView for ValidListView<'_> {}
+
+/// Abstraction over Polars storage for lists where individual lists can be missing:
+/// the outer level of a geometry column.
+/// Otherwise, use [ValidListView].
+///
+/// See the expression implementation guide for more details.
+pub(crate) struct ListView<'a> {
+    /// Which lists are there.
+    validity: Option<&'a Bitmap>,
+    lists: ValidListView<'a>,
+}
+
+impl<'a> ListView<'a> {
+    pub(crate) fn new(list: &'a ListArray<i64>) -> Self {
+        Self {
+            validity: list.validity(),
+            lists: ValidListView::new(list),
+        }
+    }
+}
+
+impl GeoArrowListShared for ListView<'_> {
+    #[inline]
+    fn len(&self) -> usize {
+        self.lists.len()
+    }
+
+    #[inline(always)]
+    fn range(&self, i: usize) -> Range<usize> {
+        self.lists.range(i)
+    }
+}
+
+impl GeoArrowListView for ListView<'_> {
+    type Validity = Bitmap;
+
+    #[inline(always)]
+    fn is_valid(&self, i: usize) -> bool {
+        self.validity.is_none_or(|validity| validity.get_bit(i))
+    }
+
+    #[inline]
+    fn validity(&self) -> Option<&Bitmap> {
+        self.validity
     }
 }

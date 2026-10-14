@@ -5,6 +5,8 @@
 
 mod coords;
 mod dimension;
+mod lists;
 
 pub use coords::{GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowValidCoordsView};
 pub use dimension::GeoDimension;
+pub use lists::{GeoArrowListShared, GeoArrowListView, GeoArrowValidListView};

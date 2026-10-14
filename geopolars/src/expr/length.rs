@@ -4,14 +4,17 @@
 
 use std::ops::Range;
 
-use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowValidCoordsView};
+use geoarrow_abstr::{
+    GeoArrowCoordsShared, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
+};
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray, PrimitiveArray};
+use polars_arrow::array::PrimitiveArray;
+use polars_arrow::bitmap::Bitmap;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::distance::{DistanceMethod, GeodesicMetric, Metric, Planar};
-use crate::geoarrow::storage::{downcast, ValidCoordsView};
+use crate::geoarrow::storage::{downcast, ListView, ValidCoordsView, ValidListView};
 use crate::geoarrow::{describe, Kind};
 
 #[derive(Debug, Deserialize)]
@@ -93,22 +96,18 @@ fn line_length<const Z: bool, const IGNORE_NAN: bool, M: Metric>(
 /// or with `MULTI`, a multilinestring as the sum of its parts.
 fn lengths<const Z: bool, const MULTI: bool, const IGNORE_NAN: bool>(
     metric: &impl Metric,
-    rows: &ListArray<i64>,
-    lines: &ListArray<i64>,
+    rows: &impl GeoArrowListView<Validity = Bitmap>,
+    lines: &impl GeoArrowValidListView,
     axes: &ValidCoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let line = |i: usize| {
-        let (start, end) = lines.offsets().start_end(i);
-        line_length::<Z, IGNORE_NAN, _>(metric, axes, start..end)
-    };
+    let line = |i: usize| line_length::<Z, IGNORE_NAN, _>(metric, axes, lines.range(i));
     let values = (0..rows.len())
         .map(|i| {
             // A missing row's offsets point anywhere, so it is not measured.
-            if rows.is_null(i) {
+            if !rows.is_valid(i) {
                 Ok(0.0)
             } else if MULTI {
-                let (start, end) = rows.offsets().start_end(i);
-                (start..end).map(line).sum()
+                rows.range(i).map(line).sum()
             } else {
                 line(i)
             }
@@ -135,7 +134,8 @@ fn measure(metric: &impl Metric, geometries: &Series, ignore_nan: bool) -> Polar
         };
         let axes = ValidCoordsView::new(lines.values().as_ref())?;
         let dim = axes.dim();
-        with_const_flags!(lengths(metric, rows, lines, &axes); dim.has_z(), multi, ignore_nan)
+        let (rows, lines) = (ListView::new(rows), ValidListView::new(lines));
+        with_const_flags!(lengths(metric, &rows, &lines, &axes); dim.has_z(), multi, ignore_nan)
     });
     Ok(Float64Chunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())
 }
