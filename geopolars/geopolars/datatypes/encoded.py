@@ -41,7 +41,11 @@ class EncodedGeometry(pl.datatypes.BaseExtension):
         return _rust.declares_crs(self.ext_metadata())
 
     def __repr__(self) -> str:
-        return type(self).__name__
+        # `Wkb`, or `Wkb({"crs":"EPSG:4326"})` with metadata
+        metadata = self.ext_metadata()
+        if metadata is None:
+            return type(self).__name__
+        return f"{type(self).__name__}(meta={metadata})"
 
     def _string_repr(self) -> str:
         return self._display

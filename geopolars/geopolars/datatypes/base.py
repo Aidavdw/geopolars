@@ -112,7 +112,11 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         return _rust.is_equal_area(self.ext_metadata())
 
     def __repr__(self) -> str:
-        return type(self).__name__
+        # `PointXY`, or `PointXY({"crs":"EPSG:4326"})` with metadata
+        metadata = self.ext_metadata()
+        if metadata is None:
+            return type(self).__name__
+        return f"{type(self).__name__}(meta={metadata})"
 
     def _string_repr(self) -> str:
         # This mirrors the rust `Geo::dyn_display`
@@ -120,7 +124,7 @@ class GeoArrowType(pl.datatypes.BaseExtension):
         crs = _rust.crs_label(self.ext_metadata())
         if crs is None:
             return f"{self._display}[{dimension}]"
-        return f"{self._display}[{dimension}] {crs}]"
+        return f"{self._display}[{dimension}] {crs}"
 
     @classmethod
     def of_dimension(cls, dimension: Dimension) -> type[GeoArrowType]:

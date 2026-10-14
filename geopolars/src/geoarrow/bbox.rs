@@ -68,11 +68,20 @@ impl ExtensionTypeImpl for GeoBox {
     }
 
     fn dyn_display(&self) -> Cow<'_, str> {
-        Cow::Owned(format!("box[{}]", self.dim.tag()))
+        let dim = self.dim.tag();
+        Cow::Owned(match self.metadata.crs_label() {
+            Some(crs) => format!("box[{dim}] {crs}"),
+            None => format!("box[{dim}]"),
+        })
     }
 
+    /// Shown as `BoxXY`, or `BoxXY({"crs":"EPSG:4326"})` with metadata.
     fn dyn_debug(&self) -> Cow<'_, str> {
-        Cow::Owned(format!("Box{}", self.dim.tag().to_uppercase()))
+        let name = format!("Box{}", self.dim.tag().to_uppercase());
+        Cow::Owned(match self.metadata.serialize() {
+            Some(metadata) => format!("{name} (meta={metadata})"),
+            None => name,
+        })
     }
 }
 

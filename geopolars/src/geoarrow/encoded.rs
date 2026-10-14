@@ -119,11 +119,21 @@ impl ExtensionTypeImpl for Encoded {
     }
 
     fn dyn_display(&self) -> Cow<'_, str> {
-        Cow::Borrowed(self.encoding.display())
+        let enc = self.encoding.display();
+        if let Some(crs) = self.metadata.crs_label() {
+            Cow::Owned(format!("{enc} {crs}"))
+        } else {
+            Cow::Borrowed(self.encoding.display())
+        }
     }
 
+    /// Shown as `WKB`, or `WKB({"crs":"EPSG:4326"})` with metadata.
     fn dyn_debug(&self) -> Cow<'_, str> {
-        Cow::Borrowed(self.encoding.label())
+        let name = self.encoding.label();
+        match self.metadata.serialize() {
+            Some(metadata) => Cow::Owned(format!("{name} (meta={metadata})")),
+            None => Cow::Borrowed(name),
+        }
     }
 }
 
