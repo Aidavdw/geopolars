@@ -264,6 +264,8 @@ impl GeoParquetColumn {
     /// The dtype of this column, given the `storage` Polars reads it from a file as.
     pub fn dtype(&self, storage: &DataType) -> PolarsResult<DataType> {
         let metadata = self.metadata();
+        // TODO: do we need to store the dimension here? we only want to store geoarrow.point
+        // anyway, not pointxy or smth
 
         match self.encoding {
             ColumnEncoding::Native(kind) => {

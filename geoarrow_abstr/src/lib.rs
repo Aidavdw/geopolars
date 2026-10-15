@@ -9,6 +9,7 @@ mod arrays;
 mod coords;
 mod dimension;
 mod distance;
+mod geos;
 mod length;
 mod linestrings;
 mod lists;
