@@ -19,10 +19,10 @@ pub trait DistanceMetric: BaseMetric {
     /// Why a vertex could not be prepared (e.g. a failed reprojection).
     type Error;
     /// Sometimes it is faster to just *do* a calculation and then
-    /// mask out the result *afterwards* (`FALSE`),
+    /// mask out the result *afterwards* (`TRUE`),
     /// rather than first checking for validity,
     /// and if the value is marked as invalid on the bitflag,
-    /// skipping the calculation all together (`TRUE`).
+    /// skipping the calculation all together (`FALSE`).
     /// This flag switches between the two behaviours.
     ///
     /// If `FALSE`,
@@ -108,18 +108,18 @@ fn pairwise_values<const NULLS: bool, const Z: bool, M: DistanceMetric>(
     a: &impl GeoArrowCoordsView,
     b: &impl GeoArrowCoordsView,
 ) -> Result<Vec<f64>, M::Error> {
-    (0..a.len())
-        .map(|i| {
-            // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
-            // empty points are assumed rare enough not to warrant an extra check on every valid point.
-            match (a.position::<NULLS, Z>(i), b.position::<NULLS, Z>(i)) {
-                (Some(here), Some(there)) => {
-                    Ok(metric.segment::<Z>(metric.vertex(here)?, metric.vertex(there)?))
-                }
-                _ => Ok(0.0),
-            }
-        })
-        .collect()
+    // Filled by index, not collected: collecting through `Result` loses the length,
+    // so the Vec would grow as it goes, checking its capacity on every row.
+    let mut values = vec![0.0; a.len()];
+    for (i, value) in values.iter_mut().enumerate() {
+        // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
+        // empty points are assumed rare enough not to warrant an extra check on every valid point.
+        if let (Some(here), Some(there)) = (a.position::<NULLS, Z>(i), b.position::<NULLS, Z>(i)) {
+            *value = metric.segment::<Z>(metric.vertex(here)?, metric.vertex(there)?);
+        }
+        // A missing point keeps its 0.0, which the validity masks out.
+    }
+    Ok(values)
 }
 
 /// The distance between the single point at `one` and every point of `many`.
@@ -158,14 +158,15 @@ fn against_one_values<const NULLS: bool, const Z: bool, M: DistanceMetric>(
     one: M::Vertex,
     many: &impl GeoArrowCoordsView,
 ) -> Result<Vec<f64>, M::Error> {
-    (0..many.len())
-        .map(|i| {
-            // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
-            // empty points are assumed rare enough not to warrant an extra check on every valid point.
-            match many.position::<NULLS, Z>(i) {
-                Some(there) => Ok(metric.segment::<Z>(one, metric.vertex(there)?)),
-                None => Ok(0.0),
-            }
-        })
-        .collect()
+    // Filled by index, as in `pairwise_values`.
+    let mut values = vec![0.0; many.len()];
+    for (i, value) in values.iter_mut().enumerate() {
+        // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
+        // empty points are assumed rare enough not to warrant an extra check on every valid point.
+        if let Some(there) = many.position::<NULLS, Z>(i) {
+            *value = metric.segment::<Z>(one, metric.vertex(there)?);
+        }
+        // A missing point keeps its 0.0, which the validity masks out.
+    }
+    Ok(values)
 }
