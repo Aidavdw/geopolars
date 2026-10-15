@@ -4,8 +4,8 @@ use crate::GeoArrowCoordsView;
 
 /// One point: a single coordinate, which may be missing.
 pub struct Point<'a, C: GeoArrowCoordsView> {
-    coords: &'a C,
-    index: usize,
+    pub(crate) coords: &'a C,
+    pub(crate) index: usize,
 }
 
 impl<C: GeoArrowCoordsView> Point<'_, C> {
