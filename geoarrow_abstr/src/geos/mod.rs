@@ -4,6 +4,7 @@
 //! so arrow buffers can't be borrowed zero-copy.
 //! The copy is one memcpy-like op, so still not very heavy.
 
+mod convex_hull;
 mod linestrings;
 mod polygons;
 
@@ -11,7 +12,7 @@ use std::ops::Range;
 
 use geos::{CoordSeq, CoordType, Geometry};
 
-use crate::{GeoArrowCoordsView, GeoArrowValidCoordsView, GeoDimension, Point, PointArray};
+use crate::{GeoArrowCoordsView, GeoArrowValidCoordsView, GeoDimension, PointArrayView, PointView};
 
 impl From<GeoDimension> for CoordType {
     fn from(dim: GeoDimension) -> Self {
@@ -24,7 +25,7 @@ impl From<GeoDimension> for CoordType {
     }
 }
 
-impl<C: GeoArrowCoordsView> Point<'_, C> {
+impl<C: GeoArrowCoordsView> PointView<'_, C> {
     /// `None` if the point is empty (missing).
     pub fn to_geos(&self) -> geos::GResult<Option<Geometry>> {
         let dim = self.coords.dim();
@@ -32,7 +33,7 @@ impl<C: GeoArrowCoordsView> Point<'_, C> {
     }
 }
 
-impl<C: GeoArrowCoordsView> PointArray<C> {
+impl<C: GeoArrowCoordsView> PointArrayView<C> {
     /// One geometry per row; `None` where the point is missing.
     pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
         // GEOS has no batch constructor, so only the per-column work is shared.

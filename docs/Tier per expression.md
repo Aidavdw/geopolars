@@ -19,6 +19,7 @@ the comment says when one without a CRS takes a different tier.
 | `exterior` | - | | - | | A | ring 0 | - | | - | | A | LPP |
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | LPP |
 | `boundary` | - | | C | | C | every ring | - | | C | LPP | C | LPP |
+| `convex_hull` | - | | - | | B | GEOS; z kept, m NaN | - | | - | | - | |
 | `is_ring` | - | | A | ≥ 4 vertices, ends ≈  x/y/z | - | | - | | A | LPP | - | |
 | `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes fwd `rings_overlap` | - | | B | LPP | B | LPP |
 | `rings_overlap` | - | | B | hacked as polygon's RGR | - | | - | | - | | - | |

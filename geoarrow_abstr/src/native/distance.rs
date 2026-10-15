@@ -7,7 +7,7 @@
 use std::convert::Infallible;
 
 use crate::{
-    BaseMetric, GeoArrowCoordsView, GeoArrowF64Array, GeodesicMetric, Planar, PointArray,
+    BaseMetric, GeoArrowCoordsView, GeoArrowF64Array, GeodesicMetric, Planar, PointArrayView,
     ReprojectError, WithHeight,
 };
 
@@ -87,8 +87,8 @@ impl DistanceMetric for GeodesicMetric {
 /// without, it marks that row missing and carries on, so it never fails.
 pub fn pairwise<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric, V, O>(
     metric: &M,
-    a: &PointArray<V>,
-    b: &PointArray<V>,
+    a: &PointArrayView<V>,
+    b: &PointArrayView<V>,
 ) -> Result<O, M::Error>
 where
     V: GeoArrowCoordsView,
@@ -123,8 +123,8 @@ where
 #[inline(always)]
 fn pairwise_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
     metric: &M,
-    a: &PointArray<impl GeoArrowCoordsView>,
-    b: &PointArray<impl GeoArrowCoordsView>,
+    a: &PointArrayView<impl GeoArrowCoordsView>,
+    b: &PointArrayView<impl GeoArrowCoordsView>,
 ) -> Result<(Vec<f64>, Vec<usize>), M::Error>
 where
     M: DistanceMetric,
@@ -168,7 +168,7 @@ pub fn against_one<
 >(
     metric: &M,
     one: [f64; 3],
-    many: &PointArray<V>,
+    many: &PointArrayView<V>,
 ) -> Result<O, M::Error> {
     // If any of the 'one' is NaN, then everything will become NaN anyway,
     // so we might as well exit early.
@@ -216,7 +216,7 @@ pub fn against_one<
 fn against_one_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
     metric: &M,
     one: M::Vertex,
-    many: &PointArray<impl GeoArrowCoordsView>,
+    many: &PointArrayView<impl GeoArrowCoordsView>,
 ) -> Result<(Vec<f64>, Vec<usize>), M::Error>
 where
     M: DistanceMetric,

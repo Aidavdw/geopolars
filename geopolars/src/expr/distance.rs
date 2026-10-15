@@ -9,7 +9,7 @@ use std::fmt::Display;
 use std::rc::Rc;
 
 use geoarrow_abstr::native::DistanceMetric;
-use geoarrow_abstr::{GeoArrowCoordsView, GeodesicMetric, Planar, PointArray};
+use geoarrow_abstr::{GeoArrowCoordsView, GeodesicMetric, Planar, PointArrayView};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
@@ -155,8 +155,8 @@ fn kernel_output_type_distance(
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn pairwise<const Z: bool>(
     metric: &impl DistanceMetric<Error: Display>,
-    a: &PointArray<CoordsView>,
-    b: &PointArray<CoordsView>,
+    a: &PointArrayView<CoordsView>,
+    b: &PointArrayView<CoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(distances) =
         geoarrow_abstr::native::pairwise::<Z, true, _, _, F64Array>(metric, a, b)
@@ -169,7 +169,7 @@ fn pairwise<const Z: bool>(
 fn against_one<const Z: bool>(
     metric: &impl DistanceMetric<Error: Display>,
     one: [f64; 3],
-    many: &PointArray<CoordsView>,
+    many: &PointArrayView<CoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(distances) =
         geoarrow_abstr::native::against_one::<Z, true, _, _, F64Array>(metric, one, many)
@@ -197,7 +197,7 @@ fn every_against_one<const Z: bool>(
     };
     many.downcast_iter()
         .map(|many| {
-            let many = PointArray::new(CoordsView::new(many)?);
+            let many = PointArrayView::new(CoordsView::new(many)?);
             against_one::<Z>(metric, one, &many)
         })
         .collect()
@@ -218,8 +218,8 @@ fn measure(
             a.downcast_iter()
                 .zip(b.downcast_iter())
                 .map(|(a, b)| {
-                    let a = PointArray::new(CoordsView::new(a)?);
-                    let b = PointArray::new(CoordsView::new(b)?);
+                    let a = PointArrayView::new(CoordsView::new(a)?);
+                    let b = PointArrayView::new(CoordsView::new(b)?);
                     with_const_flags!(pairwise(metric, &a, &b); z)
                 })
                 .collect::<PolarsResult<Vec<_>>>()?

@@ -2,20 +2,20 @@
 
 use std::ops::Range;
 
-use crate::{GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, LineString};
+use crate::{GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, LineStringView};
 
 /// One polygon: a run of rings, the first of which is the exterior.
-pub struct Polygon<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> {
+pub struct PolygonView<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> {
     pub rings: &'a L,
     pub coords: &'a C,
     pub parts: Range<usize>,
 }
 
-impl<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> Polygon<'a, L, C> {
+impl<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> PolygonView<'a, L, C> {
     /// Its rings in order, the exterior first, each as the closed linestring it is.
-    pub fn rings(&self) -> impl Iterator<Item = LineString<'a, C>> + 'a {
+    pub fn rings(&self) -> impl Iterator<Item = LineStringView<'a, C>> + 'a {
         let (rings, coords) = (self.rings, self.coords);
-        self.parts.clone().map(move |j| LineString {
+        self.parts.clone().map(move |j| LineStringView {
             coords,
             vertices: rings.range(j),
         })
@@ -23,19 +23,23 @@ impl<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> Polygon<'a, L, C>
 }
 
 /// A column of polygons: rows of rings of coordinates.
-pub struct PolygonArray<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> {
+pub struct PolygonArrayView<
+    R: GeoArrowListView,
+    L: GeoArrowValidListView,
+    C: GeoArrowValidCoordsView,
+> {
     pub rows: R,
     pub rings: L,
     pub coords: C,
 }
 
 impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    PolygonArray<R, L, C>
+    PolygonArrayView<R, L, C>
 {
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> Polygon<'_, L, C> {
-        Polygon {
+    pub fn get(&self, i: usize) -> PolygonView<'_, L, C> {
+        PolygonView {
             rings: &self.rings,
             coords: &self.coords,
             parts: self.rows.range(i),
@@ -44,7 +48,7 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
 }
 
 /// One multipolygon: a run of polygons.
-pub struct MultiPolygon<
+pub struct MultiPolygonView<
     'a,
     P: GeoArrowValidListView,
     L: GeoArrowValidListView,
@@ -57,12 +61,12 @@ pub struct MultiPolygon<
 }
 
 impl<'a, P: GeoArrowValidListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    MultiPolygon<'a, P, L, C>
+    MultiPolygonView<'a, P, L, C>
 {
     /// Its polygons, in order.
-    pub fn polygons(&self) -> impl Iterator<Item = Polygon<'a, L, C>> + 'a {
+    pub fn polygons(&self) -> impl Iterator<Item = PolygonView<'a, L, C>> + 'a {
         let (polygons, rings, coords) = (self.polygons, self.rings, self.coords);
-        self.parts.clone().map(move |j| Polygon {
+        self.parts.clone().map(move |j| PolygonView {
             rings,
             coords,
             parts: polygons.range(j),
@@ -71,7 +75,7 @@ impl<'a, P: GeoArrowValidListView, L: GeoArrowValidListView, C: GeoArrowValidCoo
 }
 
 /// A column of multipolygons: rows of polygons of rings of coordinates.
-pub struct MultiPolygonArray<
+pub struct MultiPolygonArrayView<
     R: GeoArrowListView,
     P: GeoArrowValidListView,
     L: GeoArrowValidListView,
@@ -88,12 +92,12 @@ impl<
         P: GeoArrowValidListView,
         L: GeoArrowValidListView,
         C: GeoArrowValidCoordsView,
-    > MultiPolygonArray<R, P, L, C>
+    > MultiPolygonArrayView<R, P, L, C>
 {
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> MultiPolygon<'_, P, L, C> {
-        MultiPolygon {
+    pub fn get(&self, i: usize) -> MultiPolygonView<'_, P, L, C> {
+        MultiPolygonView {
             polygons: &self.polygons,
             rings: &self.rings,
             coords: &self.coords,

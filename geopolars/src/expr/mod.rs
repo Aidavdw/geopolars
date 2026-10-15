@@ -34,6 +34,7 @@ pub mod affine;
 pub mod area;
 pub mod centroid;
 pub mod construct;
+pub mod convex_hull;
 pub mod coords;
 pub mod crs;
 pub mod distance;

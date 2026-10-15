@@ -2,17 +2,19 @@
 
 use geoarrow_abstr::{
     GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowF64Array, GeoArrowListShared,
-    GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, GeoDimension,
+    GeoArrowListView, GeoArrowPolygonOutput, GeoArrowValidCoordsView, GeoArrowValidListView,
+    GeoDimension, OwnedAxes,
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
-use polars_arrow::compute::utils::combine_validities_and3;
-use polars_arrow::offset::OffsetsBuffer;
+use polars_arrow::compute::utils::{combine_validities_and, combine_validities_and3};
+use polars_arrow::offset::{Offsets, OffsetsBuffer};
 
 use std::ops::Range;
 
 use super::coord::is_close;
+use super::GeoDimensionDtype;
 
 /// Downcast one level of the storage to the array it has to be.
 /// [super::describe] already checked the dtype, so this failing is a bug.
@@ -340,19 +342,69 @@ impl GeoArrowF64Array for F64Array {
         b: Option<&Bitmap>,
         failed: &[usize],
     ) -> Self {
-        let measured = (!failed.is_empty()).then(|| {
-            let mut measured = MutableBitmap::from_len_set(values.len());
-            for &i in failed {
-                measured.set(i, false);
-            }
-            Bitmap::from(measured)
-        });
+        let measured = succeeded(values.len(), failed);
         let validity = combine_validities_and3(a, b, measured.as_ref());
         Self(PrimitiveArray::from_vec(values).with_validity(validity))
     }
 }
 
-// TODO: if we already know that we do not have any nulls, we can take a faster path.
-// We should add a function to the GeoArrowCoordsView trait that allows us to check
-// if it has any nulls at all. For the polars arrow impl, we can simply check if validity
-// is 'some'
+/// [GeoArrowPolygonOutput] for Polars.
+pub(crate) struct PolygonOutput(pub(crate) ListArray<i64>);
+
+impl GeoArrowPolygonOutput for PolygonOutput {
+    type Validity = Bitmap;
+
+    fn from_buffers(
+        dim: GeoDimension,
+        (x, y, z, m): OwnedAxes,
+        rings: Vec<i64>,
+        rows: Vec<i64>,
+        validity: Option<&Bitmap>,
+        failed: &[usize],
+    ) -> Self {
+        let len = x.len();
+        let axes = [Some(x), Some(y), z, m]
+            .into_iter()
+            .flatten()
+            .map(|values| PrimitiveArray::from_vec(values).boxed())
+            .collect();
+        let coords = StructArray::new(
+            dim.coordinates().to_arrow(CompatLevel::newest()),
+            len,
+            axes,
+            None,
+        );
+        // SAFETY: the kernel builds the offsets in order, starting at 0, ending at the child's length.
+        let (rings, rows): (OffsetsBuffer<i64>, OffsetsBuffer<i64>) = unsafe {
+            (
+                Offsets::new_unchecked(rings).into(),
+                Offsets::new_unchecked(rows).into(),
+            )
+        };
+        let rings = ListArray::<i64>::new(
+            ListArray::<i64>::default_datatype(coords.dtype().clone()),
+            rings,
+            coords.boxed(),
+            None,
+        );
+        let hulled = succeeded(rows.len_proxy(), failed);
+        Self(ListArray::<i64>::new(
+            ListArray::<i64>::default_datatype(rings.dtype().clone()),
+            rows,
+            rings.boxed(),
+            combine_validities_and(validity, hulled.as_ref()),
+        ))
+    }
+}
+
+/// Every one of `len` rows but those in `failed`.
+/// `None` when nothing failed.
+fn succeeded(len: usize, failed: &[usize]) -> Option<Bitmap> {
+    (!failed.is_empty()).then(|| {
+        let mut succeeded = MutableBitmap::from_len_set(len);
+        for &i in failed {
+            succeeded.set(i, false);
+        }
+        Bitmap::from(succeeded)
+    })
+}

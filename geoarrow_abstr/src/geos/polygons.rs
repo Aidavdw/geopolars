@@ -6,18 +6,18 @@ use geos::Geometry;
 
 use super::{axes, coord_seq, Axes};
 use crate::{
-    GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, MultiPolygon,
-    MultiPolygonArray, Polygon, PolygonArray,
+    GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, MultiPolygonArrayView,
+    MultiPolygonView, PolygonArrayView, PolygonView,
 };
 
-impl<L: GeoArrowValidListView, C: GeoArrowValidCoordsView> Polygon<'_, L, C> {
+impl<L: GeoArrowValidListView, C: GeoArrowValidCoordsView> PolygonView<'_, L, C> {
     pub fn to_geos(&self) -> geos::GResult<Geometry> {
         polygon_to_geos(&axes(self.coords), self.rings, self.parts.clone())
     }
 }
 
 impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    PolygonArray<R, L, C>
+    PolygonArrayView<R, L, C>
 {
     /// One geometry per row; `None` where the row is missing.
     pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
@@ -36,7 +36,7 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
 }
 
 impl<P: GeoArrowValidListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    MultiPolygon<'_, P, L, C>
+    MultiPolygonView<'_, P, L, C>
 {
     pub fn to_geos(&self) -> geos::GResult<Geometry> {
         multi_polygon_to_geos(
@@ -53,7 +53,7 @@ impl<
         P: GeoArrowValidListView,
         L: GeoArrowValidListView,
         C: GeoArrowValidCoordsView,
-    > MultiPolygonArray<R, P, L, C>
+    > MultiPolygonArrayView<R, P, L, C>
 {
     /// One geometry per row; `None` where the row is missing.
     pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
@@ -79,7 +79,7 @@ impl<
 /// The polygon of `rings` `parts`, the first of which is the exterior.
 /// No parts gives an empty polygon.
 #[inline(always)]
-fn polygon_to_geos(
+pub(super) fn polygon_to_geos(
     axes: &Axes,
     rings: &impl GeoArrowValidListView,
     parts: Range<usize>,

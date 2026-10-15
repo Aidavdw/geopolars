@@ -1,5 +1,30 @@
 //! What a kernel builds its output in, whatever storage backs it.
 
+use crate::GeoDimension;
+
+/// Every value of the x, y, z and m axes, in coordinate order.
+/// z and m are `None` for a dimension without them.
+pub type OwnedAxes = (Vec<f64>, Vec<f64>, Option<Vec<f64>>, Option<Vec<f64>>);
+
+/// A column of polygons: rows of rings of coordinates, built from their buffers.
+pub trait GeoArrowPolygonOutput {
+    /// How the storage records which rows are there.
+    /// The same as the rows' [`GeoArrowListView::Validity`](crate::GeoArrowListView::Validity).
+    type Validity;
+
+    /// `axes` holds every coordinate of `dim`.
+    /// `rings` and `rows` are offsets, with one more entry than there are rings or rows.
+    /// A row is missing where `validity` says, and at the rows in `failed`.
+    fn from_buffers(
+        dim: GeoDimension,
+        axes: OwnedAxes,
+        rings: Vec<i64>,
+        rows: Vec<i64>,
+        validity: Option<&Self::Validity>,
+        failed: &[usize],
+    ) -> Self;
+}
+
 /// One `f64` per row, with missing rows recorded in the storage's own validity.
 pub trait GeoArrowF64Array {
     /// How the storage records which rows are there.

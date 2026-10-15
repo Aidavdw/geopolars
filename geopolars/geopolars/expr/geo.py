@@ -145,6 +145,11 @@ class ExprGeoNameSpace:
 
         return interior(self._expr)
 
+    def convex_hull(self) -> pl.Expr:
+        from geopolars.geo.convex_hull import convex_hull
+
+        return convex_hull(self._expr)
+
     def boundary(self) -> pl.Expr:
         from geopolars.geo.boundary import boundary
 

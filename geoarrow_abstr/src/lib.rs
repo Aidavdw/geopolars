@@ -18,11 +18,13 @@ pub mod native;
 mod points;
 mod polygons;
 
-pub use arrays::GeoArrowF64Array;
+pub use arrays::{GeoArrowF64Array, GeoArrowPolygonOutput, OwnedAxes};
 pub use coords::{GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowValidCoordsView};
 pub use dimension::GeoDimension;
-pub use linestrings::{LineString, LineStringArray, MultiLineString, MultiLineStringArray};
+pub use linestrings::{
+    LineStringArrayView, LineStringView, MultiLineStringArrayView, MultiLineStringView,
+};
 pub use lists::{GeoArrowListShared, GeoArrowListView, GeoArrowValidListView};
 pub use metric::{BaseMetric, GeodesicMetric, Planar, ReprojectError, WithHeight};
-pub use points::{Point, PointArray};
-pub use polygons::{MultiPolygon, MultiPolygonArray, Polygon, PolygonArray};
+pub use points::{PointArrayView, PointView};
+pub use polygons::{MultiPolygonArrayView, MultiPolygonView, PolygonArrayView, PolygonView};

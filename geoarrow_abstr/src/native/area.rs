@@ -7,7 +7,8 @@ use geographiclib_rs::{PolygonArea, Winding};
 use crate::arrays::per_row;
 use crate::{
     BaseMetric, GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeodesicMetric, LineString, MultiPolygonArray, Planar, Polygon, PolygonArray, ReprojectError,
+    GeodesicMetric, LineStringView, MultiPolygonArrayView, Planar, PolygonArrayView, PolygonView,
+    ReprojectError,
 };
 
 /// How the area a ring encloses is measured
@@ -17,7 +18,7 @@ pub trait AreaMetric: BaseMetric {
     /// The area the closed `ring` encloses, whichever way it winds. Its heights do not count.
     fn ring_area(
         &self,
-        ring: &LineString<impl GeoArrowValidCoordsView>,
+        ring: &LineStringView<impl GeoArrowValidCoordsView>,
     ) -> Result<f64, Self::Error>;
 }
 
@@ -26,7 +27,7 @@ impl AreaMetric for Planar {
 
     fn ring_area(
         &self,
-        ring: &LineString<impl GeoArrowValidCoordsView>,
+        ring: &LineStringView<impl GeoArrowValidCoordsView>,
     ) -> Result<f64, Infallible> {
         // By the shoelace formula, relative to the ring's first vertex,
         // so coordinates far from the origin keep their precision.
@@ -51,7 +52,7 @@ impl AreaMetric for GeodesicMetric {
 
     fn ring_area(
         &self,
-        ring: &LineString<impl GeoArrowValidCoordsView>,
+        ring: &LineStringView<impl GeoArrowValidCoordsView>,
     ) -> Result<f64, ReprojectError> {
         // On the ellipsoid, in the CRS's unit squared, like [`between`](GeodesicMetric::between).
         // Based on `geographiclib_rs`.
@@ -74,7 +75,7 @@ impl AreaMetric for GeodesicMetric {
 #[inline(always)]
 fn polygon_area<M: AreaMetric>(
     metric: &M,
-    polygon: &Polygon<impl GeoArrowValidListView, impl GeoArrowValidCoordsView>,
+    polygon: &PolygonView<impl GeoArrowValidListView, impl GeoArrowValidCoordsView>,
 ) -> Result<f64, M::Error> {
     let mut rings = polygon.rings();
     let Some(exterior) = rings.next() else {
@@ -90,7 +91,7 @@ fn polygon_area<M: AreaMetric>(
 /// The area of every polygon of a chunk.
 pub fn polygon_areas<M: AreaMetric, O: GeoArrowF64Array>(
     metric: &M,
-    array: &PolygonArray<
+    array: &PolygonArrayView<
         impl GeoArrowListView<Validity = O::Validity>,
         impl GeoArrowValidListView,
         impl GeoArrowValidCoordsView,
@@ -102,7 +103,7 @@ pub fn polygon_areas<M: AreaMetric, O: GeoArrowF64Array>(
 /// The area of every multipolygon of a chunk, as the sum of its parts.
 pub fn multi_polygon_areas<M: AreaMetric, O: GeoArrowF64Array>(
     metric: &M,
-    array: &MultiPolygonArray<
+    array: &MultiPolygonArrayView<
         impl GeoArrowListView<Validity = O::Validity>,
         impl GeoArrowValidListView,
         impl GeoArrowValidListView,

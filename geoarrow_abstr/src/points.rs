@@ -3,12 +3,12 @@
 use crate::GeoArrowCoordsView;
 
 /// One point: a single coordinate, which may be missing.
-pub struct Point<'a, C: GeoArrowCoordsView> {
+pub struct PointView<'a, C: GeoArrowCoordsView> {
     pub(crate) coords: &'a C,
     pub(crate) index: usize,
 }
 
-impl<C: GeoArrowCoordsView> Point<'_, C> {
+impl<C: GeoArrowCoordsView> PointView<'_, C> {
     /// Its position: x, y, and with `Z` its z (`0.0` without).
     /// With `NULLS`, `None` if it is missing.
     /// Without, it assumes it is there.
@@ -20,15 +20,15 @@ impl<C: GeoArrowCoordsView> Point<'_, C> {
 
 /// A column of points: one coordinate per row,
 /// with missing rows recorded in the coordinates' own validity.
-pub struct PointArray<C: GeoArrowCoordsView> {
+pub struct PointArrayView<C: GeoArrowCoordsView> {
     pub coords: C,
 }
 
-impl<C: GeoArrowCoordsView> PointArray<C> {
+impl<C: GeoArrowCoordsView> PointArrayView<C> {
     /// Row `i`.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> Point<'_, C> {
-        Point {
+    pub fn get(&self, i: usize) -> PointView<'_, C> {
+        PointView {
             coords: &self.coords,
             index: i,
         }

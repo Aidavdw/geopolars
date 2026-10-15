@@ -4,7 +4,7 @@ use super::DistanceMetric;
 use crate::arrays::per_row;
 use crate::{
     GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeodesicMetric, LineString, LineStringArray, MultiLineStringArray, Planar,
+    GeodesicMetric, LineStringArrayView, LineStringView, MultiLineStringArrayView, Planar,
 };
 
 /// A [`DistanceMetric`] that can also measure how long a linestring is, segment by segment.
@@ -19,7 +19,7 @@ impl LengthMetric for GeodesicMetric {}
 #[inline(always)]
 fn line_length<const Z: bool, const IGNORE_NAN: bool, M: LengthMetric>(
     metric: &M,
-    line: &LineString<impl GeoArrowValidCoordsView>,
+    line: &LineStringView<impl GeoArrowValidCoordsView>,
 ) -> Result<f64, M::Error> {
     let mut vertices = line
         .positions::<Z>()
@@ -45,7 +45,7 @@ pub fn line_string_lengths<
     O: GeoArrowF64Array,
 >(
     metric: &M,
-    array: &LineStringArray<
+    array: &LineStringArrayView<
         impl GeoArrowListView<Validity = O::Validity>,
         impl GeoArrowValidCoordsView,
     >,
@@ -63,7 +63,7 @@ pub fn multi_line_string_lengths<
     O: GeoArrowF64Array,
 >(
     metric: &M,
-    array: &MultiLineStringArray<
+    array: &MultiLineStringArrayView<
         impl GeoArrowListView<Validity = O::Validity>,
         impl GeoArrowValidListView,
         impl GeoArrowValidCoordsView,

@@ -35,6 +35,7 @@ from geopolars.geo.construct import (
     polygon_from_columns,
     polygon_from_rings,
 )
+from geopolars.geo.convex_hull import convex_hull
 from geopolars.geo.coordinates import m, x, y, z
 from geopolars.geo.count_coordinates import count_coordinates
 from geopolars.geo.crs import is_geographic, set_crs, to_crs
@@ -63,6 +64,7 @@ __all__ = [
     "bounds",
     "box",
     "centroid",
+    "convex_hull",
     "count_coordinates",
     "distance",
     "exterior",

@@ -5,7 +5,7 @@
 use std::fmt::Display;
 
 use geoarrow_abstr::native::LengthMetric;
-use geoarrow_abstr::{GeoArrowCoordsShared, LineStringArray, MultiLineStringArray, Planar};
+use geoarrow_abstr::{GeoArrowCoordsShared, LineStringArrayView, MultiLineStringArrayView, Planar};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use pyo3_polars::derive::polars_expr;
@@ -70,7 +70,7 @@ fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> Po
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl LengthMetric<Error: Display>,
-    array: &LineStringArray<ListView, ValidCoordsView>,
+    array: &LineStringArrayView<ListView, ValidCoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(lengths) =
         geoarrow_abstr::native::line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(metric, array)
@@ -82,7 +82,7 @@ fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn multi_line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl LengthMetric<Error: Display>,
-    array: &MultiLineStringArray<ListView, ValidListView, ValidCoordsView>,
+    array: &MultiLineStringArrayView<ListView, ValidListView, ValidCoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(lengths) =
         geoarrow_abstr::native::multi_line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(
@@ -109,7 +109,7 @@ fn measure(
     let chunks = storage.list()?.downcast_iter().map(|rows| {
         if multi {
             let lines = downcast(rows.values().as_ref(), "a list of linestrings")?;
-            let array = MultiLineStringArray {
+            let array = MultiLineStringArrayView {
                 rows: ListView::new(rows),
                 lines: ValidListView::new(lines),
                 coords: ValidCoordsView::new(lines.values().as_ref())?,
@@ -117,7 +117,7 @@ fn measure(
             let z = array.coords.dim().has_z();
             with_const_flags!(multi_line_string_lengths(metric, &array); z, ignore_nan)
         } else {
-            let array = LineStringArray {
+            let array = LineStringArrayView {
                 rows: ListView::new(rows),
                 coords: ValidCoordsView::new(rows.values().as_ref())?,
             };

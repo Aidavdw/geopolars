@@ -6,17 +6,17 @@ use geos::Geometry;
 
 use super::{axes, coord_seq, Axes};
 use crate::{
-    GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, LineString, LineStringArray,
-    MultiLineString, MultiLineStringArray,
+    GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, LineStringArrayView,
+    LineStringView, MultiLineStringArrayView, MultiLineStringView,
 };
 
-impl<C: GeoArrowValidCoordsView> LineString<'_, C> {
+impl<C: GeoArrowValidCoordsView> LineStringView<'_, C> {
     pub fn to_geos(&self) -> geos::GResult<Geometry> {
         line_string_to_geos(&axes(self.coords), self.vertices.clone())
     }
 }
 
-impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArray<R, C> {
+impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> {
     /// One geometry per row; `None` where the row is missing.
     pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
         let axes = axes(&self.coords);
@@ -33,14 +33,14 @@ impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArray<R, C> {
     }
 }
 
-impl<L: GeoArrowValidListView, C: GeoArrowValidCoordsView> MultiLineString<'_, L, C> {
+impl<L: GeoArrowValidListView, C: GeoArrowValidCoordsView> MultiLineStringView<'_, L, C> {
     pub fn to_geos(&self) -> geos::GResult<Geometry> {
         multi_line_string_to_geos(&axes(self.coords), self.lines, self.parts.clone())
     }
 }
 
 impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    MultiLineStringArray<R, L, C>
+    MultiLineStringArrayView<R, L, C>
 {
     /// One geometry per row; `None` where the row is missing.
     pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
