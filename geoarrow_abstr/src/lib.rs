@@ -14,6 +14,7 @@ mod length;
 mod linestrings;
 mod lists;
 mod metric;
+mod points;
 mod polygons;
 
 pub use area::{multi_polygon_areas, polygon_areas, AreaMetric};
@@ -25,4 +26,5 @@ pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use linestrings::{LineString, LineStringArray, MultiLineString, MultiLineStringArray};
 pub use lists::{GeoArrowListShared, GeoArrowListView, GeoArrowValidListView};
 pub use metric::{BaseMetric, GeodesicMetric, Planar, ReprojectError, WithHeight};
+pub use points::{Point, PointArray};
 pub use polygons::{MultiPolygon, MultiPolygonArray, Polygon, PolygonArray};

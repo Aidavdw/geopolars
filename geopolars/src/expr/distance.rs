@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
 
-use geoarrow_abstr::{DistanceMetric, GeoArrowCoordsView, GeodesicMetric, Planar};
+use geoarrow_abstr::{DistanceMetric, GeoArrowCoordsView, GeodesicMetric, Planar, PointArray};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
@@ -154,8 +154,8 @@ fn kernel_output_type_distance(
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn pairwise<const Z: bool>(
     metric: &impl DistanceMetric<Error: Display>,
-    a: &CoordsView,
-    b: &CoordsView,
+    a: &PointArray<CoordsView>,
+    b: &PointArray<CoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(distances) = geoarrow_abstr::pairwise::<Z, true, _, _, F64Array>(metric, a, b)
         .map_err(|e| polars_err!(ComputeError: "{e}"))?;
@@ -167,7 +167,7 @@ fn pairwise<const Z: bool>(
 fn against_one<const Z: bool>(
     metric: &impl DistanceMetric<Error: Display>,
     one: [f64; 3],
-    many: &CoordsView,
+    many: &PointArray<CoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(distances) =
         geoarrow_abstr::against_one::<Z, true, _, _, F64Array>(metric, one, many)
@@ -194,7 +194,10 @@ fn every_against_one<const Z: bool>(
             .collect());
     };
     many.downcast_iter()
-        .map(|many| against_one::<Z>(metric, one, &CoordsView::new(many)?))
+        .map(|many| {
+            let many = PointArray::new(CoordsView::new(many)?);
+            against_one::<Z>(metric, one, &many)
+        })
         .collect()
 }
 
@@ -213,7 +216,8 @@ fn measure(
             a.downcast_iter()
                 .zip(b.downcast_iter())
                 .map(|(a, b)| {
-                    let (a, b) = (CoordsView::new(a)?, CoordsView::new(b)?);
+                    let a = PointArray::new(CoordsView::new(a)?);
+                    let b = PointArray::new(CoordsView::new(b)?);
                     with_const_flags!(pairwise(metric, &a, &b); z)
                 })
                 .collect::<PolarsResult<Vec<_>>>()?
