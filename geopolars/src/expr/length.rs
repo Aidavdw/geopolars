@@ -4,9 +4,8 @@
 
 use std::fmt::Display;
 
-use geoarrow_abstr::{
-    GeoArrowCoordsShared, LengthMetric, LineStringArray, MultiLineStringArray, Planar,
-};
+use geoarrow_abstr::native::LengthMetric;
+use geoarrow_abstr::{GeoArrowCoordsShared, LineStringArray, MultiLineStringArray, Planar};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use pyo3_polars::derive::polars_expr;
@@ -67,27 +66,29 @@ fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> Po
     length_dtype(&input_fields[0])
 }
 
-/// [geoarrow_abstr::line_string_lengths], into a polars array.
+/// [geoarrow_abstr::native::line_string_lengths], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl LengthMetric<Error: Display>,
     array: &LineStringArray<ListView, ValidCoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(lengths) =
-        geoarrow_abstr::line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(metric, array)
+        geoarrow_abstr::native::line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(metric, array)
             .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(lengths)
 }
 
-/// [geoarrow_abstr::multi_line_string_lengths], into a polars array.
+/// [geoarrow_abstr::native::multi_line_string_lengths], into a polars array.
 /// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
 fn multi_line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl LengthMetric<Error: Display>,
     array: &MultiLineStringArray<ListView, ValidListView, ValidCoordsView>,
 ) -> PolarsResult<PrimitiveArray<f64>> {
     let F64Array(lengths) =
-        geoarrow_abstr::multi_line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(metric, array)
-            .map_err(|e| polars_err!(ComputeError: "{e}"))?;
+        geoarrow_abstr::native::multi_line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(
+            metric, array,
+        )
+        .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(lengths)
 }
 

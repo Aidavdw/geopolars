@@ -1,10 +1,10 @@
 //! How long a linestring is, as a [LengthMetric] measures it.
 
+use super::DistanceMetric;
 use crate::arrays::per_row;
 use crate::{
-    DistanceMetric, GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView,
-    GeoArrowValidListView, GeodesicMetric, LineString, LineStringArray, MultiLineStringArray,
-    Planar,
+    GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
+    GeodesicMetric, LineString, LineStringArray, MultiLineStringArray, Planar,
 };
 
 /// A [`DistanceMetric`] that can also measure how long a linestring is, segment by segment.

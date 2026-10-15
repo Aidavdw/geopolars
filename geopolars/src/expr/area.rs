@@ -4,7 +4,8 @@
 
 use std::fmt::Display;
 
-use geoarrow_abstr::{AreaMetric, MultiPolygonArray, Planar, PolygonArray};
+use geoarrow_abstr::native::AreaMetric;
+use geoarrow_abstr::{MultiPolygonArray, Planar, PolygonArray};
 use polars::prelude::*;
 use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
@@ -73,7 +74,7 @@ fn measure(metric: &impl AreaMetric<Error: Display>, geometries: &Series) -> Pol
                 rings: ValidListView::new(rings),
                 coords: ValidCoordsView::new(rings.values().as_ref())?,
             };
-            geoarrow_abstr::multi_polygon_areas(metric, &array)
+            geoarrow_abstr::native::multi_polygon_areas(metric, &array)
         } else {
             let rings: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of rings")?;
             let array = PolygonArray {
@@ -81,7 +82,7 @@ fn measure(metric: &impl AreaMetric<Error: Display>, geometries: &Series) -> Pol
                 rings: ValidListView::new(rings),
                 coords: ValidCoordsView::new(rings.values().as_ref())?,
             };
-            geoarrow_abstr::polygon_areas(metric, &array)
+            geoarrow_abstr::native::polygon_areas(metric, &array)
         }
         .map_err(|e| polars_err!(ComputeError: "{e}"))?;
         PolarsResult::Ok(areas)
