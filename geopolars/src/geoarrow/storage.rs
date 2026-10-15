@@ -5,8 +5,9 @@ use geoarrow_abstr::{
     GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, GeoDimension,
 };
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray, MutablePrimitiveArray, PrimitiveArray, StructArray};
+use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
+use polars_arrow::compute::utils::combine_validities_and;
 use polars_arrow::offset::OffsetsBuffer;
 
 use std::ops::Range;
@@ -179,6 +180,13 @@ impl<'a> CoordsView<'a> {
 }
 
 impl GeoArrowCoordsView for CoordsView<'_> {
+    type Validity = Bitmap;
+
+    #[inline]
+    fn validity(&self) -> Option<&Bitmap> {
+        self.validity
+    }
+
     fn xy(&self, i: usize) -> Option<(f64, f64)> {
         self.xy_checking_nulls::<true>(i)
     }
@@ -310,17 +318,12 @@ impl GeoArrowF64Array for F64Array {
         Self(PrimitiveArray::from_vec(values).with_validity(validity.cloned()))
     }
 
-    fn try_from_options<const STOP_ON_ERROR: bool, E>(
-        values: impl ExactSizeIterator<Item = Result<Option<f64>, E>>,
-    ) -> Result<Self, E> {
-        let mut array = MutablePrimitiveArray::with_capacity(values.len());
-        for value in values {
-            match value {
-                Ok(value) => array.push(value),
-                Err(e) if STOP_ON_ERROR => return Err(e),
-                Err(_) => array.push(None),
-            }
-        }
-        Ok(Self(array.into()))
+    fn from_values_and(values: Vec<f64>, a: Option<&Bitmap>, b: Option<&Bitmap>) -> Self {
+        Self(PrimitiveArray::from_vec(values).with_validity(combine_validities_and(a, b)))
     }
 }
+
+// TODO: if we already know that we do not have any nulls, we can take a faster path.
+// We should add a function to the GeoArrowCoordsView trait that allows us to check
+// if it has any nulls at all. For the polars arrow impl, we can simply check if validity
+// is 'some'

@@ -11,14 +11,12 @@ pub trait GeoArrowF64Array {
     /// `values` has one entry per row. `validity` is `None` when every row is there.
     fn from_values(values: Vec<f64>, validity: Option<&Self::Validity>) -> Self;
 
-    /// Fill up a new one from a fallible function.
-    /// On an error, with `STOP_ON_ERROR` it stops and returns it;
-    /// without, it marks that row missing and carries on, so it never fails.
-    fn try_from_options<const STOP_ON_ERROR: bool, E>(
-        values: impl ExactSizeIterator<Item = Result<Option<f64>, E>>,
-    ) -> Result<Self, E>
-    where
-        Self: Sized;
+    /// `values` has one entry per row. A row is missing where `a` or `b` is.
+    fn from_values_and(
+        values: Vec<f64>,
+        a: Option<&Self::Validity>,
+        b: Option<&Self::Validity>,
+    ) -> Self;
 }
 
 /// `measure` of every row of a chunk, with the rows' own validity.

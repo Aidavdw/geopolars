@@ -37,6 +37,12 @@ pub trait GeoArrowValidCoordsView: GeoArrowCoordsShared {
 /// Use for coordinates that **can** include invalid coordinates (columns of Points).
 /// Otherwise, use [GeoArrowValidCoordsView].
 pub trait GeoArrowCoordsView: GeoArrowCoordsShared {
+    /// How the storage records which coordinates are there.
+    type Validity;
+
+    /// `None` when every coordinate is there.
+    fn validity(&self) -> Option<&Self::Validity>;
+
     fn xy(&self, i: usize) -> Option<(f64, f64)>;
 
     /// [`xy`](Self::xy), checking whether it is missing only with `NULLS`.

@@ -154,7 +154,7 @@ fn pairwise<const Z: bool>(
     a: &CoordsView,
     b: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(distances) = geoarrow_abstr::pairwise::<Z, _, F64Array>(metric, a, b)
+    let F64Array(distances) = geoarrow_abstr::pairwise::<Z, _, _, F64Array>(metric, a, b)
         .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(distances)
 }
@@ -166,7 +166,7 @@ fn against_one<const Z: bool>(
     one: [f64; 3],
     many: &CoordsView,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(distances) = geoarrow_abstr::against_one::<Z, _, F64Array>(metric, one, many)
+    let F64Array(distances) = geoarrow_abstr::against_one::<Z, _, _, F64Array>(metric, one, many)
         .map_err(|e| polars_err!(ComputeError: "{e}"))?;
     Ok(distances)
 }
