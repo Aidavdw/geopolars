@@ -40,7 +40,7 @@ impl DistanceMetric for Planar {
             let dz = bz - az;
             (dx * dx + dy * dy + dz * dz).sqrt()
         } else {
-            dx.hypot(dy)
+            (dx * dx + dy * dy).sqrt()
         }
     }
 }
@@ -60,7 +60,8 @@ impl DistanceMetric for GeodesicMetric {
     fn segment<const Z: bool>(&self, (a, z_a): WithHeight, (b, z_b): WithHeight) -> f64 {
         let along = self.between(a, b);
         if Z {
-            along.hypot(z_b - z_a)
+            let dz = z_b - z_a;
+            (along * along + dz * dz).sqrt()
         } else {
             along
         }
