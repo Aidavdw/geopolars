@@ -4,14 +4,14 @@
 //! so arrow buffers can't be borrowed zero-copy.
 //! The copy is one memcpy-like op, so still not very heavy.
 
+mod linestrings;
+mod polygons;
+
 use std::ops::Range;
 
 use geos::{CoordSeq, CoordType, Geometry};
 
-use crate::{
-    GeoArrowCoordsView, GeoArrowListView, GeoArrowValidCoordsView, GeoDimension, LineString,
-    LineStringArray, Point, PointArray,
-};
+use crate::{GeoArrowCoordsView, GeoArrowValidCoordsView, GeoDimension, Point, PointArray};
 
 impl From<GeoDimension> for CoordType {
     fn from(dim: GeoDimension) -> Self {
@@ -84,39 +84,14 @@ fn axes<C: GeoArrowValidCoordsView>(coords: &C) -> Axes<'_> {
     }
 }
 
-impl<C: GeoArrowValidCoordsView> LineString<'_, C> {
-    pub fn to_geos(&self) -> geos::GResult<Geometry> {
-        line_string_to_geos(&axes(self.coords), self.vertices.clone())
-    }
-}
-
-impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArray<R, C> {
-    /// One geometry per row; `None` where the row is missing.
-    pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
-        let axes = axes(&self.coords);
-        let mut geometries = Vec::with_capacity(self.rows.len());
-        for i in 0..self.rows.len() {
-            // A missing row's offsets point anywhere, so it is not converted.
-            geometries.push(if self.rows.is_valid(i) {
-                Some(line_string_to_geos(&axes, self.rows.range(i))?)
-            } else {
-                None
-            });
-        }
-        Ok(geometries)
-    }
-}
-
-/// The line string through `vertices`, copied from `axes` in one go.
-/// No vertices gives an empty line string.
+/// The coordinates at `vertices`, copied from `axes` in one go.
 #[inline(always)]
-fn line_string_to_geos(axes: &Axes, vertices: Range<usize>) -> geos::GResult<Geometry> {
+fn coord_seq(axes: &Axes, vertices: Range<usize>) -> geos::GResult<CoordSeq> {
     let (x, y, z, m) = axes;
-    let seq = CoordSeq::new_from_arrays(
+    CoordSeq::new_from_arrays(
         &x[vertices.clone()],
         &y[vertices.clone()],
         z.map(|z| &z[vertices.clone()]),
         m.map(|m| &m[vertices]),
-    )?;
-    Geometry::create_line_string(seq)
+    )
 }

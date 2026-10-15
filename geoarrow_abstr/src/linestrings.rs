@@ -22,9 +22,9 @@ impl<'a, C: GeoArrowValidCoordsView> LineString<'a, C> {
 
 /// One multilinestring: a run of linestrings.
 pub struct MultiLineString<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> {
-    lines: &'a L,
-    coords: &'a C,
-    parts: Range<usize>,
+    pub(crate) lines: &'a L,
+    pub(crate) coords: &'a C,
+    pub(crate) parts: Range<usize>,
 }
 
 impl<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> MultiLineString<'a, L, C> {

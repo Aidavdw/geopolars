@@ -6,9 +6,9 @@ use crate::{GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, Li
 
 /// One polygon: a run of rings, the first of which is the exterior.
 pub struct Polygon<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> {
-    rings: &'a L,
-    coords: &'a C,
-    parts: Range<usize>,
+    pub rings: &'a L,
+    pub coords: &'a C,
+    pub parts: Range<usize>,
 }
 
 impl<'a, L: GeoArrowValidListView, C: GeoArrowValidCoordsView> Polygon<'a, L, C> {
@@ -50,10 +50,10 @@ pub struct MultiPolygon<
     L: GeoArrowValidListView,
     C: GeoArrowValidCoordsView,
 > {
-    polygons: &'a P,
-    rings: &'a L,
-    coords: &'a C,
-    parts: Range<usize>,
+    pub polygons: &'a P,
+    pub rings: &'a L,
+    pub coords: &'a C,
+    pub parts: Range<usize>,
 }
 
 impl<'a, P: GeoArrowValidListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
