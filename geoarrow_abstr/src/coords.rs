@@ -31,6 +31,10 @@ pub trait GeoArrowValidCoordsView: GeoArrowCoordsShared {
 
     /// The m of coordinate `i`. Only for a dimension with an `m`.
     fn m(&self, i: usize) -> f64;
+
+    /// Every value of axis `n`, in storage order: x, y, then z and/or m
+    /// (as [`nth`](GeoArrowCoordsShared::nth)).
+    fn axis(&self, n: usize) -> &[f64];
 }
 
 /// Coordinates where individual coordinates can be invalid.

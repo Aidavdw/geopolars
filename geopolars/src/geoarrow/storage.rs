@@ -77,6 +77,17 @@ impl GeoArrowValidCoordsView for ValidCoordsView<'_> {
     fn m(&self, i: usize) -> f64 {
         self.m.unwrap()[i]
     }
+
+    fn axis(&self, n: usize) -> &[f64] {
+        let values = match n {
+            0 => Some(self.x),
+            1 => Some(self.y),
+            2 => self.z.or(self.m),
+            3 => self.m,
+            _ => None,
+        };
+        values.unwrap_or_else(|| panic!("coordinate index {n} out of range"))
+    }
 }
 
 impl GeoArrowCoordsShared for ValidCoordsView<'_> {
@@ -85,14 +96,7 @@ impl GeoArrowCoordsShared for ValidCoordsView<'_> {
     }
 
     fn nth(&self, i: usize, n: usize) -> f64 {
-        let values = match n {
-            0 => Some(self.x),
-            1 => Some(self.y),
-            2 => self.z.or(self.m),
-            3 => self.m,
-            _ => None,
-        };
-        values.unwrap_or_else(|| panic!("coordinate index {n} out of range"))[i]
+        self.axis(n)[i]
     }
 
     fn same_place(&self, i: usize, j: usize) -> bool {

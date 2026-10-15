@@ -4,9 +4,14 @@
 //! so arrow buffers can't be borrowed zero-copy.
 //! The copy is one memcpy-like op, so still not very heavy.
 
+use std::ops::Range;
+
 use geos::{CoordSeq, CoordType, Geometry};
 
-use crate::{GeoArrowCoordsView, GeoDimension, Point, PointArray};
+use crate::{
+    GeoArrowCoordsView, GeoArrowListView, GeoArrowValidCoordsView, GeoDimension, LineString,
+    LineStringArray, Point, PointArray,
+};
 
 impl From<GeoDimension> for CoordType {
     fn from(dim: GeoDimension) -> Self {
@@ -64,4 +69,54 @@ fn point_to_geos<C: GeoArrowCoordsView>(
     }
     let seq = CoordSeq::new_from_buffer(&buffer[..len], 1, coord_type)?;
     Geometry::create_point(seq).map(Some)
+}
+
+/// The x, y, z and m values of every coordinate, as [`CoordSeq::new_from_arrays`] takes them.
+type Axes<'a> = (&'a [f64], &'a [f64], Option<&'a [f64]>, Option<&'a [f64]>);
+
+fn axes<C: GeoArrowValidCoordsView>(coords: &C) -> Axes<'_> {
+    let (x, y) = (coords.axis(0), coords.axis(1));
+    match coords.dim() {
+        GeoDimension::XY => (x, y, None, None),
+        GeoDimension::XYZ => (x, y, Some(coords.axis(2)), None),
+        GeoDimension::XYM => (x, y, None, Some(coords.axis(2))),
+        GeoDimension::XYZM => (x, y, Some(coords.axis(2)), Some(coords.axis(3))),
+    }
+}
+
+impl<C: GeoArrowValidCoordsView> LineString<'_, C> {
+    pub fn to_geos(&self) -> geos::GResult<Geometry> {
+        line_string_to_geos(&axes(self.coords), self.vertices.clone())
+    }
+}
+
+impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArray<R, C> {
+    /// One geometry per row; `None` where the row is missing.
+    pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+        let axes = axes(&self.coords);
+        let mut geometries = Vec::with_capacity(self.rows.len());
+        for i in 0..self.rows.len() {
+            // A missing row's offsets point anywhere, so it is not converted.
+            geometries.push(if self.rows.is_valid(i) {
+                Some(line_string_to_geos(&axes, self.rows.range(i))?)
+            } else {
+                None
+            });
+        }
+        Ok(geometries)
+    }
+}
+
+/// The line string through `vertices`, copied from `axes` in one go.
+/// No vertices gives an empty line string.
+#[inline(always)]
+fn line_string_to_geos(axes: &Axes, vertices: Range<usize>) -> geos::GResult<Geometry> {
+    let (x, y, z, m) = axes;
+    let seq = CoordSeq::new_from_arrays(
+        &x[vertices.clone()],
+        &y[vertices.clone()],
+        z.map(|z| &z[vertices.clone()]),
+        m.map(|m| &m[vertices]),
+    )?;
+    Geometry::create_line_string(seq)
 }
