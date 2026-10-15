@@ -26,6 +26,9 @@ use crate::geoarrow::{describe, Kind};
 const CACHED_CRSS: usize = 16;
 
 thread_local! {
+    // TODO: use pl hashmap, is faster.
+    // TODO: make a second 'cache' which literally stores the pointer of the string,
+    // so that it can re-use very quickly for the last used CRS (same loc in memory from header)
     /// A cache of CRSes.
     /// call to PROJ by parsing costs more than measuring a small morsel, so cached.
     /// Per thread, because a [`Proj`] can't be shared between threads.

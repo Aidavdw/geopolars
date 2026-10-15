@@ -95,6 +95,9 @@ where
     O: GeoArrowF64Array<Validity = V::Validity>,
 {
     debug_assert!(a.len() == b.len(), "Chunks must be the same size");
+    // Can't just pass the M::MEASURES_NULL_SLOTS into the function on rust stable,
+    // so use a silly if-statement. I know we use nightly at polars,
+    // but this is nicer if other people would want to use this crate :)
     let (values, failed) = if M::MEASURES_NULL_SLOTS {
         pairwise_values::<false, Z, STOP_ON_ERROR, _>(metric, a, b)?
     } else {
