@@ -11,11 +11,13 @@ pub trait GeoArrowF64Array {
     /// `values` has one entry per row. `validity` is `None` when every row is there.
     fn from_values(values: Vec<f64>, validity: Option<&Self::Validity>) -> Self;
 
-    /// `values` has one entry per row. A row is missing where `a` or `b` is.
+    /// `values` has one entry per row.
+    /// A row is missing where `a` or `b` is, and at the rows in `failed`.
     fn from_values_and(
         values: Vec<f64>,
         a: Option<&Self::Validity>,
         b: Option<&Self::Validity>,
+        failed: &[usize],
     ) -> Self;
 }
 

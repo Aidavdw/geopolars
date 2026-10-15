@@ -6,8 +6,8 @@ use geoarrow_abstr::{
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
-use polars_arrow::bitmap::Bitmap;
-use polars_arrow::compute::utils::combine_validities_and;
+use polars_arrow::bitmap::{Bitmap, MutableBitmap};
+use polars_arrow::compute::utils::combine_validities_and3;
 use polars_arrow::offset::OffsetsBuffer;
 
 use std::ops::Range;
@@ -318,8 +318,21 @@ impl GeoArrowF64Array for F64Array {
         Self(PrimitiveArray::from_vec(values).with_validity(validity.cloned()))
     }
 
-    fn from_values_and(values: Vec<f64>, a: Option<&Bitmap>, b: Option<&Bitmap>) -> Self {
-        Self(PrimitiveArray::from_vec(values).with_validity(combine_validities_and(a, b)))
+    fn from_values_and(
+        values: Vec<f64>,
+        a: Option<&Bitmap>,
+        b: Option<&Bitmap>,
+        failed: &[usize],
+    ) -> Self {
+        let measured = (!failed.is_empty()).then(|| {
+            let mut measured = MutableBitmap::from_len_set(values.len());
+            for &i in failed {
+                measured.set(i, false);
+            }
+            Bitmap::from(measured)
+        });
+        let validity = combine_validities_and3(a, b, measured.as_ref());
+        Self(PrimitiveArray::from_vec(values).with_validity(validity))
     }
 }
 

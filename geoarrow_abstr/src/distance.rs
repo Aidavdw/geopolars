@@ -83,55 +83,81 @@ impl DistanceMetric for GeodesicMetric {
 }
 
 /// The distance between the points of `a` and `b`, which are the same length.
-pub fn pairwise<const Z: bool, M: DistanceMetric, V: GeoArrowCoordsView, O>(
+/// On an error, with `STOP_ON_ERROR` it stops and returns it;
+/// without, it marks that row missing and carries on, so it never fails.
+pub fn pairwise<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric, V, O>(
     metric: &M,
     a: &V,
     b: &V,
 ) -> Result<O, M::Error>
 where
+    V: GeoArrowCoordsView,
     O: GeoArrowF64Array<Validity = V::Validity>,
 {
     debug_assert!(a.len() == b.len(), "Chunks must be the same size");
-    let values = if M::MEASURES_NULL_SLOTS {
-        pairwise_values::<false, Z, _>(metric, a, b)?
+    let (values, failed) = if M::MEASURES_NULL_SLOTS {
+        pairwise_values::<false, Z, STOP_ON_ERROR, _>(metric, a, b)?
     } else {
-        pairwise_values::<true, Z, _>(metric, a, b)?
+        pairwise_values::<true, Z, STOP_ON_ERROR, _>(metric, a, b)?
     };
-    Ok(O::from_values_and(values, a.validity(), b.validity()))
+    Ok(O::from_values_and(
+        values,
+        a.validity(),
+        b.validity(),
+        &failed,
+    ))
 }
 
-/// [pairwise]'s distances, measuring missing points only without `NULLS`.
+/// [pairwise]'s distances, and the rows that failed (only without `STOP_ON_ERROR`),
+/// measuring missing points only without `NULLS`.
 /// A missing point's distance is masked by the validity afterwards.
 #[inline(always)]
-fn pairwise_values<const NULLS: bool, const Z: bool, M: DistanceMetric>(
+fn pairwise_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
     metric: &M,
     a: &impl GeoArrowCoordsView,
     b: &impl GeoArrowCoordsView,
-) -> Result<Vec<f64>, M::Error> {
-    // Filled by index, not collected: collecting through `Result` loses the length,
+) -> Result<(Vec<f64>, Vec<usize>), M::Error>
+where
+    M: DistanceMetric,
+{
+    // Filled by index, not collected,
+    // because collecting through `Result` loses the length,
     // so the Vec would grow as it goes, checking its capacity on every row.
     let mut values = vec![0.0; a.len()];
+    let mut failed = Vec::with_capacity(a.len());
     for (i, value) in values.iter_mut().enumerate() {
         // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
         // empty points are assumed rare enough not to warrant an extra check on every valid point.
         if let (Some(here), Some(there)) = (a.position::<NULLS, Z>(i), b.position::<NULLS, Z>(i)) {
-            *value = metric.segment::<Z>(metric.vertex(here)?, metric.vertex(there)?);
+            let distance = metric
+                .vertex(here)
+                .and_then(|here| Ok(metric.segment::<Z>(here, metric.vertex(there)?)));
+            match distance {
+                Ok(distance) => *value = distance,
+                Err(e) if STOP_ON_ERROR => return Err(e),
+                Err(_) => failed.push(i),
+            }
         }
         // A missing point keeps its 0.0, which the validity masks out.
     }
-    Ok(values)
+    Ok((values, failed))
 }
 
 /// The distance between the single point at `one` and every point of `many`.
 /// `one` is prepared (reprojected) once, rather than on every row.
-pub fn against_one<const Z: bool, M: DistanceMetric, V: GeoArrowCoordsView, O>(
+/// On an error, with `STOP_ON_ERROR` it stops and returns it;
+/// without, it marks that row missing (every row, for `one`) and carries on, so it never fails.
+pub fn against_one<
+    const Z: bool,
+    const STOP_ON_ERROR: bool,
+    M: DistanceMetric,
+    V: GeoArrowCoordsView,
+    O: GeoArrowF64Array<Validity = V::Validity>,
+>(
     metric: &M,
     one: [f64; 3],
     many: &V,
-) -> Result<O, M::Error>
-where
-    O: GeoArrowF64Array<Validity = V::Validity>,
-{
+) -> Result<O, M::Error> {
     // If any of the 'one' is NaN, then everything will become NaN anyway,
     // so we might as well exit early.
     // Missing points stay missing.
@@ -141,32 +167,53 @@ where
     {
         return Ok(O::from_values(vec![f64::NAN; many.len()], many.validity()));
     }
-    let one = metric.vertex(one)?;
-    let values = if M::MEASURES_NULL_SLOTS {
-        against_one_values::<false, Z, _>(metric, one, many)?
-    } else {
-        against_one_values::<true, Z, _>(metric, one, many)?
+    let one = match metric.vertex(one) {
+        Ok(one) => one,
+        Err(e) if STOP_ON_ERROR => return Err(e),
+        Err(_) => {
+            let every_row = (0..many.len()).collect::<Vec<_>>();
+            return Ok(O::from_values_and(
+                vec![0.0; many.len()],
+                None,
+                None,
+                &every_row,
+            ));
+        }
     };
-    Ok(O::from_values(values, many.validity()))
+    let (values, failed) = if M::MEASURES_NULL_SLOTS {
+        against_one_values::<false, Z, STOP_ON_ERROR, _>(metric, one, many)?
+    } else {
+        against_one_values::<true, Z, STOP_ON_ERROR, _>(metric, one, many)?
+    };
+    Ok(O::from_values_and(values, many.validity(), None, &failed))
 }
 
-/// [against_one]'s distances, measuring missing points only without `NULLS`.
+/// [against_one]'s distances, and the rows that failed (only without `STOP_ON_ERROR`),
+/// measuring missing points only without `NULLS`.
 /// A missing point's distance is masked by the validity afterwards.
 #[inline(always)]
-fn against_one_values<const NULLS: bool, const Z: bool, M: DistanceMetric>(
+fn against_one_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
     metric: &M,
     one: M::Vertex,
     many: &impl GeoArrowCoordsView,
-) -> Result<Vec<f64>, M::Error> {
+) -> Result<(Vec<f64>, Vec<usize>), M::Error>
+where
+    M: DistanceMetric,
+{
     // Filled by index, as in `pairwise_values`.
     let mut values = vec![0.0; many.len()];
+    let mut failed = Vec::new();
     for (i, value) in values.iter_mut().enumerate() {
         // An empty point (NaN coordinates) does go through, and comes out as a NaN distance:
         // empty points are assumed rare enough not to warrant an extra check on every valid point.
         if let Some(there) = many.position::<NULLS, Z>(i) {
-            *value = metric.segment::<Z>(one, metric.vertex(there)?);
+            match metric.vertex(there) {
+                Ok(there) => *value = metric.segment::<Z>(one, there),
+                Err(e) if STOP_ON_ERROR => return Err(e),
+                Err(_) => failed.push(i),
+            }
         }
         // A missing point keeps its 0.0, which the validity masks out.
     }
-    Ok(values)
+    Ok((values, failed))
 }
