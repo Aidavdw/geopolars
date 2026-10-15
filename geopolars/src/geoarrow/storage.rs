@@ -191,6 +191,12 @@ impl GeoArrowCoordsView for CoordsView<'_> {
         self.validity
     }
 
+    #[inline]
+    fn is_all_valid(&self) -> bool {
+        self.validity
+            .is_none_or(|validity| validity.unset_bits() == 0)
+    }
+
     fn xy(&self, i: usize) -> Option<(f64, f64)> {
         self.xy_checking_nulls::<true>(i)
     }
@@ -308,6 +314,12 @@ impl GeoArrowListView for ListView<'_> {
     #[inline]
     fn validity(&self) -> Option<&Bitmap> {
         self.validity
+    }
+
+    #[inline]
+    fn is_all_valid(&self) -> bool {
+        self.validity
+            .is_none_or(|validity| validity.unset_bits() == 0)
     }
 }
 

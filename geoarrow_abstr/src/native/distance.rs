@@ -101,7 +101,10 @@ where
     // Can't just pass the M::MEASURES_NULL_SLOTS into the function on rust stable,
     // so use a silly if-statement. I know we use nightly at polars,
     // but this is nicer if other people would want to use this crate :)
-    let (values, failed) = if M::MEASURES_NULL_SLOTS {
+    // Without missing points there is nothing to skip either.
+    let measure_missing_points_anyway =
+        M::MEASURES_NULL_SLOTS || (a.coords.is_all_valid() && b.coords.is_all_valid());
+    let (values, failed) = if measure_missing_points_anyway {
         pairwise_values::<false, Z, STOP_ON_ERROR, _>(metric, a, b)?
     } else {
         pairwise_values::<true, Z, STOP_ON_ERROR, _>(metric, a, b)?
@@ -192,7 +195,8 @@ pub fn against_one<
             ));
         }
     };
-    let (values, failed) = if M::MEASURES_NULL_SLOTS {
+    let measure_missing_points_anyway = M::MEASURES_NULL_SLOTS || many.coords.is_all_valid();
+    let (values, failed) = if measure_missing_points_anyway {
         against_one_values::<false, Z, STOP_ON_ERROR, _>(metric, one, many)?
     } else {
         against_one_values::<true, Z, STOP_ON_ERROR, _>(metric, one, many)?

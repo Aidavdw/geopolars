@@ -24,6 +24,9 @@ pub trait GeoArrowListView: GeoArrowListShared {
 
     fn is_valid(&self, i: usize) -> bool;
 
+    /// Whether every list is there.
+    fn is_all_valid(&self) -> bool;
+
     /// `None` when every list is there.
     fn validity(&self) -> Option<&Self::Validity>;
 }

@@ -47,6 +47,9 @@ pub trait GeoArrowCoordsView: GeoArrowCoordsShared {
     /// `None` when every coordinate is there.
     fn validity(&self) -> Option<&Self::Validity>;
 
+    /// Whether every coordinate is there.
+    fn is_all_valid(&self) -> bool;
+
     fn xy(&self, i: usize) -> Option<(f64, f64)>;
 
     /// [`xy`](Self::xy), checking whether it is missing only with `NULLS`.
