@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use geos::{Geom, Geometry, GeometryTypes};
+use geos::{CoordType, Geom, Geometry, GeometryTypes};
 
 use super::polygons::{multi_polygon_to_geos, polygon_to_geos};
 use super::{axes, Axes};
@@ -76,6 +76,8 @@ fn hulls_with<
     } else {
         GeoDimension::XY
     };
+    let coord_type = CoordType::from(dim);
+    let width = dim.field_names().len();
     let axes = axes(coords);
     let mut x = Vec::with_capacity(coords.len());
     let mut y = Vec::with_capacity(coords.len());
@@ -98,12 +100,17 @@ fn hulls_with<
                 // An empty hull gets no rings.
                 _ if hull.is_empty()? => {}
                 GeometryTypes::Polygon => {
-                    let (hull_x, hull_y, hull_z, _) =
-                        hull.get_exterior_ring()?.get_coord_seq()?.as_arrays()?;
-                    x.extend(hull_x);
-                    y.extend(hull_y);
-                    if Z {
-                        z.extend(hull_z.expect("GEOS keeps the z it is given"));
+                    // One interleaved buffer, rather than a `Vec` per axis.
+                    let buffer = hull
+                        .get_exterior_ring()?
+                        .get_coord_seq()?
+                        .as_buffer(Some(coord_type))?;
+                    for coord in buffer.chunks_exact(width) {
+                        x.push(coord[0]);
+                        y.push(coord[1]);
+                        if Z {
+                            z.push(coord[2]);
+                        }
                     }
                     rings.push(x.len() as i64);
                 }
