@@ -54,14 +54,38 @@ fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
     coords: &impl GeoArrowValidCoordsView,
     to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
 ) -> geos::GResult<O> {
-    let dim = if coords.dim().has_z() {
+    if coords.dim().has_z() {
+        hulls_with::<true, R, O>(rows, coords, to_geos)
+    } else {
+        hulls_with::<false, R, O>(rows, coords, to_geos)
+    }
+}
+
+/// [`hulls`], with `Z` saying whether the coordinates (and so the hulls) have z.
+fn hulls_with<
+    const Z: bool,
+    R: GeoArrowListView,
+    O: GeoArrowPolygonOutput<Validity = R::Validity>,
+>(
+    rows: &R,
+    coords: &impl GeoArrowValidCoordsView,
+    to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
+) -> geos::GResult<O> {
+    let dim = if Z {
         GeoDimension::XYZ
     } else {
         GeoDimension::XY
     };
     let axes = axes(coords);
-    let (mut x, mut y) = (Vec::new(), Vec::new());
-    let mut z = dim.has_z().then(Vec::new);
+    let mut x = Vec::with_capacity(coords.len());
+    let mut y = Vec::with_capacity(coords.len());
+    let mut z = if Z {
+        Vec::with_capacity(coords.len())
+    } else {
+        // will not be allocated because we don't push anything in.
+        Vec::new()
+    };
+
     let mut rings = vec![0];
     let mut offsets = Vec::with_capacity(rows.len() + 1);
     offsets.push(0);
@@ -70,40 +94,31 @@ fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         // A missing row's offsets point anywhere, so it is not converted.
         if rows.is_valid(i) {
             let hull = to_geos(&axes, rows.range(i))?.convex_hull()?;
-            // An empty hull gets no rings.
-            if !hull.is_empty()? {
-                if hull.geometry_type()? != GeometryTypes::Polygon {
-                    failed.push(i);
-                } else {
+            match hull.geometry_type()? {
+                // An empty hull gets no rings.
+                _ if hull.is_empty()? => {}
+                GeometryTypes::Polygon => {
                     let (hull_x, hull_y, hull_z, _) =
                         hull.get_exterior_ring()?.get_coord_seq()?.as_arrays()?;
-                    let len = hull_x.len();
                     x.extend(hull_x);
                     y.extend(hull_y);
-                    extend_axis(&mut z, hull_z, len);
+                    if Z {
+                        z.extend(hull_z.expect("GEOS keeps the z it is given"));
+                    }
                     rings.push(x.len() as i64);
                 }
+                // Zero area: a point or a linestring.
+                _ => failed.push(i),
             }
         }
         offsets.push(rings.len() as i64 - 1);
     }
     Ok(O::from_buffers(
         dim,
-        (x, y, z, None),
+        (x, y, Z.then_some(z), None),
         rings,
         offsets,
         rows.validity(),
         &failed,
     ))
-}
-
-/// Where GEOS dropped the axis from its result, it appends `len` NaNs instead.
-#[inline(always)]
-fn extend_axis(axis: &mut Option<Vec<f64>>, values: Option<Vec<f64>>, len: usize) {
-    if let Some(axis) = axis {
-        match values {
-            Some(values) => axis.extend(values),
-            None => axis.resize(axis.len() + len, f64::NAN),
-        }
-    }
 }
