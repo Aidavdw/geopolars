@@ -253,7 +253,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
             return Ok(None);
         };
         let hull = geometry.convex_hull()?;
-        debug_assert!(hull.is_empty()?, "Check before offset should catch this");
+        debug_assert!(!hull.is_empty()?, "Check before offset should catch this");
         if hull.geometry_type()? != GeometryTypes::Polygon {
             return Ok(None);
         }
