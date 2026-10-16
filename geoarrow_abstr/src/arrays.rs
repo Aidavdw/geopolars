@@ -51,10 +51,25 @@ pub(crate) fn per_row<O: GeoArrowF64Array, E>(
     rows: &impl crate::GeoArrowListView<Validity = O::Validity>,
     measure: impl Fn(usize) -> Result<f64, E>,
 ) -> Result<O, E> {
+    if rows.is_all_valid() {
+        per_row_with::<true, O, E>(rows, measure)
+    } else {
+        per_row_with::<false, O, E>(rows, measure)
+    }
+}
+
+/// If `ALL_VALID=true`, we don't have to individually check
+/// each row for validity.
+#[cfg(feature = "native")]
+#[inline(always)]
+fn per_row_with<const ALL_VALID: bool, O: GeoArrowF64Array, E>(
+    rows: &impl crate::GeoArrowListView<Validity = O::Validity>,
+    measure: impl Fn(usize) -> Result<f64, E>,
+) -> Result<O, E> {
     let values = (0..rows.len())
         // A missing row's offsets point anywhere, so it is not measured.
         .map(|i| {
-            if rows.is_valid(i) {
+            if ALL_VALID || rows.is_valid(i) {
                 measure(i)
             } else {
                 Ok(0.0)
