@@ -36,6 +36,26 @@ e.g. `#[polars_expr(output_type_func=kernel_output_type_area_planar)]`.
 These should always be named `kernel_output_type_*`.
 Functions that wrap these should be `kernel_output_type_wrapper_*`
 
+## Fallible functions
+
+How you should handle errors depends on where they are raised.
+
+- If it errors in such a way that *all rows* would be invalid, i.e. before looping over the rows,
+then you may raise the error. In this case, it is useful if the user sees the error.
+
+- if the function errors while evaluating a single row, and it would not affect the other row results
+  the behaviour should switch on a flag `ignore_per_row_errors`.
+  Errors should be an exception case, and we cannot pre-filter for them,
+  so here it is fine to switch on the bool in the hot path, rather than using a const generic branch.
+  If `ignore_per_row_errors=false`, which is the default, you should raise an error.
+  This gives the user a way to inspect errors if they want.
+  If `ignore_per_row_errors=true`, you should instead mark this entry as invalid/missing
+  (not insert an empty object!).
+
+- For an accumulator-like function (combining many rows into a far fewer results),
+you should specifically ask the user how to handle this case,
+with a `IGNORE_ERRORS` const bool flag in the kernel. The default case should be to raise the error.
+
 ## Array abstractions for GeoArrow
 
 In `../geopolars/src/geoarrow/storage.rs`, you will find abstractions over the
