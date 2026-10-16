@@ -63,10 +63,6 @@ GeoPolars does not really care about winding order. It will take any,
 and keep them in their orientation if that means less copying around is required.
 This philosophy is extended to external tools.
 If we don't need to transform any data, we'll just keep it in the same order.
-For operations using external tools, it is often necessary to reconstruct geometry.
-In such cases, there is essentially no cost in changing the winding order,
-because we already need to re-allocate anyway.
-In such a case, GeoPolars will try to (re)construct geometries **counter-clockwise**.
 
 ## CRS awareness
 

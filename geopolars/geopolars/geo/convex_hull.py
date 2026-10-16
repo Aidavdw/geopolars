@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 _ACCEPTED = (LineStringType, MultiLineStringType, PolygonType, MultiPolygonType)
 
 
-def convex_hull(geometry: IntoExprColumn, *, stop_on_error: bool = False) -> pl.Expr:
+def convex_hull(
+    geometry: IntoExprColumn, *, stop_on_error: bool = False, ccw_outer: bool = False
+) -> pl.Expr:
     """The smallest convex polygon that contains every vertex of a linestring or polygon,
     with its CRS.
     A multilinestring or multipolygon gives a single polygon:
@@ -55,6 +57,9 @@ def convex_hull(geometry: IntoExprColumn, *, stop_on_error: bool = False) -> pl.
     A geometry GEOS fails on gives a missing polygon too.
     With `stop_on_error`, GEOS's error is raised instead, failing the query.
 
+    The exterior runs as GEOS gives it, clockwise.
+    With `ccw_outer`, it runs counter-clockwise instead at a minimal performance cost.
+
     ```python
     df.select(geo.convex_hull("parcel"))
     ```
@@ -71,7 +76,7 @@ def convex_hull(geometry: IntoExprColumn, *, stop_on_error: bool = False) -> pl.
             plugin_path=LIB,
             args=[column],
             function_name="convex_hull",
-            kwargs={"stop_on_error": stop_on_error},
+            kwargs={"stop_on_error": stop_on_error, "ccw_outer": ccw_outer},
             is_elementwise=True,
         )
 

@@ -9,6 +9,7 @@
 
 use std::ops::Range;
 
+use geoarrow_abstr::with_const_flags;
 use geoarrow_abstr::{GeoArrowCoordsShared, GeoArrowValidCoordsView};
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};

@@ -234,6 +234,33 @@ def test_the_namespace_matches_the_function() -> None:
     )
 
 
+def _is_standard(df: pl.DataFrame) -> list[bool | None]:
+    return df.select(geo.is_standard_orientation("polygon")).to_series().to_list()
+
+
+def test_the_exterior_runs_as_geos_gives_it_clockwise() -> None:
+    out = _polygons([_NOTCHED]).select(geo.convex_hull("polygon"))
+
+    assert _is_standard(out) == [False]
+
+
+def test_ccw_outer_runs_the_exterior_counter_clockwise() -> None:
+    out = _polygons([_NOTCHED]).select(geo.convex_hull("polygon", ccw_outer=True))
+
+    assert _is_standard(out) == [True]
+    assert out.to_series().ext.storage().to_list() == [
+        [_ring((0, 0), (4, 0), (4, 4), (0, 4))]
+    ]
+
+
+def test_the_namespace_forwards_ccw_outer() -> None:
+    df = _polygons([_NOTCHED])
+
+    assert df.select(pl.col("polygon").geo.convex_hull(ccw_outer=True)).equals(
+        df.select(geo.convex_hull("polygon", ccw_outer=True))
+    )
+
+
 def test_the_namespace_forwards_stop_on_error() -> None:
     df = _lines(_line((1, 1)))
 

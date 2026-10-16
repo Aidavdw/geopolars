@@ -5,6 +5,7 @@
 use std::fmt::Display;
 
 use geoarrow_abstr::native::LengthMetric;
+use geoarrow_abstr::with_const_flags;
 use geoarrow_abstr::{GeoArrowCoordsShared, LineStringArrayView, MultiLineStringArrayView, Planar};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;

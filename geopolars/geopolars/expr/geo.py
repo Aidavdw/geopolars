@@ -145,10 +145,12 @@ class ExprGeoNameSpace:
 
         return interior(self._expr)
 
-    def convex_hull(self, *, stop_on_error: bool = False) -> pl.Expr:
+    def convex_hull(
+        self, *, stop_on_error: bool = False, ccw_outer: bool = False
+    ) -> pl.Expr:
         from geopolars.geo.convex_hull import convex_hull
 
-        return convex_hull(self._expr, stop_on_error=stop_on_error)
+        return convex_hull(self._expr, stop_on_error=stop_on_error, ccw_outer=ccw_outer)
 
     def boundary(self) -> pl.Expr:
         from geopolars.geo.boundary import boundary

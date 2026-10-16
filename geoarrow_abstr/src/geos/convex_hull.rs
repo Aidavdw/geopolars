@@ -1,4 +1,6 @@
 //! Convex hulls, forwarded to GEOS.
+//! GEOS has clockwise winding order,
+//! so the user gets to choose if we want to reverse it.
 
 use std::ops::Range;
 
@@ -10,7 +12,7 @@ use super::{axes, Axes};
 use crate::{
     GeoArrowListShared, GeoArrowListView, GeoArrowPolygonOutput, GeoArrowValidCoordsView,
     GeoArrowValidListView, GeoDimension, LineStringArrayView, MultiLineStringArrayView,
-    MultiPolygonArrayView, PolygonArrayView,
+    MultiPolygonArrayView, OwnedAxes, PolygonArrayView,
 };
 
 // Because we don't consider CRS,
@@ -25,14 +27,17 @@ impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> 
     /// GEOS returns a point or a linestring for a straight linestring,
     /// so we return invalid.
     /// With `stop_on_error`, a GEOS error is returned; otherwise that row is missing.
+    /// With `ccw_outer`, the exterior runs counter-clockwise; otherwise as GEOS gives it (clockwise).
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
         stop_on_error: bool,
+        ccw_outer: bool,
     ) -> geos::GResult<O> {
         hulls(
             &self.rows,
             &self.coords,
             stop_on_error,
+            ccw_outer,
             |vertices| vertices.is_empty(),
             line_string_to_geos,
         )
@@ -48,14 +53,17 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     /// GEOS returns a point or a linestring when all the vertices lie on one line,
     /// so we return invalid.
     /// With `stop_on_error`, a GEOS error is returned; otherwise that row is missing.
+    /// With `ccw_outer`, the exterior runs counter-clockwise; otherwise as GEOS gives it (clockwise).
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
         stop_on_error: bool,
+        ccw_outer: bool,
     ) -> geos::GResult<O> {
         hulls(
             &self.rows,
             &self.coords,
             stop_on_error,
+            ccw_outer,
             |parts| spans_nothing(&self.lines, parts),
             |axes, parts| multi_line_string_to_geos(axes, &self.lines, parts),
         )
@@ -71,15 +79,18 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     /// GEOS returns a point or a linestring for a polygon with zero area
     /// (all the points intersecting), so we return invalid.
     /// With `stop_on_error`, a GEOS error is returned; otherwise that row is missing.
+    /// With `ccw_outer`, the exterior runs counter-clockwise; otherwise as GEOS gives it (clockwise).
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
         stop_on_error: bool,
+        ccw_outer: bool,
     ) -> geos::GResult<O> {
         // A ring has at least 4 vertices, so a polygon is only empty without rings.
         hulls(
             &self.rows,
             &self.coords,
             stop_on_error,
+            ccw_outer,
             |parts| parts.is_empty(),
             |axes, parts| polygon_to_geos(axes, &self.rings, parts),
         )
@@ -98,15 +109,20 @@ impl<
     /// An empty multipolygon's hull is empty.
     /// GEOS returns a point or a linestring for a multipolygon with zero area
     /// (all the points intersecting), so we return invalid.
-    /// With `stop_on_error`, a GEOS error is returned; otherwise that row is missing.
+    /// With `stop_on_error=true`, a GEOS error is returned; otherwise that row is missing.
+    ///
+    /// GEOS gives the exterior as running clockwise.
+    /// You can reverse this by giving `ccw_outer=true` for a minimal performance penalty.
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
         stop_on_error: bool,
+        ccw_outer: bool,
     ) -> geos::GResult<O> {
         hulls(
             &self.rows,
             &self.coords,
             stop_on_error,
+            ccw_outer,
             |parts| spans_nothing(&self.polygons, parts),
             |axes, parts| multi_polygon_to_geos(axes, &self.polygons, &self.rings, parts),
         )
@@ -125,41 +141,48 @@ fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
     rows: &R,
     coords: &impl GeoArrowValidCoordsView,
     stop_on_error: bool,
+    ccw_outer: bool,
     is_empty: impl Fn(Range<usize>) -> bool,
     to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
 ) -> geos::GResult<O> {
-    match (coords.dim().has_z(), rows.is_all_valid()) {
-        (true, true) => {
-            hulls_with::<true, true, R, O>(rows, coords, stop_on_error, is_empty, to_geos)
-        }
-        (true, false) => {
-            hulls_with::<true, false, R, O>(rows, coords, stop_on_error, is_empty, to_geos)
-        }
-        (false, true) => {
-            hulls_with::<false, true, R, O>(rows, coords, stop_on_error, is_empty, to_geos)
-        }
-        (false, false) => {
-            hulls_with::<false, false, R, O>(rows, coords, stop_on_error, is_empty, to_geos)
-        }
-    }
+    let hulls = with_const_flags!(
+        hulls_with(rows, coords, stop_on_error, is_empty, to_geos);
+        coords.dim().has_z(), rows.is_all_valid(), ccw_outer
+    )?;
+    Ok(O::from_buffers(
+        hulls.dim,
+        hulls.axes,
+        hulls.rings,
+        hulls.rows,
+        rows.validity(),
+        &hulls.failed,
+    ))
+}
+
+/// What [`hulls_with`] builds, for [`GeoArrowPolygonOutput::from_buffers`].
+/// The output's type is left to [`hulls`], so `hulls_with` needs no generics but its flags.
+struct HullBuffers {
+    dim: GeoDimension,
+    axes: OwnedAxes,
+    rings: Vec<i64>,
+    rows: Vec<i64>,
+    failed: Vec<usize>,
 }
 
 /// [`hulls`], with `Z` saying whether the coordinates (and so the hulls) have z.
 /// if `ALL_VALID=true`, we don't first check for validity, and just send it to GEOS.
 /// (If it does contain invalid ones, it's fine because we still check for invalid returned values,
 /// but we're just wasting time because it could have been caught before)
-fn hulls_with<
-    const Z: bool,
-    const ALL_VALID: bool,
-    R: GeoArrowListView,
-    O: GeoArrowPolygonOutput<Validity = R::Validity>,
->(
-    rows: &R,
+///
+/// GEOS gives the exterior as running clockwise.
+/// You can reverse this by giving `ccw_outer=true` for a minimal performance penalty.
+fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
+    rows: &impl GeoArrowListView,
     coords: &impl GeoArrowValidCoordsView,
     stop_on_error: bool,
     is_empty: impl Fn(Range<usize>) -> bool,
     to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
-) -> geos::GResult<O> {
+) -> geos::GResult<HullBuffers> {
     let dim = if Z {
         GeoDimension::XYZ
     } else {
@@ -199,12 +222,17 @@ fn hulls_with<
         if (ALL_VALID || rows.is_valid(i)) && !is_empty(rows.range(i)) {
             match hull_ring(rows.range(i)) {
                 Ok(Some(buffer)) => {
-                    for coord in buffer.chunks_exact(width) {
+                    let mut push = |coord: &[f64]| {
                         x.push(coord[0]);
                         y.push(coord[1]);
                         if Z {
                             z.push(coord[2]);
                         }
+                    };
+                    if CCW_OUTER {
+                        buffer.chunks_exact(width).rev().for_each(&mut push);
+                    } else {
+                        buffer.chunks_exact(width).for_each(&mut push);
                     }
                     rings.push(x.len() as i64);
                 }
@@ -216,12 +244,11 @@ fn hulls_with<
         }
         offsets.push(rings.len() as i64 - 1);
     }
-    Ok(O::from_buffers(
+    Ok(HullBuffers {
         dim,
-        (x, y, Z.then_some(z), None),
+        axes: (x, y, Z.then_some(z), None),
         rings,
-        offsets,
-        rows.validity(),
-        &failed,
-    ))
+        rows: offsets,
+        failed,
+    })
 }

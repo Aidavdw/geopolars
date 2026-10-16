@@ -9,6 +9,7 @@ use std::fmt::Display;
 use std::rc::Rc;
 
 use geoarrow_abstr::native::DistanceMetric;
+use geoarrow_abstr::with_const_flags;
 use geoarrow_abstr::{GeoArrowCoordsView, GeodesicMetric, Planar, PointArrayView};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;

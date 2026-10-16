@@ -45,11 +45,12 @@ fn kernel_output_type_convex_hull(input_fields: &[Field]) -> PolarsResult<Field>
     Ok(Field::new(input_fields[0].name().clone(), dtype))
 }
 
+/// See python docs for details.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConvexHullKwargs {
-    /// Whether a GEOS error fails the query, rather than leaving that row missing.
     stop_on_error: bool,
+    ccw_outer: bool,
 }
 
 /// The convex hulls of one chunk of `kind` geometries, as polygons.
@@ -57,7 +58,7 @@ fn chunk_hulls(
     rows: &ListArray<i64>,
     kind: Kind,
     dtype: &DataType,
-    stop_on_error: bool,
+    kwargs: &ConvexHullKwargs,
 ) -> PolarsResult<PolygonOutput> {
     let values = rows.values().as_ref();
     match kind {
@@ -65,7 +66,7 @@ fn chunk_hulls(
             rows: ListView::new(rows),
             coords: ValidCoordsView::new(values)?,
         }
-        .convex_hulls(stop_on_error),
+        .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer),
         Kind::MultiLineString => {
             let lines: &ListArray<i64> = downcast(values, "a list of linestrings")?;
             MultiLineStringArrayView {
@@ -73,7 +74,7 @@ fn chunk_hulls(
                 lines: ValidListView::new(lines),
                 coords: ValidCoordsView::new(lines.values().as_ref())?,
             }
-            .convex_hulls(stop_on_error)
+            .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer)
         }
         Kind::Polygon => {
             let rings: &ListArray<i64> = downcast(values, "a list of rings")?;
@@ -82,7 +83,7 @@ fn chunk_hulls(
                 rings: ValidListView::new(rings),
                 coords: ValidCoordsView::new(rings.values().as_ref())?,
             }
-            .convex_hulls(stop_on_error)
+            .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer)
         }
         Kind::MultiPolygon => {
             let polygons: &ListArray<i64> = downcast(values, "a list of polygons")?;
@@ -93,7 +94,7 @@ fn chunk_hulls(
                 rings: ValidListView::new(rings),
                 coords: ValidCoordsView::new(rings.values().as_ref())?,
             }
-            .convex_hulls(stop_on_error)
+            .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer)
         }
         Kind::Point | Kind::MultiPoint => return Err(encloses_nothing(dtype)),
     }
@@ -109,11 +110,9 @@ fn convex_hull(inputs: &[Series], kwargs: ConvexHullKwargs) -> PolarsResult<Seri
         .list()?
         .downcast_iter()
         .map(|rows| {
-            Ok(
-                chunk_hulls(rows, kind, inputs[0].dtype(), kwargs.stop_on_error)?
-                    .0
-                    .boxed(),
-            )
+            Ok(chunk_hulls(rows, kind, inputs[0].dtype(), &kwargs)?
+                .0
+                .boxed())
         })
         .collect::<PolarsResult<_>>()?;
     // SAFETY: the hulls are polygons of `dtype`'s dimension, its storage.

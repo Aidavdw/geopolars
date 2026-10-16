@@ -13,6 +13,7 @@
 use std::mem;
 use std::ops::Range;
 
+use geoarrow_abstr::with_const_flags;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
