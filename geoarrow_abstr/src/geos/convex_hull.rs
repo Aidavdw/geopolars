@@ -8,9 +8,9 @@ use super::linestrings::{line_string_to_geos, multi_line_string_to_geos};
 use super::polygons::{multi_polygon_to_geos, polygon_to_geos};
 use super::{axes, Axes};
 use crate::{
-    GeoArrowListView, GeoArrowPolygonOutput, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeoDimension, LineStringArrayView, MultiLineStringArrayView, MultiPolygonArrayView,
-    PolygonArrayView,
+    GeoArrowListShared, GeoArrowListView, GeoArrowPolygonOutput, GeoArrowValidCoordsView,
+    GeoArrowValidListView, GeoDimension, LineStringArrayView, MultiLineStringArrayView,
+    MultiPolygonArrayView, PolygonArrayView,
 };
 
 impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> {
@@ -22,7 +22,12 @@ impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> 
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
     ) -> geos::GResult<O> {
-        hulls(&self.rows, &self.coords, line_string_to_geos)
+        hulls(
+            &self.rows,
+            &self.coords,
+            |vertices| vertices.is_empty(),
+            line_string_to_geos,
+        )
     }
 }
 
@@ -37,9 +42,12 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
     ) -> geos::GResult<O> {
-        hulls(&self.rows, &self.coords, |axes, parts| {
-            multi_line_string_to_geos(axes, &self.lines, parts)
-        })
+        hulls(
+            &self.rows,
+            &self.coords,
+            |parts| spans_nothing(&self.lines, parts),
+            |axes, parts| multi_line_string_to_geos(axes, &self.lines, parts),
+        )
     }
 }
 
@@ -54,9 +62,13 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
     ) -> geos::GResult<O> {
-        hulls(&self.rows, &self.coords, |axes, parts| {
-            polygon_to_geos(axes, &self.rings, parts)
-        })
+        // A ring has at least 4 vertices, so a polygon is only empty without rings.
+        hulls(
+            &self.rows,
+            &self.coords,
+            |parts| parts.is_empty(),
+            |axes, parts| polygon_to_geos(axes, &self.rings, parts),
+        )
     }
 }
 
@@ -75,32 +87,50 @@ impl<
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
     ) -> geos::GResult<O> {
-        hulls(&self.rows, &self.coords, |axes, parts| {
-            multi_polygon_to_geos(axes, &self.polygons, &self.rings, parts)
-        })
+        hulls(
+            &self.rows,
+            &self.coords,
+            |parts| spans_nothing(&self.polygons, parts),
+            |axes, parts| multi_polygon_to_geos(axes, &self.polygons, &self.rings, parts),
+        )
     }
 }
 
+/// Whether the `parts` of `list` hold no items at all: none, or only empty ones.
+#[inline(always)]
+fn spans_nothing(list: &impl GeoArrowListShared, parts: Range<usize>) -> bool {
+    parts.is_empty() || list.range(parts.start).start == list.range(parts.end - 1).end
+}
+
+/// The convex hull of every one of `rows`, each turned into GEOS by `to_geos` from its parts.
+/// A row that `is_empty` says is empty gets an empty hull without going to GEOS.
 fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
     rows: &R,
     coords: &impl GeoArrowValidCoordsView,
+    is_empty: impl Fn(Range<usize>) -> bool,
     to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
 ) -> geos::GResult<O> {
-    if coords.dim().has_z() {
-        hulls_with::<true, R, O>(rows, coords, to_geos)
-    } else {
-        hulls_with::<false, R, O>(rows, coords, to_geos)
+    match (coords.dim().has_z(), rows.is_all_valid()) {
+        (true, true) => hulls_with::<true, true, R, O>(rows, coords, is_empty, to_geos),
+        (true, false) => hulls_with::<true, false, R, O>(rows, coords, is_empty, to_geos),
+        (false, true) => hulls_with::<false, true, R, O>(rows, coords, is_empty, to_geos),
+        (false, false) => hulls_with::<false, false, R, O>(rows, coords, is_empty, to_geos),
     }
 }
 
 /// [`hulls`], with `Z` saying whether the coordinates (and so the hulls) have z.
+/// if `ALL_VALID=true`, we don't first check for validity, and just send it to GEOS.
+/// (If it does contain invalid ones, it's fine because we still check for invalid returned values,
+/// but we're just wasting time because it could have been caught before)
 fn hulls_with<
     const Z: bool,
+    const ALL_VALID: bool,
     R: GeoArrowListView,
     O: GeoArrowPolygonOutput<Validity = R::Validity>,
 >(
     rows: &R,
     coords: &impl GeoArrowValidCoordsView,
+    is_empty: impl Fn(Range<usize>) -> bool,
     to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
 ) -> geos::GResult<O> {
     let dim = if Z {
@@ -126,9 +156,11 @@ fn hulls_with<
     let mut failed = Vec::new();
     for i in 0..rows.len() {
         // A missing row's offsets point anywhere, so it is not converted.
-        if rows.is_valid(i) {
+        // An empty one has an empty hull: no rings, and no trip to GEOS.
+        if (ALL_VALID || rows.is_valid(i)) && !is_empty(rows.range(i)) {
             let hull = to_geos(&axes, rows.range(i))?.convex_hull()?;
             match hull.geometry_type()? {
+                // Our own check only reads offsets, so GEOS's stays as a guard.
                 // An empty hull gets no rings.
                 _ if hull.is_empty()? => {}
                 GeometryTypes::Polygon => {
