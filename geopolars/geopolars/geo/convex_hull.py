@@ -27,22 +27,7 @@ if TYPE_CHECKING:
 _ACCEPTED = (LineStringType, MultiLineStringType, PolygonType, MultiPolygonType)
 
 
-def _convex_hull(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    if not isinstance(geometry, _ACCEPTED):
-        msg = (
-            "convex_hull expects a linestring, polygon, multilinestring"
-            f" or multipolygon column, got: {geometry!r}"
-        )
-        raise TypeError(msg)
-    return register_plugin_function(
-        plugin_path=LIB,
-        args=[column],
-        function_name="convex_hull",
-        is_elementwise=True,
-    )
-
-
-def convex_hull(geometry: IntoExprColumn) -> pl.Expr:
+def convex_hull(geometry: IntoExprColumn, *, stop_on_error: bool = False) -> pl.Expr:
     """The smallest convex polygon that contains every vertex of a linestring or polygon,
     with its CRS.
     A multilinestring or multipolygon gives a single polygon:
@@ -63,8 +48,27 @@ def convex_hull(geometry: IntoExprColumn) -> pl.Expr:
     such as a straight linestring) has a point or a line for a hull,
     so it gives a missing polygon.
 
+    A geometry GEOS fails on gives a missing polygon too.
+    With `stop_on_error`, GEOS's error is raised instead, failing the query.
+
     ```python
     df.select(geo.convex_hull("parcel"))
     ```
     """
-    return on_geometry(geometry, _convex_hull)
+
+    def build(column: pl.Expr, dtype: GeoArrowType) -> pl.Expr:
+        if not isinstance(dtype, _ACCEPTED):
+            msg = (
+                "convex_hull expects a linestring, polygon, multilinestring"
+                f" or multipolygon column, got: {dtype!r}"
+            )
+            raise TypeError(msg)
+        return register_plugin_function(
+            plugin_path=LIB,
+            args=[column],
+            function_name="convex_hull",
+            kwargs={"stop_on_error": stop_on_error},
+            is_elementwise=True,
+        )
+
+    return on_geometry(geometry, build)

@@ -6,6 +6,7 @@ use geoarrow_abstr::{
 use polars::prelude::*;
 use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
+use serde::Deserialize;
 
 use crate::geoarrow::storage::{downcast, ListView, PolygonOutput, ValidCoordsView, ValidListView};
 use geoarrow_abstr::GeoDimension;
@@ -44,15 +45,27 @@ fn kernel_output_type_convex_hull(input_fields: &[Field]) -> PolarsResult<Field>
     Ok(Field::new(input_fields[0].name().clone(), dtype))
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConvexHullKwargs {
+    /// Whether a GEOS error fails the query, rather than leaving that row missing.
+    stop_on_error: bool,
+}
+
 /// The convex hulls of one chunk of `kind` geometries, as polygons.
-fn chunk_hulls(rows: &ListArray<i64>, kind: Kind, dtype: &DataType) -> PolarsResult<PolygonOutput> {
+fn chunk_hulls(
+    rows: &ListArray<i64>,
+    kind: Kind,
+    dtype: &DataType,
+    stop_on_error: bool,
+) -> PolarsResult<PolygonOutput> {
     let values = rows.values().as_ref();
     match kind {
         Kind::LineString => LineStringArrayView {
             rows: ListView::new(rows),
             coords: ValidCoordsView::new(values)?,
         }
-        .convex_hulls(),
+        .convex_hulls(stop_on_error),
         Kind::MultiLineString => {
             let lines: &ListArray<i64> = downcast(values, "a list of linestrings")?;
             MultiLineStringArrayView {
@@ -60,7 +73,7 @@ fn chunk_hulls(rows: &ListArray<i64>, kind: Kind, dtype: &DataType) -> PolarsRes
                 lines: ValidListView::new(lines),
                 coords: ValidCoordsView::new(lines.values().as_ref())?,
             }
-            .convex_hulls()
+            .convex_hulls(stop_on_error)
         }
         Kind::Polygon => {
             let rings: &ListArray<i64> = downcast(values, "a list of rings")?;
@@ -69,7 +82,7 @@ fn chunk_hulls(rows: &ListArray<i64>, kind: Kind, dtype: &DataType) -> PolarsRes
                 rings: ValidListView::new(rings),
                 coords: ValidCoordsView::new(rings.values().as_ref())?,
             }
-            .convex_hulls()
+            .convex_hulls(stop_on_error)
         }
         Kind::MultiPolygon => {
             let polygons: &ListArray<i64> = downcast(values, "a list of polygons")?;
@@ -80,7 +93,7 @@ fn chunk_hulls(rows: &ListArray<i64>, kind: Kind, dtype: &DataType) -> PolarsRes
                 rings: ValidListView::new(rings),
                 coords: ValidCoordsView::new(rings.values().as_ref())?,
             }
-            .convex_hulls()
+            .convex_hulls(stop_on_error)
         }
         Kind::Point | Kind::MultiPoint => return Err(encloses_nothing(dtype)),
     }
@@ -89,13 +102,19 @@ fn chunk_hulls(rows: &ListArray<i64>, kind: Kind, dtype: &DataType) -> PolarsRes
 
 /// See `convex_hull`.
 #[polars_expr(output_type_func=kernel_output_type_convex_hull)]
-fn convex_hull(inputs: &[Series]) -> PolarsResult<Series> {
+fn convex_hull(inputs: &[Series], kwargs: ConvexHullKwargs) -> PolarsResult<Series> {
     let (dtype, kind) = hull_type(inputs[0].dtype())?;
     let storage = inputs[0].ext()?.storage();
     let chunks = storage
         .list()?
         .downcast_iter()
-        .map(|rows| Ok(chunk_hulls(rows, kind, inputs[0].dtype())?.0.boxed()))
+        .map(|rows| {
+            Ok(
+                chunk_hulls(rows, kind, inputs[0].dtype(), kwargs.stop_on_error)?
+                    .0
+                    .boxed(),
+            )
+        })
         .collect::<PolarsResult<_>>()?;
     // SAFETY: the hulls are polygons of `dtype`'s dimension, its storage.
     Ok(

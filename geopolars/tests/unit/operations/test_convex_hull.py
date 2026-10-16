@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import polars as pl
 import pytest
+from polars.exceptions import ComputeError
 
 from geopolars import geo
 from geopolars.datatypes import (
@@ -211,9 +212,30 @@ def test_a_multipolygon_hull_carries_the_crs() -> None:
     assert out.schema["polygon"] == PolygonXY(crs="EPSG:28992")
 
 
+def test_a_geometry_geos_fails_on_gives_a_missing_hull() -> None:
+    # GEOS cannot build a linestring of one vertex.
+    df = _lines(_line((1, 1)), _line((0, 0), (4, 0), (4, 4), (0, 4)))
+
+    assert _hulls(df) == [None, [_HULL]]
+
+
+def test_stop_on_error_raises_what_geos_fails_on() -> None:
+    df = _lines(_line((1, 1)), _line((0, 0), (4, 0), (4, 4), (0, 4)))
+
+    with pytest.raises(ComputeError, match="point array"):
+        df.select(geo.convex_hull("polygon", stop_on_error=True))
+
+
 def test_the_namespace_matches_the_function() -> None:
     df = _polygons([_NOTCHED], None)
 
     assert df.select(pl.col("polygon").geo.convex_hull()).equals(
         df.select(geo.convex_hull("polygon"))
     )
+
+
+def test_the_namespace_forwards_stop_on_error() -> None:
+    df = _lines(_line((1, 1)))
+
+    with pytest.raises(ComputeError, match="point array"):
+        df.select(pl.col("polygon").geo.convex_hull(stop_on_error=True))

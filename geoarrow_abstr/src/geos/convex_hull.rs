@@ -19,12 +19,15 @@ impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> 
     /// An empty linestring's hull is empty.
     /// GEOS returns a point or a linestring for a straight linestring,
     /// so we return invalid.
+    /// With `stop_on_error`, a GEOS error is returned; otherwise that row is missing.
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
+        stop_on_error: bool,
     ) -> geos::GResult<O> {
         hulls(
             &self.rows,
             &self.coords,
+            stop_on_error,
             |vertices| vertices.is_empty(),
             line_string_to_geos,
         )
@@ -39,12 +42,15 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     /// An empty multilinestring's hull is empty.
     /// GEOS returns a point or a linestring when all the vertices lie on one line,
     /// so we return invalid.
+    /// With `stop_on_error`, a GEOS error is returned; otherwise that row is missing.
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
+        stop_on_error: bool,
     ) -> geos::GResult<O> {
         hulls(
             &self.rows,
             &self.coords,
+            stop_on_error,
             |parts| spans_nothing(&self.lines, parts),
             |axes, parts| multi_line_string_to_geos(axes, &self.lines, parts),
         )
@@ -59,13 +65,16 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     /// An empty polygon's hull is empty.
     /// GEOS returns a point or a linestring for a polygon with zero area
     /// (all the points intersecting), so we return invalid.
+    /// With `stop_on_error`, a GEOS error is returned; otherwise that row is missing.
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
+        stop_on_error: bool,
     ) -> geos::GResult<O> {
         // A ring has at least 4 vertices, so a polygon is only empty without rings.
         hulls(
             &self.rows,
             &self.coords,
+            stop_on_error,
             |parts| parts.is_empty(),
             |axes, parts| polygon_to_geos(axes, &self.rings, parts),
         )
@@ -84,12 +93,15 @@ impl<
     /// An empty multipolygon's hull is empty.
     /// GEOS returns a point or a linestring for a multipolygon with zero area
     /// (all the points intersecting), so we return invalid.
+    /// With `stop_on_error`, a GEOS error is returned; otherwise that row is missing.
     pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
         &self,
+        stop_on_error: bool,
     ) -> geos::GResult<O> {
         hulls(
             &self.rows,
             &self.coords,
+            stop_on_error,
             |parts| spans_nothing(&self.polygons, parts),
             |axes, parts| multi_polygon_to_geos(axes, &self.polygons, &self.rings, parts),
         )
@@ -107,14 +119,23 @@ fn spans_nothing(list: &impl GeoArrowListShared, parts: Range<usize>) -> bool {
 fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
     rows: &R,
     coords: &impl GeoArrowValidCoordsView,
+    stop_on_error: bool,
     is_empty: impl Fn(Range<usize>) -> bool,
     to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
 ) -> geos::GResult<O> {
     match (coords.dim().has_z(), rows.is_all_valid()) {
-        (true, true) => hulls_with::<true, true, R, O>(rows, coords, is_empty, to_geos),
-        (true, false) => hulls_with::<true, false, R, O>(rows, coords, is_empty, to_geos),
-        (false, true) => hulls_with::<false, true, R, O>(rows, coords, is_empty, to_geos),
-        (false, false) => hulls_with::<false, false, R, O>(rows, coords, is_empty, to_geos),
+        (true, true) => {
+            hulls_with::<true, true, R, O>(rows, coords, stop_on_error, is_empty, to_geos)
+        }
+        (true, false) => {
+            hulls_with::<true, false, R, O>(rows, coords, stop_on_error, is_empty, to_geos)
+        }
+        (false, true) => {
+            hulls_with::<false, true, R, O>(rows, coords, stop_on_error, is_empty, to_geos)
+        }
+        (false, false) => {
+            hulls_with::<false, false, R, O>(rows, coords, stop_on_error, is_empty, to_geos)
+        }
     }
 }
 
@@ -130,6 +151,7 @@ fn hulls_with<
 >(
     rows: &R,
     coords: &impl GeoArrowValidCoordsView,
+    stop_on_error: bool,
     is_empty: impl Fn(Range<usize>) -> bool,
     to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
 ) -> geos::GResult<O> {
@@ -150,6 +172,18 @@ fn hulls_with<
         Vec::new()
     };
 
+    // The hull's exterior as one interleaved buffer, rather than a `Vec` per axis.
+    // `None` if it is not a polygon. Nothing is pushed until all of it succeeded.
+    let hull_ring = |parts| -> geos::GResult<Option<Vec<f64>>> {
+        let hull = to_geos(&axes, parts)?.convex_hull()?;
+        // Empty input never gets here, so an empty hull is a failure too.
+        if hull.is_empty()? || hull.geometry_type()? != GeometryTypes::Polygon {
+            return Ok(None);
+        }
+        let ring = hull.get_exterior_ring()?;
+        Ok(Some(ring.get_coord_seq()?.as_buffer(Some(coord_type))?))
+    };
+
     let mut rings = vec![0];
     let mut offsets = Vec::with_capacity(rows.len() + 1);
     offsets.push(0);
@@ -158,17 +192,8 @@ fn hulls_with<
         // A missing row's offsets point anywhere, so it is not converted.
         // An empty one has an empty hull: no rings, and no trip to GEOS.
         if (ALL_VALID || rows.is_valid(i)) && !is_empty(rows.range(i)) {
-            let hull = to_geos(&axes, rows.range(i))?.convex_hull()?;
-            match hull.geometry_type()? {
-                // Our own check only reads offsets, so GEOS's stays as a guard.
-                // An empty hull gets no rings.
-                _ if hull.is_empty()? => {}
-                GeometryTypes::Polygon => {
-                    // One interleaved buffer, rather than a `Vec` per axis.
-                    let buffer = hull
-                        .get_exterior_ring()?
-                        .get_coord_seq()?
-                        .as_buffer(Some(coord_type))?;
+            match hull_ring(rows.range(i)) {
+                Ok(Some(buffer)) => {
                     for coord in buffer.chunks_exact(width) {
                         x.push(coord[0]);
                         y.push(coord[1]);
@@ -178,8 +203,10 @@ fn hulls_with<
                     }
                     rings.push(x.len() as i64);
                 }
-                // Zero area: a point or a linestring.
-                _ => failed.push(i),
+                // Zero area (a point or a linestring), or a failure we were asked to pass over.
+                Ok(None) => failed.push(i),
+                Err(e) if stop_on_error => return Err(e),
+                Err(_) => failed.push(i),
             }
         }
         offsets.push(rings.len() as i64 - 1);
