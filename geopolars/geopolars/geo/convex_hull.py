@@ -1,4 +1,4 @@
-"""The convex hull of a polygon.
+"""The convex hull of a polygon or multipolygon.
 
 Forwarded to GEOS (B-tier).
 """
@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
-from geopolars.datatypes import PolygonType
+from geopolars.datatypes import MultiPolygonType, PolygonType
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 
 
 def _convex_hull(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    if not isinstance(geometry, PolygonType):
-        msg = f"convex_hull expects a polygon column, got: {geometry!r}"
+    if not isinstance(geometry, (PolygonType, MultiPolygonType)):
+        msg = f"convex_hull expects a polygon or multipolygon column, got: {geometry!r}"
         raise TypeError(msg)
     return register_plugin_function(
         plugin_path=LIB,
@@ -35,15 +35,18 @@ def _convex_hull(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 def convex_hull(geometry: IntoExprColumn) -> pl.Expr:
     """The smallest convex polygon that contains every vertex of a polygon,
     with the polygon's dimension and CRS.
+    A multipolygon gives a single polygon:
+    the hull of the multipolygon as a whole, not one per part.
 
-    | in              | out             |
-    |-----------------|-----------------|
-    | `PolygonXY`     | `PolygonXY`     |
-    | `PolygonXYZM`   | `PolygonXYZM`   |
+    | in                  | out             |
+    |---------------------|-----------------|
+    | `PolygonXY`         | `PolygonXY`     |
+    | `PolygonXYZM`       | `PolygonXYZM`   |
+    | `MultiPolygonXYZ`   | `PolygonXYZ`    |
 
     Computed by GEOS, on x and y. GEOS keeps z, but drops m, so the hull's m is NaN.
-    An empty polygon gives an empty polygon, and a missing polygon a missing one.
-    A polygon that encloses nothing (all its vertices on one point or one line)
+    An empty (multi)polygon gives an empty polygon, and a missing one a missing polygon.
+    One that encloses nothing (all its vertices on one point or one line)
     has a point or a line for a hull, so it gives a missing polygon.
 
     ```python

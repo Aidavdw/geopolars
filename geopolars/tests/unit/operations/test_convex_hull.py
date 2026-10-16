@@ -1,4 +1,4 @@
-"""The convex hull of a polygon."""
+"""The convex hull of a polygon or multipolygon."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 
 from geopolars import geo
-from geopolars.datatypes import PolygonXY, PolygonXYZM
+from geopolars.datatypes import MultiPolygonXY, PolygonXY, PolygonXYZM
 from tests.unit.conftest import XY
 
 _XY_RINGS = pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})))
@@ -32,6 +32,14 @@ def _polygons(*polygons: list[Ring] | None, crs: str | None = None) -> pl.DataFr
     return pl.DataFrame({"rings": list(polygons)}, schema={"rings": _XY_RINGS}).select(
         geo.polygon("rings", crs=crs).alias("polygon")
     )
+
+
+def _multipolygons(
+    *multis: list[list[Ring]] | None, crs: str | None = None
+) -> pl.DataFrame:
+    """A `polygon` column of `MultiPolygonXY`, one row per list of polygons."""
+    storage = pl.Series("polygon", list(multis), dtype=pl.List(_XY_RINGS))
+    return pl.DataFrame(storage.ext.to(MultiPolygonXY(crs=crs)))
 
 
 def _hulls(df: pl.DataFrame) -> list:
@@ -83,18 +91,51 @@ def test_rejects_a_linestring_while_resolving_the_schema(
 ) -> None:
     lf = XY.lines(line_coords).lazy().select(geo.convex_hull("line"))
 
-    with pytest.raises(TypeError, match="convex_hull expects a polygon column"):
+    with pytest.raises(
+        TypeError, match="convex_hull expects a polygon or multipolygon"
+    ):
         lf.collect_schema()
 
 
-def test_rejects_a_multipolygon_while_resolving_the_schema(
-    multipolygon_coords: pl.DataFrame,
+def test_rejects_a_multilinestring_while_resolving_the_schema(
+    ring_coords: pl.DataFrame,
 ) -> None:
-    df = XY.multipolygons(multipolygon_coords)
+    df = XY.multilinestrings(ring_coords)
     lf = df.lazy().select(geo.convex_hull(df.columns[0]))
 
-    with pytest.raises(TypeError, match="convex_hull expects a polygon column"):
+    with pytest.raises(
+        TypeError, match="convex_hull expects a polygon or multipolygon"
+    ):
         lf.collect_schema()
+
+
+def test_a_multipolygon_gets_one_hull_of_the_whole() -> None:
+    left = [_ring((0, 0), (1, 0), (1, 1), (0, 1))]
+    right = [_ring((3, 0), (4, 0), (4, 1), (3, 1))]
+
+    df = _multipolygons([left, right])
+    out = df.select(geo.convex_hull("polygon"))
+
+    assert out.schema["polygon"] == PolygonXY()
+    assert _hulls(df) == [[_ring((0, 0), (0, 1), (4, 1), (4, 0))]]
+
+
+def test_a_missing_or_empty_multipolygon() -> None:
+    assert _hulls(_multipolygons(None, [], [[_NOTCHED]])) == [None, [], [_HULL]]
+
+
+def test_a_multipolygon_that_encloses_nothing_gives_a_missing_hull() -> None:
+    flat = [[_ALONG_A_LINE], [_ring((3, 0), (4, 0), (5, 0))]]
+
+    assert _hulls(_multipolygons(flat, [[_NOTCHED]])) == [None, [_HULL]]
+
+
+def test_a_multipolygon_hull_carries_the_crs() -> None:
+    df = _multipolygons([[_NOTCHED]], crs="EPSG:28992")
+
+    out = df.select(geo.convex_hull("polygon"))
+
+    assert out.schema["polygon"] == PolygonXY(crs="EPSG:28992")
 
 
 def test_the_namespace_matches_the_function() -> None:

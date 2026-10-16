@@ -95,7 +95,7 @@ pub(super) fn polygon_to_geos(
 /// The multipolygon of `polygons` `parts`.
 /// No parts gives an empty multipolygon.
 #[inline(always)]
-fn multi_polygon_to_geos(
+pub(super) fn multi_polygon_to_geos(
     axes: &Axes,
     polygons: &impl GeoArrowValidListView,
     rings: &impl GeoArrowValidListView,
