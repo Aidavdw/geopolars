@@ -1,6 +1,16 @@
 //! Convex hulls, forwarded to GEOS.
 //! GEOS has clockwise winding order,
 //! so the user gets to choose if we want to reverse it.
+//!
+//! NaN coordinates are passed to GEOS as they are, and what comes back depends on where they sit
+//! (seen with GEOS 3.13.1 through shapely, and matching what this module gets):
+//! - only NaN (e.g. a multipoint of empty points): a `POINT (NaN NaN)`, so the row is missing;
+//! - a NaN vertex first, then real ones: also a `POINT (NaN NaN)`, so the row is silently missing,
+//!   even with `stop_on_error`;
+//! - real vertices, then a NaN one: an error ("orientationIndex encountered NaN/Inf numbers"),
+//!   so the row is missing, or with `stop_on_error` the error is returned.
+//!
+//! Leaving NaN vertices out before going to GEOS would make this consistent.
 
 use std::ops::Range;
 
@@ -236,14 +246,15 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     };
 
     // The hull's exterior as one interleaved buffer, rather than a `Vec` per axis.
-    // `None` if it is not a polygon. Nothing is pushed until all of it succeeded.
+    // `None` if it is not a polygon (degenerate case)
+    // Nothing is pushed until all of it succeeded.
     let hull_ring = |parts| -> geos::GResult<Option<Vec<f64>>> {
         let Some(geometry) = to_geos(&axes, parts)? else {
             return Ok(None);
         };
         let hull = geometry.convex_hull()?;
-        // Empty input never gets here, so an empty hull is a failure too.
-        if hull.is_empty()? || hull.geometry_type()? != GeometryTypes::Polygon {
+        debug_assert!(hull.is_empty()?, "Check before offset should catch this");
+        if hull.geometry_type()? != GeometryTypes::Polygon {
             return Ok(None);
         }
         let ring = hull.get_exterior_ring()?;
