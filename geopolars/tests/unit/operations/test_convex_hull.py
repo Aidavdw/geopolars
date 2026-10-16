@@ -1,4 +1,4 @@
-"""The convex hull of a polygon or multipolygon."""
+"""The convex hull of a linestring or polygon, or their multi-variants."""
 
 from __future__ import annotations
 
@@ -6,7 +6,14 @@ import polars as pl
 import pytest
 
 from geopolars import geo
-from geopolars.datatypes import MultiPolygonXY, PolygonXY, PolygonXYZ, PolygonXYZM
+from geopolars.datatypes import (
+    LineStringXY,
+    MultiLineStringXY,
+    MultiPolygonXY,
+    PolygonXY,
+    PolygonXYZ,
+    PolygonXYZM,
+)
 from tests.unit.conftest import XY, Dimension
 
 _XY_RINGS = pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})))
@@ -38,6 +45,24 @@ def _multipolygons(
     """A `polygon` column of `MultiPolygonXY`, one row per list of polygons."""
     storage = pl.Series("polygon", list(multis), dtype=pl.List(_XY_RINGS))
     return pl.DataFrame(storage.ext.to(MultiPolygonXY(crs=crs)))
+
+
+def _line(*xy: tuple[float, float]) -> Ring:
+    """An open linestring through `xy`."""
+    return [{"x": x, "y": y} for x, y in xy]
+
+
+def _lines(*lines: Ring | None) -> pl.DataFrame:
+    """A `polygon` column of `LineStringXY`, one row per list of vertices.
+    Named like the polygon columns, so `_hulls` reads it too."""
+    storage = pl.Series("polygon", list(lines), dtype=LineStringXY._geo_storage)
+    return pl.DataFrame(storage.ext.to(LineStringXY()))
+
+
+def _multilines(*multis: list[Ring] | None) -> pl.DataFrame:
+    """A `polygon` column of `MultiLineStringXY`, one row per list of linestrings."""
+    storage = pl.Series("polygon", list(multis), dtype=MultiLineStringXY._geo_storage)
+    return pl.DataFrame(storage.ext.to(MultiLineStringXY()))
 
 
 def _hulls(df: pl.DataFrame) -> list:
@@ -82,12 +107,15 @@ def test_z_is_kept_but_m_is_not() -> None:
 
 def test_a_hull_has_no_m(
     dimension: Dimension,
+    line_coords: pl.DataFrame,
     ring_coords: pl.DataFrame,
     multipolygon_coords: pl.DataFrame,
 ) -> None:
     expected = PolygonXYZ() if dimension.has_z else PolygonXY()
 
     for df in (
+        dimension.lines(line_coords),
+        dimension.multilinestrings(ring_coords),
         dimension.polygons(ring_coords),
         dimension.multipolygons(multipolygon_coords),
     ):
@@ -102,27 +130,56 @@ def test_the_crs_is_carried_over() -> None:
     assert out.schema["polygon"] == PolygonXY(crs="EPSG:28992")
 
 
-def test_rejects_a_linestring_while_resolving_the_schema(
+def test_rejects_a_point_while_resolving_the_schema() -> None:
+    lf = pl.LazyFrame({"x": [1.0], "y": [2.0]}).select(
+        geo.point("x", "y").alias("point")
+    )
+
+    with pytest.raises(TypeError, match="convex_hull expects a linestring, polygon"):
+        lf.select(geo.convex_hull("point")).collect_schema()
+
+
+def test_rejects_a_multipoint_while_resolving_the_schema(
     line_coords: pl.DataFrame,
 ) -> None:
-    lf = XY.lines(line_coords).lazy().select(geo.convex_hull("line"))
+    lf = XY.multipoints(line_coords).lazy().select(geo.convex_hull("multipoint"))
 
-    with pytest.raises(
-        TypeError, match="convex_hull expects a polygon or multipolygon"
-    ):
+    with pytest.raises(TypeError, match="convex_hull expects a linestring, polygon"):
         lf.collect_schema()
 
 
-def test_rejects_a_multilinestring_while_resolving_the_schema(
-    ring_coords: pl.DataFrame,
-) -> None:
-    df = XY.multilinestrings(ring_coords)
-    lf = df.lazy().select(geo.convex_hull(df.columns[0]))
+def test_a_bent_linestring_is_closed_around() -> None:
+    bent = _line((0, 0), (4, 0), (4, 4), (0, 4))
 
-    with pytest.raises(
-        TypeError, match="convex_hull expects a polygon or multipolygon"
-    ):
-        lf.collect_schema()
+    df = _lines(bent)
+    out = df.select(geo.convex_hull("polygon"))
+
+    assert out.schema["polygon"] == PolygonXY()
+    assert _hulls(df) == [[_HULL]]
+
+
+def test_a_missing_or_empty_linestring() -> None:
+    bent = _line((0, 0), (4, 0), (4, 4), (0, 4))
+
+    assert _hulls(_lines(None, [], bent)) == [None, [], [_HULL]]
+
+
+def test_a_straight_linestring_gives_a_missing_hull() -> None:
+    straight = _line((0, 0), (1, 0), (2, 0))
+    bent = _line((0, 0), (4, 0), (4, 4), (0, 4))
+
+    assert _hulls(_lines(straight, bent)) == [None, [_HULL]]
+
+
+def test_a_multilinestring_gets_one_hull_of_the_whole() -> None:
+    bottom = _line((0, 0), (4, 0))
+    top = _line((0, 4), (4, 4))
+
+    df = _multilines([bottom, top], None, [], [_line((0, 0), (1, 0))])
+    out = df.select(geo.convex_hull("polygon"))
+
+    assert out.schema["polygon"] == PolygonXY()
+    assert _hulls(df) == [[_HULL], None, [], None]
 
 
 def test_a_multipolygon_gets_one_hull_of_the_whole() -> None:

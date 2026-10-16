@@ -4,12 +4,44 @@ use std::ops::Range;
 
 use geos::{CoordType, Geom, Geometry, GeometryTypes};
 
+use super::linestrings::{line_string_to_geos, multi_line_string_to_geos};
 use super::polygons::{multi_polygon_to_geos, polygon_to_geos};
 use super::{axes, Axes};
 use crate::{
     GeoArrowListView, GeoArrowPolygonOutput, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeoDimension, MultiPolygonArrayView, PolygonArrayView,
+    GeoDimension, LineStringArrayView, MultiLineStringArrayView, MultiPolygonArrayView,
+    PolygonArrayView,
 };
+
+impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> {
+    /// The convex hull of every row, forwarded to GEOS.
+    /// GEOS keeps z, but drops m.
+    /// An empty linestring's hull is empty.
+    /// GEOS returns a point or a linestring for a straight linestring,
+    /// so we return invalid.
+    pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
+        &self,
+    ) -> geos::GResult<O> {
+        hulls(&self.rows, &self.coords, line_string_to_geos)
+    }
+}
+
+impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
+    MultiLineStringArrayView<R, L, C>
+{
+    /// The convex hull of every row: the GEOS multilinestring of all its parts, hulled as a whole.
+    /// GEOS keeps z, but drops m.
+    /// An empty multilinestring's hull is empty.
+    /// GEOS returns a point or a linestring when all the vertices lie on one line,
+    /// so we return invalid.
+    pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
+        &self,
+    ) -> geos::GResult<O> {
+        hulls(&self.rows, &self.coords, |axes, parts| {
+            multi_line_string_to_geos(axes, &self.lines, parts)
+        })
+    }
+}
 
 impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     PolygonArrayView<R, L, C>

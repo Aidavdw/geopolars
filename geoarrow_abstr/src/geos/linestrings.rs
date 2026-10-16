@@ -65,13 +65,13 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
 /// Can copy from axes in one go.
 /// No vertices gives an empty line string.
 #[inline(always)]
-fn line_string_to_geos(axes: &Axes, vertices: Range<usize>) -> geos::GResult<Geometry> {
+pub(super) fn line_string_to_geos(axes: &Axes, vertices: Range<usize>) -> geos::GResult<Geometry> {
     Geometry::create_line_string(coord_seq(axes, vertices)?)
 }
 
 /// No parts gives an empty multilinestring.
 #[inline(always)]
-fn multi_line_string_to_geos(
+pub(super) fn multi_line_string_to_geos(
     axes: &Axes,
     lines: &impl GeoArrowValidListView,
     parts: Range<usize>,
