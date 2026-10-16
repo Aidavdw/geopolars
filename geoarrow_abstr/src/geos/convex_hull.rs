@@ -8,14 +8,14 @@ use super::polygons::{multi_polygon_to_geos, polygon_to_geos};
 use super::{axes, Axes};
 use crate::{
     GeoArrowListView, GeoArrowPolygonOutput, GeoArrowValidCoordsView, GeoArrowValidListView,
-    MultiPolygonArrayView, PolygonArrayView,
+    GeoDimension, MultiPolygonArrayView, PolygonArrayView,
 };
 
 impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     PolygonArrayView<R, L, C>
 {
     /// The convex hull of every row, forwarded to GEOS.
-    /// GEOS keeps z, but drops m, so a hull's m is NaN.
+    /// GEOS keeps z, but drops m.
     /// An empty polygon's hull is empty.
     /// GEOS returns a point or a linestring for a polygon with zero area
     /// (all the points intersecting), so we return invalid.
@@ -36,7 +36,7 @@ impl<
     > MultiPolygonArrayView<R, P, L, C>
 {
     /// The convex hull of every row: the GEOS multipolygon of all its parts, hulled as a whole.
-    /// GEOS keeps z, but drops m, so a hull's m is NaN.
+    /// GEOS keeps z, but drops m.
     /// An empty multipolygon's hull is empty.
     /// GEOS returns a point or a linestring for a multipolygon with zero area
     /// (all the points intersecting), so we return invalid.
@@ -54,13 +54,14 @@ fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
     coords: &impl GeoArrowValidCoordsView,
     to_geos: impl Fn(&Axes, Range<usize>) -> geos::GResult<Geometry>,
 ) -> geos::GResult<O> {
-    // TODO: Have this set the 'm' values to none so it is clear we shuold reconstruct this
-    // as a PolygonXY[Z]
-    let dim = coords.dim();
+    let dim = if coords.dim().has_z() {
+        GeoDimension::XYZ
+    } else {
+        GeoDimension::XY
+    };
     let axes = axes(coords);
     let (mut x, mut y) = (Vec::new(), Vec::new());
     let mut z = dim.has_z().then(Vec::new);
-    let mut m = dim.has_m().then(Vec::new);
     let mut rings = vec![0];
     let mut offsets = Vec::with_capacity(rows.len() + 1);
     offsets.push(0);
@@ -74,13 +75,12 @@ fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
                 if hull.geometry_type()? != GeometryTypes::Polygon {
                     failed.push(i);
                 } else {
-                    let (hull_x, hull_y, hull_z, hull_m) =
+                    let (hull_x, hull_y, hull_z, _) =
                         hull.get_exterior_ring()?.get_coord_seq()?.as_arrays()?;
                     let len = hull_x.len();
                     x.extend(hull_x);
                     y.extend(hull_y);
                     extend_axis(&mut z, hull_z, len);
-                    extend_axis(&mut m, hull_m, len);
                     rings.push(x.len() as i64);
                 }
             }
@@ -89,7 +89,7 @@ fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
     }
     Ok(O::from_buffers(
         dim,
-        (x, y, z, m),
+        (x, y, z, None),
         rings,
         offsets,
         rows.validity(),

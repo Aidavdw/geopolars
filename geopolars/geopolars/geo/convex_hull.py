@@ -34,17 +34,19 @@ def _convex_hull(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 
 def convex_hull(geometry: IntoExprColumn) -> pl.Expr:
     """The smallest convex polygon that contains every vertex of a polygon,
-    with the polygon's dimension and CRS.
+    with the polygon's CRS.
     A multipolygon gives a single polygon:
     the hull of the multipolygon as a whole, not one per part.
 
-    | in                  | out             |
-    |---------------------|-----------------|
-    | `PolygonXY`         | `PolygonXY`     |
-    | `PolygonXYZM`       | `PolygonXYZM`   |
-    | `MultiPolygonXYZ`   | `PolygonXYZ`    |
+    | in                                    | out             |
+    |---------------------------------------|-----------------|
+    | `PolygonXY`, `PolygonXYM`             | `PolygonXY`     |
+    | `PolygonXYZ`, `PolygonXYZM`           | `PolygonXYZ`    |
+    | `MultiPolygonXY`, `MultiPolygonXYM`   | `PolygonXY`     |
+    | `MultiPolygonXYZ`, `MultiPolygonXYZM` | `PolygonXYZ`    |
 
-    Computed by GEOS, on x and y. GEOS keeps z, but drops m, so the hull's m is NaN.
+    Computed by GEOS.
+    This operation keeps z, but drops m.
     An empty (multi)polygon gives an empty polygon, and a missing one a missing polygon.
     One that encloses nothing (all its vertices on one point or one line)
     has a point or a line for a hull, so it gives a missing polygon.

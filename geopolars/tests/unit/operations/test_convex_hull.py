@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import math
-
 import polars as pl
 import pytest
 
 from geopolars import geo
-from geopolars.datatypes import MultiPolygonXY, PolygonXY, PolygonXYZM
-from tests.unit.conftest import XY
+from geopolars.datatypes import MultiPolygonXY, PolygonXY, PolygonXYZ, PolygonXYZM
+from tests.unit.conftest import XY, Dimension
 
 _XY_RINGS = pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})))
 
@@ -68,16 +66,34 @@ def test_z_is_kept_but_m_is_not() -> None:
 
     out = df.select(geo.convex_hull("polygon"))
 
-    assert out.schema["polygon"] == PolygonXYZM()
-    [[hull]] = out.to_series().ext.storage().to_list()
-    assert [(c["x"], c["y"], c["z"]) for c in hull] == [
-        (0, 0, 0),
-        (0, 4, 0),
-        (4, 4, 40),
-        (4, 0, 40),
-        (0, 0, 0),
+    assert out.schema["polygon"] == PolygonXYZ()
+    assert out.to_series().ext.storage().to_list() == [
+        [
+            [
+                {"x": 0, "y": 0, "z": 0},
+                {"x": 0, "y": 4, "z": 0},
+                {"x": 4, "y": 4, "z": 40},
+                {"x": 4, "y": 0, "z": 40},
+                {"x": 0, "y": 0, "z": 0},
+            ]
+        ]
     ]
-    assert all(math.isnan(c["m"]) for c in hull)
+
+
+def test_a_hull_has_no_m(
+    dimension: Dimension,
+    ring_coords: pl.DataFrame,
+    multipolygon_coords: pl.DataFrame,
+) -> None:
+    expected = PolygonXYZ() if dimension.has_z else PolygonXY()
+
+    for df in (
+        dimension.polygons(ring_coords),
+        dimension.multipolygons(multipolygon_coords),
+    ):
+        out = df.select(geo.convex_hull(df.columns[0]))
+
+        assert out.schema[df.columns[0]] == expected
 
 
 def test_the_crs_is_carried_over() -> None:

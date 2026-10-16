@@ -6,9 +6,11 @@ use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
 
 use crate::geoarrow::storage::{downcast, ListView, PolygonOutput, ValidCoordsView, ValidListView};
+use geoarrow_abstr::GeoDimension;
+
 use crate::geoarrow::{describe, Geo, Kind};
 
-/// A polygon per polygon or multipolygon, with the input's dimension and metadata.
+/// A polygon per polygon or multipolygon, with the input's metadata and z, but without m.
 /// Also whether the input is a multipolygon.
 fn hull_type(dtype: &DataType) -> PolarsResult<(DataType, bool)> {
     let geo = describe(dtype)?;
@@ -21,7 +23,12 @@ fn hull_type(dtype: &DataType) -> PolarsResult<(DataType, bool)> {
             )
         }
     };
-    let dtype = Geo::new(Kind::Polygon, geo.dim, geo.metadata.clone()).dtype();
+    let dim = if geo.dim.has_z() {
+        GeoDimension::XYZ
+    } else {
+        GeoDimension::XY
+    };
+    let dtype = Geo::new(Kind::Polygon, dim, geo.metadata.clone()).dtype();
     Ok((dtype, multi))
 }
 
@@ -65,7 +72,7 @@ fn convex_hull(inputs: &[Series]) -> PolarsResult<Series> {
             PolarsResult::Ok(hulls.boxed())
         })
         .collect::<PolarsResult<_>>()?;
-    // SAFETY: the hulls are polygons of the input's dimension, the storage of `dtype`.
+    // SAFETY: the hulls are polygons of `dtype`'s dimension, its storage.
     Ok(
         unsafe {
             Series::from_chunks_and_dtype_unchecked(inputs[0].name().clone(), chunks, &dtype)
