@@ -1,7 +1,8 @@
 //! The convex hull of a linestring or polygon, or their multi-variants, forwarded to GEOS.
 
 use geoarrow_abstr::{
-    LineStringArrayView, MultiLineStringArrayView, MultiPolygonArrayView, PolygonArrayView,
+    LineStringArrayView, MultiLineStringArrayView, MultiPointArrayView, MultiPolygonArrayView,
+    PolygonArrayView,
 };
 use polars::prelude::*;
 use polars_arrow::array::ListArray;
@@ -13,11 +14,11 @@ use geoarrow_abstr::GeoDimension;
 
 use crate::geoarrow::{describe, Geo, Kind};
 
-/// Points enclose nothing, so they are refused.
+/// A point encloses nothing, so it is refused.
 fn encloses_nothing(dtype: &DataType) -> PolarsError {
     polars_err!(
         SchemaMismatch:
-        "convex_hull expects a linestring, polygon, multilinestring or multipolygon column, got: {}",
+        "convex_hull expects a linestring, polygon, multipoint, multilinestring or multipolygon column, got: {}",
         dtype
     )
 }
@@ -27,8 +28,12 @@ fn encloses_nothing(dtype: &DataType) -> PolarsError {
 fn hull_type(dtype: &DataType) -> PolarsResult<(DataType, Kind)> {
     let geo = describe(dtype)?;
     match geo.kind {
-        Kind::LineString | Kind::MultiLineString | Kind::Polygon | Kind::MultiPolygon => {}
-        Kind::Point | Kind::MultiPoint => return Err(encloses_nothing(dtype)),
+        Kind::LineString
+        | Kind::MultiPoint
+        | Kind::MultiLineString
+        | Kind::Polygon
+        | Kind::MultiPolygon => {}
+        Kind::Point => return Err(encloses_nothing(dtype)),
     }
     let dim = if geo.dim.has_z() {
         GeoDimension::XYZ
@@ -67,6 +72,11 @@ fn chunk_hulls(
             coords: ValidCoordsView::new(values)?,
         }
         .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer),
+        Kind::MultiPoint => MultiPointArrayView {
+            rows: ListView::new(rows),
+            coords: ValidCoordsView::new(values)?,
+        }
+        .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer),
         Kind::MultiLineString => {
             let lines: &ListArray<i64> = downcast(values, "a list of linestrings")?;
             MultiLineStringArrayView {
@@ -96,7 +106,7 @@ fn chunk_hulls(
             }
             .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer)
         }
-        Kind::Point | Kind::MultiPoint => return Err(encloses_nothing(dtype)),
+        Kind::Point => return Err(encloses_nothing(dtype)),
     }
     .map_err(|e| polars_err!(ComputeError: "{e}"))
 }

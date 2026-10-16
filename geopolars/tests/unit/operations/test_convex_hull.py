@@ -10,6 +10,7 @@ from geopolars import geo
 from geopolars.datatypes import (
     LineStringXY,
     MultiLineStringXY,
+    MultiPointXY,
     MultiPolygonXY,
     PolygonXY,
     PolygonXYZ,
@@ -58,6 +59,12 @@ def _lines(*lines: Ring | None) -> pl.DataFrame:
     Named like the polygon columns, so `_hulls` reads it too."""
     storage = pl.Series("polygon", list(lines), dtype=LineStringXY._geo_storage)
     return pl.DataFrame(storage.ext.to(LineStringXY()))
+
+
+def _multipoints(*multis: Ring | None) -> pl.DataFrame:
+    """A `polygon` column of `MultiPointXY`, one row per list of points."""
+    storage = pl.Series("polygon", list(multis), dtype=MultiPointXY._geo_storage)
+    return pl.DataFrame(storage.ext.to(MultiPointXY()))
 
 
 def _multilines(*multis: list[Ring] | None) -> pl.DataFrame:
@@ -116,6 +123,7 @@ def test_a_hull_has_no_m(
 
     for df in (
         dimension.lines(line_coords),
+        dimension.multipoints(line_coords),
         dimension.multilinestrings(ring_coords),
         dimension.polygons(ring_coords),
         dimension.multipolygons(multipolygon_coords),
@@ -136,17 +144,35 @@ def test_rejects_a_point_while_resolving_the_schema() -> None:
         geo.point("x", "y").alias("point")
     )
 
-    with pytest.raises(TypeError, match="convex_hull expects a linestring, polygon"):
+    with pytest.raises(
+        TypeError, match="convex_hull expects a linestring, polygon, multipoint"
+    ):
         lf.select(geo.convex_hull("point")).collect_schema()
 
 
-def test_rejects_a_multipoint_while_resolving_the_schema(
-    line_coords: pl.DataFrame,
-) -> None:
-    lf = XY.multipoints(line_coords).lazy().select(geo.convex_hull("multipoint"))
+def test_a_multipoint_is_hulled_around_its_outer_points() -> None:
+    # The corners of a square, and one point inside it.
+    points = _line((0, 0), (4, 0), (2, 2), (4, 4), (0, 4))
 
-    with pytest.raises(TypeError, match="convex_hull expects a linestring, polygon"):
-        lf.collect_schema()
+    df = _multipoints(points)
+    out = df.select(geo.convex_hull("polygon"))
+
+    assert out.schema["polygon"] == PolygonXY()
+    assert _hulls(df) == [[_HULL]]
+
+
+def test_a_missing_or_empty_multipoint() -> None:
+    square = _line((0, 0), (4, 0), (4, 4), (0, 4))
+
+    assert _hulls(_multipoints(None, [], square)) == [None, [], [_HULL]]
+
+
+def test_one_or_two_points_give_a_missing_hull() -> None:
+    square = _line((0, 0), (4, 0), (4, 4), (0, 4))
+
+    hulls = _hulls(_multipoints(_line((1, 1)), _line((0, 0), (1, 1)), square))
+
+    assert hulls == [None, None, [_HULL]]
 
 
 def test_a_bent_linestring_is_closed_around() -> None:

@@ -1,6 +1,6 @@
 //! Points, whatever storage backs them: one coordinate per row.
 
-use crate::GeoArrowCoordsView;
+use crate::{GeoArrowCoordsView, GeoArrowListView, GeoArrowValidCoordsView};
 
 /// One point: a single coordinate, which may be missing.
 pub struct PointView<'a, C: GeoArrowCoordsView> {
@@ -38,4 +38,11 @@ impl<C: GeoArrowCoordsView> PointArrayView<C> {
     pub fn new(coords: C) -> Self {
         Self { coords }
     }
+}
+
+/// A column of multipoints: rows of coordinates.
+/// The points of a multipoint are never missing, only a whole row is.
+pub struct MultiPointArrayView<R: GeoArrowListView, C: GeoArrowValidCoordsView> {
+    pub rows: R,
+    pub coords: C,
 }

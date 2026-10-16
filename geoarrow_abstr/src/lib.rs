@@ -48,5 +48,5 @@ pub use linestrings::{
 };
 pub use lists::{GeoArrowListShared, GeoArrowListView, GeoArrowValidListView};
 pub use metric::{BaseMetric, GeodesicMetric, Planar, ReprojectError, WithHeight};
-pub use points::{PointArrayView, PointView};
+pub use points::{MultiPointArrayView, PointArrayView, PointView};
 pub use polygons::{MultiPolygonArrayView, MultiPolygonView, PolygonArrayView, PolygonView};
