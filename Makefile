@@ -13,10 +13,19 @@ POLARS_STAMP := $(POLARS_DIR)/.rev-$(POLARS_REV)
 UV_SYNC = if [ -e $(POLARS_DIR)/.reinstall ]; then \
 		reinstall="--reinstall-package polars --reinstall-package polars-runtime-32"; \
 	fi; \
-	uv sync $$reinstall && rm -f $(POLARS_DIR)/.reinstall
+	uv sync $$reinstall $(UV_SYNC_ARGS) && rm -f $(POLARS_DIR)/.reinstall
 
 # Sync the venv, building the plugin unoptimized (fast edit-compile loop).
 # this builds polars as debug.
+#
+# uv can take the plugin to be up to date after Rust edits, and keep a stale build,
+# so always rebuild it.
+# In uv's isolated build env, maturin points PYO3_PYTHON at a fresh temporary interpreter,
+# so cargo recompiles pyo3 and all of polars on top of it every time.
+# Building in our own venv keeps that path, and so cargo's cache, stable.
+# A fresh venv has no maturin yet to build with, so that first build stays isolated.
+install: UV_SYNC_ARGS = --reinstall-package geopolars \
+	$(if $(wildcard .venv/bin/maturin),--no-build-isolation-package geopolars)
 install: polars-src
 	export MATURIN_PEP517_ARGS="--profile dev"; $(UV_SYNC)
 
