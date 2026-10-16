@@ -12,6 +12,12 @@
 //!
 //! Leaving NaN vertices out before going to GEOS would make this consistent.
 
+// TODO: Use the new style of handling per-row errors
+// TODO: we can (although hacky) use that convex_hull only depends on the *points*,
+// and not on the actual geometry type. We can simplify this entire module by just taking in
+// an array with lists of coordinates.
+// We can then add a very small wrapper that gets those per geometry type.
+
 use std::ops::Range;
 
 use geos::{CoordType, Geom, Geometry, GeometryTypes};

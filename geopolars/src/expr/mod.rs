@@ -24,5 +24,6 @@ pub mod length;
 pub mod rings;
 pub mod rings_overlap;
 pub mod self_intersects;
+pub mod simplify;
 pub mod wkb;
 pub mod wkt;

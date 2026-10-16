@@ -1,10 +1,10 @@
-//! Linestrings and multilinestrings to GEOS.
+//! Linestrings and multilinestrings to GEOS, and back.
 
 use std::ops::Range;
 
-use geos::Geometry;
+use geos::{Geom, Geometry, GeometryTypes};
 
-use super::{axes, coord_seq, Axes};
+use super::{axes, coord_seq, Axes, Buffers};
 use crate::{
     GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, LineStringArrayView,
     LineStringView, MultiLineStringArrayView, MultiLineStringView,
@@ -82,4 +82,49 @@ pub(super) fn multi_line_string_to_geos(
         line_strings.push(line_string_to_geos(axes, lines.range(j))?);
     }
     Geometry::create_multiline_string(line_strings)
+}
+
+/// Appends the coordinates of a GEOS linestring.
+/// Their list is left open for the caller to close.
+/// Gives `false` for any other kind of geometry.
+/// Nothing is appended then.
+#[inline(always)]
+pub(super) fn line_string_from_geos(
+    buffers: &mut Buffers,
+    geometry: &impl Geom,
+) -> geos::GResult<bool> {
+    if geometry.geometry_type()? != GeometryTypes::LineString {
+        return Ok(false);
+    }
+    buffers.push_coords(geometry)?;
+    Ok(true)
+}
+
+/// Appends the parts of a GEOS multilinestring, each closed at level 0.
+/// The multilinestring itself is left open for the caller to close.
+/// GEOS gives a multilinestring of one part as a plain linestring.
+/// So a linestring is read as a single part.
+/// An empty geometry has no parts.
+/// Gives `false` for any other kind of geometry.
+/// Nothing is appended then.
+#[inline(always)]
+pub(super) fn multi_line_string_from_geos(
+    buffers: &mut Buffers,
+    geometry: &impl Geom,
+) -> geos::GResult<bool> {
+    match geometry.geometry_type()? {
+        GeometryTypes::LineString if geometry.is_empty()? => {}
+        GeometryTypes::LineString => {
+            buffers.push_coords(geometry)?;
+            buffers.close(0);
+        }
+        GeometryTypes::MultiLineString => {
+            for n in 0..geometry.get_num_geometries()? {
+                buffers.push_coords(&geometry.get_geometry_n(n)?)?;
+                buffers.close(0);
+            }
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
 }

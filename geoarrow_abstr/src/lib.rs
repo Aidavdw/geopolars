@@ -40,7 +40,10 @@ pub mod native;
 mod points;
 mod polygons;
 
-pub use arrays::{GeoArrowF64Array, GeoArrowPolygonOutput, OwnedAxes};
+pub use arrays::{
+    GeoArrowF64Array, GeoArrowLineStringOutput, GeoArrowMultiLineStringOutput,
+    GeoArrowMultiPolygonOutput, GeoArrowPolygonOutput, OwnedAxes,
+};
 pub use coords::{GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowValidCoordsView};
 pub use dimension::GeoDimension;
 pub use linestrings::{

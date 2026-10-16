@@ -152,6 +152,22 @@ class ExprGeoNameSpace:
 
         return convex_hull(self._expr, stop_on_error=stop_on_error, ccw_outer=ccw_outer)
 
+    def simplify(
+        self,
+        tolerance: float,
+        *,
+        preserve_topology: bool = False,
+        ignore_per_row_errors: bool = False,
+    ) -> pl.Expr:
+        from geopolars.geo.simplify import simplify
+
+        return simplify(
+            self._expr,
+            tolerance,
+            preserve_topology=preserve_topology,
+            ignore_per_row_errors=ignore_per_row_errors,
+        )
+
     def boundary(self) -> pl.Expr:
         from geopolars.geo.boundary import boundary
 

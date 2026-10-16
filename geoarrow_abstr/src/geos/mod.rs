@@ -7,12 +7,15 @@
 mod convex_hull;
 mod linestrings;
 mod polygons;
+mod simplify;
 
 use std::ops::Range;
 
-use geos::{CoordSeq, CoordType, Geometry};
+use geos::{CoordSeq, CoordType, Geom, Geometry};
 
-use crate::{GeoArrowCoordsView, GeoArrowValidCoordsView, GeoDimension, PointArrayView, PointView};
+use crate::{
+    GeoArrowCoordsView, GeoArrowValidCoordsView, GeoDimension, OwnedAxes, PointArrayView, PointView,
+};
 
 impl From<GeoDimension> for CoordType {
     fn from(dim: GeoDimension) -> Self {
@@ -95,4 +98,110 @@ fn coord_seq(axes: &Axes, vertices: Range<usize>) -> geos::GResult<CoordSeq> {
         z.map(|z| &z[vertices.clone()]),
         m.map(|m| &m[vertices]),
     )
+}
+
+/// Contains arrow-ified output of a GEOS function.
+/// - Coordinates (x, y, and z if there is one)
+/// - the list levels above them, built from one GEOS geometry after the other.
+///
+/// The output of GEOS never contains m values.
+pub(super) struct Buffers {
+    x: Vec<f64>,
+    y: Vec<f64>,
+    z: Option<Vec<f64>>,
+    /// One per list level, innermost first.
+    offsets: Vec<Vec<i64>>,
+}
+
+/// How far [`Buffers`] was filled, to go back to with [`Buffers::truncate`].
+/// Sized for the most list levels a geometry has (a multipolygon's three),
+/// so taking it allocates nothing.
+pub(super) struct Filled {
+    coords: usize,
+    offsets: [usize; 3],
+}
+
+impl Buffers {
+    /// With `has_z=true` the coordinates keep their z.
+    pub(super) fn new(has_z: bool, levels: usize, coords: usize) -> Self {
+        Self {
+            x: Vec::with_capacity(coords),
+            y: Vec::with_capacity(coords),
+            z: has_z.then(|| Vec::with_capacity(coords)),
+            offsets: vec![vec![0]; levels],
+        }
+    }
+
+    fn dim(&self) -> GeoDimension {
+        match self.z {
+            Some(_) => GeoDimension::XYZ,
+            None => GeoDimension::XY,
+        }
+    }
+
+    /// Appends the coordinates of `geometry`, a linestring or a ring.
+    pub(super) fn push_coords(&mut self, geometry: &impl Geom) -> geos::GResult<()> {
+        let dim = self.dim();
+        let buffer = geometry.get_coord_seq()?.as_buffer(Some(dim.into()))?;
+        let width = dim.field_names().len();
+        // Once per linestring or ring, rather than per coordinate.
+        match &mut self.z {
+            Some(z) => buffer.chunks_exact(width).for_each(|coord| {
+                self.x.push(coord[0]);
+                self.y.push(coord[1]);
+                z.push(coord[2]);
+            }),
+            None => buffer.chunks_exact(width).for_each(|coord| {
+                self.x.push(coord[0]);
+                self.y.push(coord[1]);
+            }),
+        }
+        Ok(())
+    }
+
+    /// Ends the current list at `level`, after everything pushed to the level below it.
+    #[inline(always)]
+    pub(super) fn close(&mut self, level: usize) {
+        let end = match level {
+            0 => self.x.len(),
+            _ => self.offsets[level - 1].len() - 1,
+        };
+        self.offsets[level].push(end as i64);
+    }
+
+    /// Ends the current row: the list at the outermost level.
+    #[inline(always)]
+    pub(super) fn close_row(&mut self) {
+        self.close(self.offsets.len() - 1);
+    }
+
+    pub(super) fn filled(&self) -> Filled {
+        Filled {
+            coords: self.x.len(),
+            offsets: std::array::from_fn(|level| self.offsets.get(level).map_or(0, Vec::len)),
+        }
+    }
+
+    /// Drops everything pushed since `filled`.
+    pub(super) fn truncate(&mut self, filled: &Filled) {
+        self.x.truncate(filled.coords);
+        self.y.truncate(filled.coords);
+        if let Some(z) = &mut self.z {
+            z.truncate(filled.coords);
+        }
+        for (offsets, &len) in self.offsets.iter_mut().zip(&filled.offsets) {
+            offsets.truncate(len);
+        }
+    }
+
+    /// The dimension, axes and `N` offsets (innermost first, so the rows last),
+    /// for the `from_buffers` of the output of the kind built.
+    pub(super) fn finish<const N: usize>(self) -> (GeoDimension, OwnedAxes, [Vec<i64>; N]) {
+        let dim = self.dim();
+        let offsets = self
+            .offsets
+            .try_into()
+            .unwrap_or_else(|_| panic!("built with {N} list levels"));
+        (dim, (self.x, self.y, self.z, None), offsets)
+    }
 }

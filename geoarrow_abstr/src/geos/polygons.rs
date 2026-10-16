@@ -1,10 +1,10 @@
-//! Polygons and multipolygons to GEOS.
+//! Polygons and multipolygons to GEOS, and back.
 
 use std::ops::Range;
 
-use geos::Geometry;
+use geos::{Geom, Geometry, GeometryTypes};
 
-use super::{axes, coord_seq, Axes};
+use super::{axes, coord_seq, Axes, Buffers};
 use crate::{
     GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, MultiPolygonArrayView,
     MultiPolygonView, PolygonArrayView, PolygonView,
@@ -107,4 +107,68 @@ pub(super) fn multi_polygon_to_geos(
         geometries.push(polygon_to_geos(axes, rings, polygons.range(j))?);
     }
     Geometry::create_multipolygon(geometries)
+}
+
+/// Appends the rings of a GEOS polygon, each closed at level 0.
+/// The polygon itself is left open for the caller to close.
+/// Gives `false` for any other kind of geometry, such as a multipolygon.
+/// Nothing is appended then.
+#[inline(always)]
+pub(super) fn polygon_from_geos(
+    buffers: &mut Buffers,
+    geometry: &impl Geom,
+) -> geos::GResult<bool> {
+    if geometry.geometry_type()? != GeometryTypes::Polygon {
+        return Ok(false);
+    }
+    push_rings(buffers, geometry)?;
+    Ok(true)
+}
+
+/// Appends the parts of a GEOS multipolygon, each closed at level 1.
+/// The multipolygon itself is left open for the caller to close.
+/// GEOS gives a multipolygon of one part as a plain polygon.
+/// So a polygon is read as a single part.
+/// An empty geometry has no parts.
+/// Gives `false` for any other kind of geometry.
+/// Nothing is appended then.
+#[inline(always)]
+pub(super) fn multi_polygon_from_geos(
+    buffers: &mut Buffers,
+    geometry: &impl Geom,
+) -> geos::GResult<bool> {
+    match geometry.geometry_type()? {
+        GeometryTypes::Polygon if geometry.is_empty()? => {}
+        GeometryTypes::Polygon => {
+            push_rings(buffers, geometry)?;
+            buffers.close(1);
+        }
+        GeometryTypes::MultiPolygon => {
+            for n in 0..geometry.get_num_geometries()? {
+                push_rings(buffers, &geometry.get_geometry_n(n)?)?;
+                buffers.close(1);
+            }
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+/// Appends the rings of `polygon`, each closed at level 0.
+/// The exterior comes first, then the interiors.
+/// An empty polygon has no rings.
+#[inline(always)]
+fn push_rings(buffers: &mut Buffers, polygon: &impl Geom) -> geos::GResult<()> {
+    // GEOS gives an empty polygon an empty exterior.
+    // We would store that as a ring without vertices.
+    if polygon.is_empty()? {
+        return Ok(());
+    }
+    buffers.push_coords(&polygon.get_exterior_ring()?)?;
+    buffers.close(0);
+    for n in 0..polygon.get_num_interior_rings()? {
+        buffers.push_coords(&polygon.get_interior_ring_n(n)?)?;
+        buffers.close(0);
+    }
+    Ok(())
 }

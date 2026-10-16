@@ -6,7 +6,44 @@ use crate::GeoDimension;
 /// z and m are `None` for a dimension without them.
 pub type OwnedAxes = (Vec<f64>, Vec<f64>, Option<Vec<f64>>, Option<Vec<f64>>);
 
-/// A column of polygons: rows of rings of coordinates, built from their buffers.
+/// A column of linestrings
+pub trait GeoArrowLineStringOutput {
+    /// How the storage records which rows are there.
+    /// The same as the rows' [`GeoArrowListView::Validity`](crate::GeoArrowListView::Validity).
+    type Validity;
+
+    /// `axes` holds every coordinate of `dim`.
+    /// `rows` are offsets, with one more entry than there are rows.
+    /// A row is missing where `validity` says, and at the rows in `failed`.
+    fn from_buffers(
+        dim: GeoDimension,
+        axes: OwnedAxes,
+        rows: Vec<i64>,
+        validity: Option<&Self::Validity>,
+        failed: &[usize],
+    ) -> Self;
+}
+
+/// A column of multilinestrings
+pub trait GeoArrowMultiLineStringOutput {
+    /// How the storage records which rows are there.
+    /// The same as the rows' [`GeoArrowListView::Validity`](crate::GeoArrowListView::Validity).
+    type Validity;
+
+    /// `axes` holds every coordinate of `dim`.
+    /// `lines` and `rows` are offsets, with one more entry than there are linestrings or rows.
+    /// A row is missing where `validity` says, and at the rows in `failed`.
+    fn from_buffers(
+        dim: GeoDimension,
+        axes: OwnedAxes,
+        lines: Vec<i64>,
+        rows: Vec<i64>,
+        validity: Option<&Self::Validity>,
+        failed: &[usize],
+    ) -> Self;
+}
+
+/// A column of polygons
 pub trait GeoArrowPolygonOutput {
     /// How the storage records which rows are there.
     /// The same as the rows' [`GeoArrowListView::Validity`](crate::GeoArrowListView::Validity).
@@ -19,6 +56,27 @@ pub trait GeoArrowPolygonOutput {
         dim: GeoDimension,
         axes: OwnedAxes,
         rings: Vec<i64>,
+        rows: Vec<i64>,
+        validity: Option<&Self::Validity>,
+        failed: &[usize],
+    ) -> Self;
+}
+
+/// A column of multipolygons
+pub trait GeoArrowMultiPolygonOutput {
+    /// How the storage records which rows are there.
+    /// The same as the rows' [`GeoArrowListView::Validity`](crate::GeoArrowListView::Validity).
+    type Validity;
+
+    /// `axes` holds every coordinate of `dim`.
+    /// `rings`, `polygons` and `rows` are offsets,
+    /// with one more entry than there are rings, polygons or rows.
+    /// A row is missing where `validity` says, and at the rows in `failed`.
+    fn from_buffers(
+        dim: GeoDimension,
+        axes: OwnedAxes,
+        rings: Vec<i64>,
+        polygons: Vec<i64>,
         rows: Vec<i64>,
         validity: Option<&Self::Validity>,
         failed: &[usize],

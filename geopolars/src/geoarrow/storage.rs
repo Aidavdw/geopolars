@@ -1,9 +1,10 @@
 //! See the expression implementation guide on Array abstractions for GeoArrow.
 
 use geoarrow_abstr::{
-    GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowF64Array, GeoArrowListShared,
-    GeoArrowListView, GeoArrowPolygonOutput, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeoDimension, OwnedAxes,
+    GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowF64Array, GeoArrowLineStringOutput,
+    GeoArrowListShared, GeoArrowListView, GeoArrowMultiLineStringOutput,
+    GeoArrowMultiPolygonOutput, GeoArrowPolygonOutput, GeoArrowValidCoordsView,
+    GeoArrowValidListView, GeoDimension, OwnedAxes,
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray, PrimitiveArray, StructArray};
@@ -348,6 +349,43 @@ impl GeoArrowF64Array for F64Array {
     }
 }
 
+/// [GeoArrowLineStringOutput] for Polars.
+pub(crate) struct LineStringOutput(pub(crate) ListArray<i64>);
+
+impl GeoArrowLineStringOutput for LineStringOutput {
+    type Validity = Bitmap;
+
+    fn from_buffers(
+        dim: GeoDimension,
+        axes: OwnedAxes,
+        rows: Vec<i64>,
+        validity: Option<&Bitmap>,
+        failed: &[usize],
+    ) -> Self {
+        let coords = coords_array(dim, axes);
+        Self(wrap_in_list(coords.boxed(), rows, validity, failed))
+    }
+}
+
+/// [GeoArrowMultiLineStringOutput] for Polars.
+pub(crate) struct MultiLineStringOutput(pub(crate) ListArray<i64>);
+
+impl GeoArrowMultiLineStringOutput for MultiLineStringOutput {
+    type Validity = Bitmap;
+
+    fn from_buffers(
+        dim: GeoDimension,
+        axes: OwnedAxes,
+        lines: Vec<i64>,
+        rows: Vec<i64>,
+        validity: Option<&Bitmap>,
+        failed: &[usize],
+    ) -> Self {
+        let lines = LineStringOutput::from_buffers(dim, axes, lines, None, &[]).0;
+        Self(wrap_in_list(lines.boxed(), rows, validity, failed))
+    }
+}
+
 /// [GeoArrowPolygonOutput] for Polars.
 pub(crate) struct PolygonOutput(pub(crate) ListArray<i64>);
 
@@ -356,45 +394,71 @@ impl GeoArrowPolygonOutput for PolygonOutput {
 
     fn from_buffers(
         dim: GeoDimension,
-        (x, y, z, m): OwnedAxes,
+        axes: OwnedAxes,
         rings: Vec<i64>,
         rows: Vec<i64>,
         validity: Option<&Bitmap>,
         failed: &[usize],
     ) -> Self {
-        let len = x.len();
-        let axes = [Some(x), Some(y), z, m]
-            .into_iter()
-            .flatten()
-            .map(|values| PrimitiveArray::from_vec(values).boxed())
-            .collect();
-        let coords = StructArray::new(
-            dim.coordinates().to_arrow(CompatLevel::newest()),
-            len,
-            axes,
-            None,
-        );
-        // SAFETY: the kernel builds the offsets in order, starting at 0, ending at the child's length.
-        let (rings, rows): (OffsetsBuffer<i64>, OffsetsBuffer<i64>) = unsafe {
-            (
-                Offsets::new_unchecked(rings).into(),
-                Offsets::new_unchecked(rows).into(),
-            )
-        };
-        let rings = ListArray::<i64>::new(
-            ListArray::<i64>::default_datatype(coords.dtype().clone()),
-            rings,
-            coords.boxed(),
-            None,
-        );
-        let hulled = succeeded(rows.len_proxy(), failed);
-        Self(ListArray::<i64>::new(
-            ListArray::<i64>::default_datatype(rings.dtype().clone()),
-            rows,
-            rings.boxed(),
-            combine_validities_and(validity, hulled.as_ref()),
-        ))
+        // A ring is stored like a linestring.
+        let rings = LineStringOutput::from_buffers(dim, axes, rings, None, &[]).0;
+        Self(wrap_in_list(rings.boxed(), rows, validity, failed))
     }
+}
+
+/// [GeoArrowMultiPolygonOutput] for Polars.
+pub(crate) struct MultiPolygonOutput(pub(crate) ListArray<i64>);
+
+impl GeoArrowMultiPolygonOutput for MultiPolygonOutput {
+    type Validity = Bitmap;
+
+    fn from_buffers(
+        dim: GeoDimension,
+        axes: OwnedAxes,
+        rings: Vec<i64>,
+        polygons: Vec<i64>,
+        rows: Vec<i64>,
+        validity: Option<&Bitmap>,
+        failed: &[usize],
+    ) -> Self {
+        let polygons = PolygonOutput::from_buffers(dim, axes, rings, polygons, None, &[]).0;
+        Self(wrap_in_list(polygons.boxed(), rows, validity, failed))
+    }
+}
+
+/// The coordinate struct of `dim`, taking over the `axes` buffers.
+fn coords_array(dim: GeoDimension, (x, y, z, m): OwnedAxes) -> StructArray {
+    let len = x.len();
+    let axes = [Some(x), Some(y), z, m]
+        .into_iter()
+        .flatten()
+        .map(|values| PrimitiveArray::from_vec(values).boxed())
+        .collect();
+    StructArray::new(
+        dim.coordinates().to_arrow(CompatLevel::newest()),
+        len,
+        axes,
+        None,
+    )
+}
+
+/// `values` split into lists at `offsets`.
+/// A list is missing where `validity` says, and at the lists in `failed`.
+fn wrap_in_list(
+    values: Box<dyn Array>,
+    offsets: Vec<i64>,
+    validity: Option<&Bitmap>,
+    failed: &[usize],
+) -> ListArray<i64> {
+    // SAFETY: the kernel builds the offsets in order, starting at 0, ending at the child's length.
+    let offsets: OffsetsBuffer<i64> = unsafe { Offsets::new_unchecked(offsets) }.into();
+    let built = succeeded(offsets.len_proxy(), failed);
+    ListArray::<i64>::new(
+        ListArray::<i64>::default_datatype(values.dtype().clone()),
+        offsets,
+        values,
+        combine_validities_and(validity, built.as_ref()),
+    )
 }
 
 /// Every one of `len` rows but those in `failed`.
