@@ -13,6 +13,11 @@ use crate::{
     MultiPolygonArrayView, PolygonArrayView,
 };
 
+// Because we don't consider CRS,
+// A geometry crossing the antimeridian is hulled the long way round.
+// We could add a flag that checks if the input crosses it (>180°),
+// and then reproject them back
+
 impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> {
     /// The convex hull of every row, forwarded to GEOS.
     /// GEOS keeps z, but drops m.

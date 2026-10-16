@@ -48,6 +48,10 @@ def convex_hull(geometry: IntoExprColumn, *, stop_on_error: bool = False) -> pl.
     such as a straight linestring) has a point or a line for a hull,
     so it gives a missing polygon.
 
+    CRS is ignored:
+    for longitude/latitude the hull's edges are straight in degrees, not along the globe.
+    A geometry crossing the antimeridian is hulled the long way round.
+
     A geometry GEOS fails on gives a missing polygon too.
     With `stop_on_error`, GEOS's error is raised instead, failing the query.
 

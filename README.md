@@ -5,7 +5,7 @@ This is all very much still work-in-progress, and as such this branch is HIGHLY 
 We'll need a little bit more time to make things nice, but we're making a lot of progress very quickly,
 so stay tuned!
 
-## Features
+## Overview of Features
 
 GeoPolars has Geo data types as first-class Polars citizens,
   represented using the Arrow Extension format as [GeoArrow](https://geoarrow.org/).
@@ -23,7 +23,7 @@ In addition, GeoPolars aims to be a modern GeoSpatial toolset, offering:
 - Support for 3D (z) and measured quantities (m) for most operations
 - (De)serialisation with GeoParquet
 
-### Developer Documentation
+## Developer Documentation
 
 If you are interested in the design paradigm and architecture used for this plugin,
 See the `Docs` directory for more information about the internals of this plugin.
@@ -34,7 +34,7 @@ See the `Docs` directory for more information about the internals of this plugin
 - [What to consider when implementing new or editing existing expressions](./docs/Expression implementation guide.md)
 - [An overview of which expression is implemented at which *tier*](./docs/Tier per expression.md)
 
-### Two APIs
+## Quickstart
 
 We present two equivalent APIs.
 All functionality is is available through both.
@@ -57,23 +57,40 @@ but a checker cannot see namespaces that `register_expr_namespace`
 patches onto `pl.Expr`.
 To avoid that, prefer `gpl.col` to keep static typing.
 
-### Geometry Operations
+## Conventions
+
+GeoPolars does not really care about winding order. It will take any,
+and keep them in their orientation if that means less copying around is required.
+This philosophy is extended to external tools.
+If we don't need to transform any data, we'll just keep it in the same order.
+For operations using external tools, it is often necessary to reconstruct geometry.
+In such cases, there is essentially no cost in changing the winding order,
+because we already need to re-allocate anyway.
+In such a case, GeoPolars will try to (re)construct geometries **counter-clockwise**.
+
+## CRS awareness
+
+### Geometries crossing the antimeridian
+
+Things that cross the antimeridian can be represented as having points >180° or <-180°.
+
+## Geometry Operations
 
 All operations can be applied to all of the geometries.
 
-#### Distance
+### Distance
 
 Does not need to reproject: Uses the CRS geodetic.
 
-#### Area
+### Area
 
-#### Centroid
+### Centroid
 
 Gets the centre of mass of the geometry.
 This operation takes the CRS into consideration.
 For MultiPoint, this is the same as its mean coordinate.
 
-#### Mean Coordinate
+### Mean Coordinate
 
 This takes the average of all the coordinates that show up in this geometry.
 It does not have to be CRS-aware.
