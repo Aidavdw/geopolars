@@ -4,17 +4,18 @@
 
 use std::fmt::Display;
 
-use geoarrow_abstr::native::LengthMetric;
-use geoarrow_abstr::with_const_flags;
-use geoarrow_abstr::{GeoArrowCoordsShared, LineStringArrayView, MultiLineStringArrayView, Planar};
+use geopolars_compute::native::LengthMetric;
+use geopolars_compute::with_const_flags;
+use geopolars_compute::Planar;
+use geopolars_core::{LineStringArray, MultiLineStringArray};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::distance::{geodesic_metric, DistanceMethod};
-use crate::geoarrow::storage::{downcast, F64Array, ListView, ValidCoordsView, ValidListView};
 use crate::geoarrow::{describe, Kind};
+use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -67,30 +68,24 @@ fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> Po
     length_dtype(&input_fields[0])
 }
 
-/// [geoarrow_abstr::native::line_string_lengths], into a polars array.
-/// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
+/// [geopolars_compute::native::line_string_lengths], into a polars array.
+/// `with_const_flags!` cannot name the metric type itself, so it calls this.
 fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl LengthMetric<Error: Display>,
-    array: &LineStringArrayView<ListView, ValidCoordsView>,
+    array: &LineStringArray,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(lengths) =
-        geoarrow_abstr::native::line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(metric, array)
-            .map_err(|e| polars_err!(ComputeError: "{e}"))?;
-    Ok(lengths)
+    geopolars_compute::native::line_string_lengths::<Z, IGNORE_NAN, _>(metric, array)
+        .map_err(|e| polars_err!(ComputeError: "{e}"))
 }
 
-/// [geoarrow_abstr::native::multi_line_string_lengths], into a polars array.
-/// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
+/// [geopolars_compute::native::multi_line_string_lengths], into a polars array.
+/// `with_const_flags!` cannot name the metric type itself, so it calls this.
 fn multi_line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl LengthMetric<Error: Display>,
-    array: &MultiLineStringArrayView<ListView, ValidListView, ValidCoordsView>,
+    array: &MultiLineStringArray,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(lengths) =
-        geoarrow_abstr::native::multi_line_string_lengths::<Z, IGNORE_NAN, _, F64Array>(
-            metric, array,
-        )
-        .map_err(|e| polars_err!(ComputeError: "{e}"))?;
-    Ok(lengths)
+    geopolars_compute::native::multi_line_string_lengths::<Z, IGNORE_NAN, _>(metric, array)
+        .map_err(|e| polars_err!(ComputeError: "{e}"))
 }
 
 /// The length of every geometry in `geometries`, as `metric` measures it.
@@ -110,17 +105,17 @@ fn measure(
     let chunks = storage.list()?.downcast_iter().map(|rows| {
         if multi {
             let lines = downcast(rows.values().as_ref(), "a list of linestrings")?;
-            let array = MultiLineStringArrayView {
-                rows: ListView::new(rows),
-                lines: ValidListView::new(lines),
-                coords: ValidCoordsView::new(lines.values().as_ref())?,
+            let array = MultiLineStringArray {
+                rows: List::new(rows),
+                lines: ValidList::new(lines),
+                coords: ValidCoords::new(lines.values().as_ref())?,
             };
             let z = array.coords.dim().has_z();
             with_const_flags!(multi_line_string_lengths(metric, &array); z, ignore_nan)
         } else {
-            let array = LineStringArrayView {
-                rows: ListView::new(rows),
-                coords: ValidCoordsView::new(rows.values().as_ref())?,
+            let array = LineStringArray {
+                rows: List::new(rows),
+                coords: ValidCoords::new(rows.values().as_ref())?,
             };
             let z = array.coords.dim().has_z();
             with_const_flags!(line_string_lengths(metric, &array); z, ignore_nan)

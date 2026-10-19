@@ -8,17 +8,14 @@ pub mod bbox;
 pub mod coord;
 pub mod crs;
 pub mod decode;
-mod dimension;
 pub mod encoded;
 mod geo;
 pub mod geodetic;
 pub mod geotraits;
 mod kind;
-pub mod storage;
 
-pub use dimension::GeoDimensionDtype;
 pub use geo::Geo;
-pub use geoarrow_abstr::GeoDimension;
+pub use geopolars_core::GeoDimension;
 pub use kind::Kind;
 
 use std::any::Any;

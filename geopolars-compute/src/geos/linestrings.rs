@@ -2,23 +2,25 @@
 
 use std::ops::Range;
 
+use geopolars_core::{
+    LineString, LineStringArray, MultiLineString, MultiLineStringArray, ValidList,
+};
 use geos::{Geom, Geometry, GeometryTypes};
 
-use super::{axes, coord_seq, Axes, Buffers};
-use crate::{
-    GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, LineStringArrayView,
-    LineStringView, MultiLineStringArrayView, MultiLineStringView,
-};
+use super::{axes, coord_seq, Axes, Buffers, ToGeos};
 
-impl<C: GeoArrowValidCoordsView> LineStringView<'_, C> {
-    pub fn to_geos(&self) -> geos::GResult<Geometry> {
+impl ToGeos for LineString<'_> {
+    type Geos = Geometry;
+
+    fn to_geos(&self) -> geos::GResult<Geometry> {
         line_string_to_geos(&axes(self.coords), self.vertices.clone())
     }
 }
 
-impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> {
-    /// One geometry per row; `None` where the row is missing.
-    pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeos for LineStringArray {
+    type Geos = Vec<Option<Geometry>>;
+
+    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
         let axes = axes(&self.coords);
         let mut geometries = Vec::with_capacity(self.rows.len());
         for i in 0..self.rows.len() {
@@ -33,17 +35,18 @@ impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> 
     }
 }
 
-impl<L: GeoArrowValidListView, C: GeoArrowValidCoordsView> MultiLineStringView<'_, L, C> {
-    pub fn to_geos(&self) -> geos::GResult<Geometry> {
+impl ToGeos for MultiLineString<'_> {
+    type Geos = Geometry;
+
+    fn to_geos(&self) -> geos::GResult<Geometry> {
         multi_line_string_to_geos(&axes(self.coords), self.lines, self.parts.clone())
     }
 }
 
-impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    MultiLineStringArrayView<R, L, C>
-{
-    /// One geometry per row; `None` where the row is missing.
-    pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeos for MultiLineStringArray {
+    type Geos = Vec<Option<Geometry>>;
+
+    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
         let axes = axes(&self.coords);
         let mut geometries = Vec::with_capacity(self.rows.len());
         for i in 0..self.rows.len() {
@@ -73,7 +76,7 @@ pub(super) fn line_string_to_geos(axes: &Axes, vertices: Range<usize>) -> geos::
 #[inline(always)]
 pub(super) fn multi_line_string_to_geos(
     axes: &Axes,
-    lines: &impl GeoArrowValidListView,
+    lines: &ValidList,
     parts: Range<usize>,
 ) -> geos::GResult<Geometry> {
     // GEOS takes ownership of the parts, so they can't share a buffer across rows.

@@ -9,40 +9,61 @@ mod linestrings;
 mod polygons;
 mod simplify;
 
-use std::ops::Range;
-
-use geos::{CoordSeq, CoordType, Geom, Geometry};
-
-use crate::{
-    GeoArrowCoordsView, GeoArrowValidCoordsView, GeoDimension, OwnedAxes, PointArrayView, PointView,
+pub use convex_hull::{
+    line_string_convex_hulls, multi_line_string_convex_hulls, multi_point_convex_hulls,
+    multi_polygon_convex_hulls, polygon_convex_hulls,
+};
+pub use simplify::{
+    simplify_line_strings, simplify_multi_line_strings, simplify_multi_polygons, simplify_polygons,
 };
 
-impl From<GeoDimension> for CoordType {
-    fn from(dim: GeoDimension) -> Self {
-        match dim {
-            GeoDimension::XY => CoordType::XY,
-            GeoDimension::XYZ => CoordType::XYZ,
-            GeoDimension::XYM => CoordType::XYM,
-            GeoDimension::XYZM => CoordType::XYZM,
-        }
+use std::ops::Range;
+
+use geopolars_core::output::OwnedAxes;
+use geopolars_core::{Coords, GeoDimension, Point, PointArray, ValidCoords};
+use geos::{CoordSeq, CoordType, Geom, Geometry};
+
+/// Converts a view into GEOS geometries.
+/// A single geometry gives one GEOS geometry.
+/// An array gives one per row, with `None` where the row is missing.
+pub trait ToGeos {
+    type Geos;
+
+    fn to_geos(&self) -> geos::GResult<Self::Geos>;
+}
+
+fn coord_type(dim: GeoDimension) -> CoordType {
+    match dim {
+        GeoDimension::XY => CoordType::XY,
+        GeoDimension::XYZ => CoordType::XYZ,
+        GeoDimension::XYM => CoordType::XYM,
+        GeoDimension::XYZM => CoordType::XYZM,
     }
 }
 
-impl<C: GeoArrowCoordsView> PointView<'_, C> {
-    /// `None` if the point is empty (missing).
-    pub fn to_geos(&self) -> geos::GResult<Option<Geometry>> {
+/// `None` if the point is empty (missing).
+impl ToGeos for Point<'_> {
+    type Geos = Option<Geometry>;
+
+    fn to_geos(&self) -> geos::GResult<Option<Geometry>> {
         let dim = self.coords.dim();
-        point_to_geos(self.coords, self.index, dim.field_names().len(), dim.into())
+        point_to_geos(
+            self.coords,
+            self.index,
+            dim.field_names().len(),
+            coord_type(dim),
+        )
     }
 }
 
-impl<C: GeoArrowCoordsView> PointArrayView<C> {
-    /// One geometry per row; `None` where the point is missing.
-    pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeos for PointArray {
+    type Geos = Vec<Option<Geometry>>;
+
+    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
         // GEOS has no batch constructor, so only the per-column work is shared.
         let dim = self.coords.dim();
         let len = dim.field_names().len();
-        let coord_type: CoordType = dim.into();
+        let coord_type = coord_type(dim);
         let mut geometries = Vec::with_capacity(self.coords.len());
         for i in 0..self.coords.len() {
             geometries.push(point_to_geos(&self.coords, i, len, coord_type)?);
@@ -54,8 +75,8 @@ impl<C: GeoArrowCoordsView> PointArrayView<C> {
 /// Point `i` of `coords`, which carry `len` axes of `coord_type`.
 /// `None` if it is missing.
 #[inline(always)]
-fn point_to_geos<C: GeoArrowCoordsView>(
-    coords: &C,
+fn point_to_geos(
+    coords: &Coords,
     i: usize,
     len: usize,
     coord_type: CoordType,
@@ -78,7 +99,7 @@ fn point_to_geos<C: GeoArrowCoordsView>(
 /// The x, y, z and m values of every coordinate, as [`CoordSeq::new_from_arrays`] takes them.
 type Axes<'a> = (&'a [f64], &'a [f64], Option<&'a [f64]>, Option<&'a [f64]>);
 
-fn axes<C: GeoArrowValidCoordsView>(coords: &C) -> Axes<'_> {
+fn axes(coords: &ValidCoords) -> Axes<'_> {
     let (x, y) = (coords.axis(0), coords.axis(1));
     match coords.dim() {
         GeoDimension::XY => (x, y, None, None),
@@ -142,7 +163,7 @@ impl Buffers {
     /// Appends the coordinates of `geometry`, a linestring or a ring.
     pub(super) fn push_coords(&mut self, geometry: &impl Geom) -> geos::GResult<()> {
         let dim = self.dim();
-        let buffer = geometry.get_coord_seq()?.as_buffer(Some(dim.into()))?;
+        let buffer = geometry.get_coord_seq()?.as_buffer(Some(coord_type(dim)))?;
         let width = dim.field_names().len();
         // Once per linestring or ring, rather than per coordinate.
         match &mut self.z {
@@ -195,7 +216,7 @@ impl Buffers {
     }
 
     /// The dimension, axes and `N` offsets (innermost first, so the rows last),
-    /// for the `from_buffers` of the output of the kind built.
+    /// for the [output](geopolars_core::output) array of the kind built.
     pub(super) fn finish<const N: usize>(self) -> (GeoDimension, OwnedAxes, [Vec<i64>; N]) {
         let dim = self.dim();
         let offsets = self

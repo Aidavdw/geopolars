@@ -1,19 +1,18 @@
 //! The simplification of a linestring or polygon, or their multi-variants, forwarded to GEOS.
 
-use geoarrow_abstr::{
-    GeoDimension, LineStringArrayView, MultiLineStringArrayView, MultiPolygonArrayView,
-    PolygonArrayView,
+use geopolars_compute::geos::{
+    simplify_line_strings, simplify_multi_line_strings, simplify_multi_polygons, simplify_polygons,
+};
+use geopolars_core::{
+    GeoDimension, LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray,
 };
 use polars::prelude::*;
 use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use crate::geoarrow::storage::{
-    downcast, LineStringOutput, ListView, MultiLineStringOutput, MultiPolygonOutput, PolygonOutput,
-    ValidCoordsView, ValidListView,
-};
 use crate::geoarrow::{describe, Geo, Kind};
+use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
 /// Python returns a point or multipoint as it is, so it never gets here.
 fn already_simple(dtype: &DataType) -> PolarsError {
@@ -70,43 +69,55 @@ fn chunk_simplified(
     } = *kwargs;
     let values = rows.values().as_ref();
     match kind {
-        Kind::LineString => LineStringArrayView {
-            rows: ListView::new(rows),
-            coords: ValidCoordsView::new(values)?,
-        }
-        .simplify::<LineStringOutput>(tolerance, preserve_topology, ignore_per_row_errors)
-        .map(|output| output.0),
+        Kind::LineString => simplify_line_strings(
+            &LineStringArray {
+                rows: List::new(rows),
+                coords: ValidCoords::new(values)?,
+            },
+            tolerance,
+            preserve_topology,
+            ignore_per_row_errors,
+        ),
         Kind::MultiLineString => {
             let lines: &ListArray<i64> = downcast(values, "a list of linestrings")?;
-            MultiLineStringArrayView {
-                rows: ListView::new(rows),
-                lines: ValidListView::new(lines),
-                coords: ValidCoordsView::new(lines.values().as_ref())?,
-            }
-            .simplify::<MultiLineStringOutput>(tolerance, preserve_topology, ignore_per_row_errors)
-            .map(|output| output.0)
+            simplify_multi_line_strings(
+                &MultiLineStringArray {
+                    rows: List::new(rows),
+                    lines: ValidList::new(lines),
+                    coords: ValidCoords::new(lines.values().as_ref())?,
+                },
+                tolerance,
+                preserve_topology,
+                ignore_per_row_errors,
+            )
         }
         Kind::Polygon => {
             let rings: &ListArray<i64> = downcast(values, "a list of rings")?;
-            PolygonArrayView {
-                rows: ListView::new(rows),
-                rings: ValidListView::new(rings),
-                coords: ValidCoordsView::new(rings.values().as_ref())?,
-            }
-            .simplify::<PolygonOutput>(tolerance, preserve_topology, ignore_per_row_errors)
-            .map(|output| output.0)
+            simplify_polygons(
+                &PolygonArray {
+                    rows: List::new(rows),
+                    rings: ValidList::new(rings),
+                    coords: ValidCoords::new(rings.values().as_ref())?,
+                },
+                tolerance,
+                preserve_topology,
+                ignore_per_row_errors,
+            )
         }
         Kind::MultiPolygon => {
             let polygons: &ListArray<i64> = downcast(values, "a list of polygons")?;
             let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
-            MultiPolygonArrayView {
-                rows: ListView::new(rows),
-                polygons: ValidListView::new(polygons),
-                rings: ValidListView::new(rings),
-                coords: ValidCoordsView::new(rings.values().as_ref())?,
-            }
-            .simplify::<MultiPolygonOutput>(tolerance, preserve_topology, ignore_per_row_errors)
-            .map(|output| output.0)
+            simplify_multi_polygons(
+                &MultiPolygonArray {
+                    rows: List::new(rows),
+                    polygons: ValidList::new(polygons),
+                    rings: ValidList::new(rings),
+                    coords: ValidCoords::new(rings.values().as_ref())?,
+                },
+                tolerance,
+                preserve_topology,
+                ignore_per_row_errors,
+            )
         }
         Kind::Point | Kind::MultiPoint => return Err(already_simple(dtype)),
     }

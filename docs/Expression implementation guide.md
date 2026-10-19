@@ -17,30 +17,25 @@ e.g. `#[polars_expr(output_type_func=kernel_output_type_area_planar)]`.
 These should always be named `kernel_output_type_*`.
 Functions that wrap these should be `kernel_output_type_wrapper_*`
 
-## Kernels live in `geoarrow_abstr`
+## Kernels live in `geopolars-compute`
 
 Kernels used to work directly on Polars' Arrow arrays.
-We are moving them to the polars-free `../geoarrow_abstr` crate.
-That way, the 'geo' logic is separated from the Polars plugin layer,
-and it also makes the implementation agnostic of the Polars arrow implementation.
+We are moving them to the `../geopolars-compute` crate.
+They take the views of `../geopolars-core`.
+That way, the 'geo' logic is separated from the Polars plugin layer.
 Write new kernels there.
 Some kernels still live in `src/expr/` until they are migrated.
-See [its README](../geoarrow_abstr/README.md) for how to write a kernel.
+See [its README](../geopolars-compute/README.md) for how to write a kernel.
 
 What remains in the plugin is a thin layer per expression in `src/expr/`.
 
 - It checks the input's dtype with `describe`, and picks a kernel per `Kind`.
-- It wraps each chunk of the storage in the Polars views from `src/geoarrow/storage.rs`
-  (`ListView`, `ValidCoordsView`, ...).
-- It calls the kernel, which builds its output in a Polars newtype like `F64Array`.
+- It wraps each chunk of the storage in the views from `geopolars-core`
+  (`List`, `ValidCoords`, ...).
+- It calls the kernel, which returns a Polars array.
 - It turns kernel errors into a `PolarsError`.
 
 `src/expr/is_ccw.rs` is a simple example.
-
-`storage.rs` also has `AxisArrays`, which has no counterpart yet in `geoarrow_abstr`.
-It considers the validity of each coordinate field separately
-('x' may be valid, but 'y' may not be).
-Use it only to check that something is valid GeoArrow.
 
 ## Implementation tiers
 
@@ -62,7 +57,7 @@ But don't take my word as gospel! Benchmark, benchmark, benchmark!
 
 ### A. Native kernel
 
-This functionality has a dedicated Rust kernel in `geoarrow_abstr`'s `native` module,
+This functionality has a dedicated Rust kernel in `geopolars-compute`'s `native` module,
 working directly on our storage.
 This makes them very fast, but they cannot be subdivided at plan-time.
 These are ideally element-wise if possible.
@@ -74,7 +69,7 @@ putting it into that library's own data type.
 This usually means at least one allocation and copy pass
 for every item processed this way, so prefer A-tier where it is feasible.
 In return we don't have to re-implement (and maintain) well-tested algorithms.
-Kernels forwarding to GEOS live in `geoarrow_abstr`'s `geos` module.
+Kernels forwarding to GEOS live in `geopolars-compute`'s `geos` module.
 
 Examples are:
 

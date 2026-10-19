@@ -1,44 +1,14 @@
-# geoarrow_abstr
+# geopolars-compute
 
-Kernels and bindings to kernels for GeoArrow.
-Instead of supplying an arrow type, this crate defines traits,
-which can be implemented for your specific arrow implementation.
-Kernels use these trait types directly.
+Kernels for GeoArrow.
+They take the views of [`geopolars-core`](../geopolars-core/README.md),
+and return Polars arrays.
 
 The crate holds:
 
-- the views and output traits, at the crate root.
 - the metrics that kernels measure with (`Planar`, `GeodesicMetric`).
-- kernels for simple operations implemented directly on the arrow type behind the `native` feature.
+- kernels for simple operations implemented directly on the arrow type in `native`, behind the `native` feature.
 - kernels forwarding to GEOS in `geos`, behind the `geos` feature.
-
-## Views
-
-The views are zero-allocation references to the underlying storage.
-They are split up by validity, because the GeoArrow spec says
-validity is only ever expressed at the outer level.
-A kernel on a nested type like Polygon therefore never has to check validity below the rows.
-
-The coordinate traits, from 'least valid' to 'most valid', are:
-
-- `GeoArrowCoordsView`, which considers the validity of coordinates.
-  Use this only for Points.
-- `GeoArrowValidCoordsView`, which assumes every coordinate is valid.
-  Use this for nested geometry types like Polygon.
-  **Do not** use this for Points.
-
-The list levels above the coordinates are split the same way:
-
-- `GeoArrowListView`, which considers the validity of lists.
-  Use this for the outer level of a geometry column.
-- `GeoArrowValidListView`, which assumes every list is valid.
-  Use this for the inner levels of a nested geometry (the linestrings of a multilinestring).
-
-Kernels take these held together per geometry type,
-such as `LineStringArrayView` or `PolygonArrayView`.
-They build their output through a trait as well
-(`GeoArrowF64Array`, `GeoArrowBoolArray`, `GeoArrowPolygonOutput`, ...),
-so the implementation decides what array comes out.
 
 ## Writing kernels
 
@@ -83,7 +53,7 @@ How to handle errors depends on where they are raised.
   If `ignore_per_row_errors=false`, which is the default, return the error.
   This gives the user a way to inspect errors if they want.
   If `ignore_per_row_errors=true`, mark the row as missing instead (not as an empty geometry!).
-  The output traits take the rows that failed for this.
+  The `geopolars-core` output functions take the rows that failed for this.
 - An accumulator-like function combines many rows into far fewer results.
   Ask the caller how to handle errors here, with an `IGNORE_ERRORS` const `bool`.
   The default should be to return the error.

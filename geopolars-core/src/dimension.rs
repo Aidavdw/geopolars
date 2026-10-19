@@ -10,6 +10,7 @@
 //! and this extends that framework.
 
 use geo_traits::Dimensions;
+use polars_core::prelude::{DataType, Field};
 
 /// Which coordinate dimensions a coordinate/geometry carries.
 ///
@@ -83,6 +84,36 @@ impl GeoDimension {
                 "xmin", "ymin", "zmin", "mmin", "xmax", "ymax", "zmax", "mmax",
             ],
         }
+    }
+}
+
+/// The polars dtypes of coordinates, geometries and boxes.
+impl GeoDimension {
+    /// The separated-coordinate struct an array of these coordinates is stored as.
+    pub fn coordinates(self) -> DataType {
+        DataType::Struct(
+            self.field_names()
+                .iter()
+                .map(|name| Field::new((*name).into(), DataType::Float64))
+                .collect(),
+        )
+    }
+
+    /// The storage of a geometry that nests its coordinates `nesting` `List` layers deep.
+    pub fn storage(self, nesting: u8) -> DataType {
+        (0..nesting).fold(self.coordinates(), |inner, _| {
+            DataType::List(Box::new(inner))
+        })
+    }
+
+    /// The struct a `geoarrow.box` of this dimension is stored as.
+    pub fn box_storage(self) -> DataType {
+        DataType::Struct(
+            self.box_field_names()
+                .iter()
+                .map(|name| Field::new((*name).into(), DataType::Float64))
+                .collect(),
+        )
     }
 }
 

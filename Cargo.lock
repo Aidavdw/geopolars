@@ -852,16 +852,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "geoarrow_abstr"
-version = "0.1.0"
-dependencies = [
- "geo-traits",
- "geographiclib-rs",
- "geos",
- "proj",
-]
-
-[[package]]
 name = "geographiclib-rs"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -877,7 +867,8 @@ dependencies = [
  "geo",
  "geo-traits",
  "geoarrow-schema",
- "geoarrow_abstr",
+ "geopolars-compute",
+ "geopolars-core",
  "indexmap",
  "polars",
  "polars-arrow",
@@ -890,6 +881,27 @@ dependencies = [
  "serde_json",
  "wkb",
  "wkt",
+]
+
+[[package]]
+name = "geopolars-compute"
+version = "0.1.0"
+dependencies = [
+ "geographiclib-rs",
+ "geopolars-core",
+ "geos",
+ "polars-arrow",
+ "proj",
+]
+
+[[package]]
+name = "geopolars-core"
+version = "0.1.0"
+dependencies = [
+ "geo-traits",
+ "polars-arrow",
+ "polars-buffer",
+ "polars-core",
 ]
 
 [[package]]

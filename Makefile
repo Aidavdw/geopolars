@@ -57,7 +57,7 @@ test-all: test-rust test-python
 ## Rust unit tests. 
 ## Run with --no-default-features  so pyo3's `extension-module` is dropped
 test-rust:
-	cargo test -p geopolars -p geoarrow_abstr --no-default-features
+	cargo test -p geopolars -p geopolars-core -p geopolars-compute --no-default-features
 
 ## Python tests. Delegates to the package Makefile, which builds first.
 test-python:

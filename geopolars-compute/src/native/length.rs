@@ -1,11 +1,11 @@
 //! How long a linestring is, as a [LengthMetric] measures it.
 
+use geopolars_core::{LineString, LineStringArray, MultiLineStringArray};
+use polars_arrow::array::PrimitiveArray;
+
+use super::per_row;
 use super::DistanceMetric;
-use crate::arrays::per_row;
-use crate::{
-    GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeodesicMetric, LineStringArrayView, LineStringView, MultiLineStringArrayView, Planar,
-};
+use crate::{GeodesicMetric, Planar};
 
 /// A [`DistanceMetric`] that can also measure how long a linestring is, segment by segment.
 pub trait LengthMetric: DistanceMetric {}
@@ -19,7 +19,7 @@ impl LengthMetric for GeodesicMetric {}
 #[inline(always)]
 fn line_length<const Z: bool, const IGNORE_NAN: bool, M: LengthMetric>(
     metric: &M,
-    line: &LineStringView<impl GeoArrowValidCoordsView>,
+    line: &LineString,
 ) -> Result<f64, M::Error> {
     let mut vertices = line
         .positions::<Z>()
@@ -38,37 +38,20 @@ fn line_length<const Z: bool, const IGNORE_NAN: bool, M: LengthMetric>(
 }
 
 /// The length of every linestring of a chunk.
-pub fn line_string_lengths<
-    const Z: bool,
-    const IGNORE_NAN: bool,
-    M: LengthMetric,
-    O: GeoArrowF64Array,
->(
+pub fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool, M: LengthMetric>(
     metric: &M,
-    array: &LineStringArrayView<
-        impl GeoArrowListView<Validity = O::Validity>,
-        impl GeoArrowValidCoordsView,
-    >,
-) -> Result<O, M::Error> {
+    array: &LineStringArray,
+) -> Result<PrimitiveArray<f64>, M::Error> {
     per_row(&array.rows, |i| {
         line_length::<Z, IGNORE_NAN, _>(metric, &array.get(i))
     })
 }
 
 /// The length of every multilinestring of a chunk, as the sum of its parts.
-pub fn multi_line_string_lengths<
-    const Z: bool,
-    const IGNORE_NAN: bool,
-    M: LengthMetric,
-    O: GeoArrowF64Array,
->(
+pub fn multi_line_string_lengths<const Z: bool, const IGNORE_NAN: bool, M: LengthMetric>(
     metric: &M,
-    array: &MultiLineStringArrayView<
-        impl GeoArrowListView<Validity = O::Validity>,
-        impl GeoArrowValidListView,
-        impl GeoArrowValidCoordsView,
-    >,
-) -> Result<O, M::Error> {
+    array: &MultiLineStringArray,
+) -> Result<PrimitiveArray<f64>, M::Error> {
     per_row(&array.rows, |i| {
         array
             .get(i)

@@ -71,4 +71,4 @@ In this table:
 [^2]: user chooses method, all of which differ in implementation method.
       Planar: A; geodesic: PROJ + GGL, needs a CRS.
 [^3]: Convex hull only cares around the points, not the actual geometry.
-      See the implementation in `geoarrow_abstr`.
+      See the implementation in `geopolars-compute`.

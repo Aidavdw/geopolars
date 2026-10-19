@@ -15,7 +15,7 @@ use polars_core::prelude::DataType;
 
 use super::coord::dimension_of_storage;
 use super::crs::ExtensionMetadata;
-use super::{GeoDimension, GeoDimensionDtype, Kind};
+use super::{GeoDimension, Kind};
 
 /// A GeoArrow geometry column's type:
 /// which geometry, over which coordinates.

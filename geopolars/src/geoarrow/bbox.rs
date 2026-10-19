@@ -12,7 +12,7 @@ use polars_core::datatypes::extension::{
 use polars_core::prelude::DataType;
 
 use super::crs::ExtensionMetadata;
-use super::{GeoDimension, GeoDimensionDtype};
+use super::GeoDimension;
 
 /// The `ARROW:extension:name` a box is registered under.
 /// The Python side must spell the same name.

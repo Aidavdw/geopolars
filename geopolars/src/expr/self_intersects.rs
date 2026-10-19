@@ -4,7 +4,6 @@
 
 use std::ops::Range;
 
-use geoarrow_abstr::GeoArrowCoordsView;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
 use polars_arrow::datatypes::ArrowDataType;
@@ -14,10 +13,10 @@ use rsgeo::algorithm::sweep::Cross;
 use rsgeo::{Coord, Intersections, Line, LineIntersection, Polygon, PreparedGeometry, Relate};
 
 use super::rings_overlap::{overlap, ring};
-use crate::geoarrow::coord::is_close;
 use crate::geoarrow::geotraits::LineString;
-use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
+use geopolars_core::is_close;
+use geopolars_core::{downcast, Coords};
 
 /// One segment of a linestring, numbered in order along it.
 #[derive(Clone, Copy)]
@@ -127,7 +126,7 @@ fn kernel_output_type_self_intersects(input_fields: &[Field]) -> PolarsResult<Fi
 /// Whether each of the linestrings `rows` intersects itself,
 /// missing where the linestring is, or one of its vertices.
 fn lines(lines: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArray> {
-    let coords = CoordsView::new(lines.values().as_ref())?;
+    let coords = Coords::new(lines.values().as_ref())?;
     Ok(rows
         .map(|i| {
             let (start, end) = lines.offsets().start_end(i);
@@ -149,7 +148,7 @@ fn lines(lines: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArra
 /// Errors on a ring that is not one, as `rings_overlap` does.
 fn polygons(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArray> {
     let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
-    let coords = CoordsView::new(rings.values().as_ref())?;
+    let coords = Coords::new(rings.values().as_ref())?;
     rows.map(|i| {
         if polygons.is_null(i) {
             return Ok(None);

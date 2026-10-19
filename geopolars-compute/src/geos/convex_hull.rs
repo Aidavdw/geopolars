@@ -41,153 +41,134 @@
 
 use std::ops::Range;
 
-use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};
-
-use super::axes;
-use crate::{
-    GeoArrowListView, GeoArrowPolygonOutput, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeoDimension, LineStringArrayView, MultiLineStringArrayView, MultiPointArrayView,
-    MultiPolygonArrayView, OwnedAxes, PolygonArrayView,
+use geopolars_core::output::{polygon_array, OwnedAxes};
+use geopolars_core::{
+    GeoDimension, LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
+    PolygonArray, ValidCoords,
 };
+use geos::{CoordSeq, Geom, Geometry, GeometryTypes};
+use polars_arrow::array::ListArray;
+
+use super::{axes, coord_type};
 
 // Because we don't consider CRS,
 // A geometry crossing the antimeridian is hulled the long way round.
 // We could add a flag that checks if the input crosses it (>180°),
 // and then reproject them back
 
-impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> LineStringArrayView<R, C> {
-    /// The convex hull of every row, forwarded to GEOS.
-    /// GEOS keeps z, but drops m.
-    /// An empty linestring's hull is empty.
-    /// A straight linestring (or one of a single vertex) has a point or a line for a hull,
-    /// so that row is missing.
-    /// If `ignore_per_row_errors=true`, a row GEOS fails on is null,
-    /// otherwise its error is returned.
-    /// If `ccw_outer=true`, the exterior is made to run counter-clockwise
-    /// at a small performance cost. If it is not set, orientation is clockwise,
-    /// as GEOS gives it.
-    pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
-        &self,
-        ignore_per_row_errors: bool,
-        ccw_outer: bool,
-    ) -> geos::GResult<O> {
-        hulls(
-            &self.rows,
-            &self.coords,
-            ignore_per_row_errors,
-            ccw_outer,
-            |vertices, ranges| ranges.push(vertices),
-        )
-    }
+/// The convex hull of every row, forwarded to GEOS.
+/// GEOS keeps z, but drops m.
+/// An empty linestring's hull is empty.
+/// A straight linestring (or one of a single vertex) has a point or a line for a hull,
+/// so that row is missing.
+/// If `ignore_per_row_errors=true`, a row GEOS fails on is null,
+/// otherwise its error is returned.
+/// If `ccw_outer=true`, the exterior is made to run counter-clockwise
+/// at a small performance cost. If it is not set, orientation is clockwise,
+/// as GEOS gives it.
+pub fn line_string_convex_hulls(
+    array: &LineStringArray,
+    ignore_per_row_errors: bool,
+    ccw_outer: bool,
+) -> geos::GResult<ListArray<i64>> {
+    hulls(
+        &array.rows,
+        &array.coords,
+        ignore_per_row_errors,
+        ccw_outer,
+        |vertices, ranges| ranges.push(vertices),
+    )
 }
 
-impl<R: GeoArrowListView, C: GeoArrowValidCoordsView> MultiPointArrayView<R, C> {
-    /// Like [`LineStringArrayView::convex_hulls`], with one hull around all the points.
-    /// One or two points, or points all on one line, give a missing row.
-    pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
-        &self,
-        ignore_per_row_errors: bool,
-        ccw_outer: bool,
-    ) -> geos::GResult<O> {
-        hulls(
-            &self.rows,
-            &self.coords,
-            ignore_per_row_errors,
-            ccw_outer,
-            |vertices, ranges| ranges.push(vertices),
-        )
-    }
+/// Like [`line_string_convex_hulls`], with one hull around all the points.
+/// One or two points, or points all on one line, give a missing row.
+pub fn multi_point_convex_hulls(
+    array: &MultiPointArray,
+    ignore_per_row_errors: bool,
+    ccw_outer: bool,
+) -> geos::GResult<ListArray<i64>> {
+    hulls(
+        &array.rows,
+        &array.coords,
+        ignore_per_row_errors,
+        ccw_outer,
+        |vertices, ranges| ranges.push(vertices),
+    )
 }
 
-impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    MultiLineStringArrayView<R, L, C>
-{
-    /// Like [`LineStringArrayView::convex_hulls`], with one hull of all the parts as a whole.
-    pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
-        &self,
-        ignore_per_row_errors: bool,
-        ccw_outer: bool,
-    ) -> geos::GResult<O> {
-        hulls(
-            &self.rows,
-            &self.coords,
-            ignore_per_row_errors,
-            ccw_outer,
-            |parts, ranges| ranges.extend(parts.map(|j| self.lines.range(j))),
-        )
-    }
+/// Like [`line_string_convex_hulls`], with one hull of all the parts as a whole.
+pub fn multi_line_string_convex_hulls(
+    array: &MultiLineStringArray,
+    ignore_per_row_errors: bool,
+    ccw_outer: bool,
+) -> geos::GResult<ListArray<i64>> {
+    hulls(
+        &array.rows,
+        &array.coords,
+        ignore_per_row_errors,
+        ccw_outer,
+        |parts, ranges| ranges.extend(parts.map(|j| array.lines.range(j))),
+    )
 }
 
-impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    PolygonArrayView<R, L, C>
-{
-    /// Like [`LineStringArrayView::convex_hulls`], hulling only the exterior.
-    /// A polygon with zero area gives a missing row.
-    pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
-        &self,
-        ignore_per_row_errors: bool,
-        ccw_outer: bool,
-    ) -> geos::GResult<O> {
-        hulls(
-            &self.rows,
-            &self.coords,
-            ignore_per_row_errors,
-            ccw_outer,
-            |parts, ranges| {
-                if !parts.is_empty() {
-                    ranges.push(self.rings.range(parts.start));
-                }
-            },
-        )
-    }
+/// Like [`line_string_convex_hulls`], hulling only the exterior.
+/// A polygon with zero area gives a missing row.
+pub fn polygon_convex_hulls(
+    array: &PolygonArray,
+    ignore_per_row_errors: bool,
+    ccw_outer: bool,
+) -> geos::GResult<ListArray<i64>> {
+    hulls(
+        &array.rows,
+        &array.coords,
+        ignore_per_row_errors,
+        ccw_outer,
+        |parts, ranges| {
+            if !parts.is_empty() {
+                ranges.push(array.rings.range(parts.start));
+            }
+        },
+    )
 }
 
-impl<
-        R: GeoArrowListView,
-        P: GeoArrowValidListView,
-        L: GeoArrowValidListView,
-        C: GeoArrowValidCoordsView,
-    > MultiPolygonArrayView<R, P, L, C>
-{
-    /// Like [`LineStringArrayView::convex_hulls`],
-    /// with one hull of the exteriors of all the parts as a whole.
-    /// A multipolygon with zero area gives a missing row.
-    pub fn convex_hulls<O: GeoArrowPolygonOutput<Validity = R::Validity>>(
-        &self,
-        ignore_per_row_errors: bool,
-        ccw_outer: bool,
-    ) -> geos::GResult<O> {
-        hulls(
-            &self.rows,
-            &self.coords,
-            ignore_per_row_errors,
-            ccw_outer,
-            |parts, ranges| {
-                ranges.extend(
-                    parts
-                        .map(|p| self.polygons.range(p))
-                        .filter(|rings| !rings.is_empty())
-                        .map(|rings| self.rings.range(rings.start)),
-                )
-            },
-        )
-    }
+/// Like [`line_string_convex_hulls`],
+/// with one hull of the exteriors of all the parts as a whole.
+/// A multipolygon with zero area gives a missing row.
+pub fn multi_polygon_convex_hulls(
+    array: &MultiPolygonArray,
+    ignore_per_row_errors: bool,
+    ccw_outer: bool,
+) -> geos::GResult<ListArray<i64>> {
+    hulls(
+        &array.rows,
+        &array.coords,
+        ignore_per_row_errors,
+        ccw_outer,
+        |parts, ranges| {
+            ranges.extend(
+                parts
+                    .map(|p| array.polygons.range(p))
+                    .filter(|rings| !rings.is_empty())
+                    .map(|rings| array.rings.range(rings.start)),
+            )
+        },
+    )
 }
 
 /// The convex hull of every one of `rows`.
 /// `coord_ranges` adds the ranges of `coords` to hull for the parts of a row.
-fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
-    rows: &R,
-    coords: &impl GeoArrowValidCoordsView,
+fn hulls(
+    rows: &List,
+    coords: &ValidCoords,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
     coord_ranges: impl Fn(Range<usize>, &mut Vec<Range<usize>>),
-) -> geos::GResult<O> {
+) -> geos::GResult<ListArray<i64>> {
     let hulls = with_const_flags!(
         hulls_with(rows, coords, ignore_per_row_errors, coord_ranges);
         coords.dim().has_z(), rows.is_all_valid(), ccw_outer
     )?;
-    Ok(O::from_buffers(
+    Ok(polygon_array(
         hulls.dim,
         hulls.axes,
         hulls.rings,
@@ -197,8 +178,7 @@ fn hulls<R: GeoArrowListView, O: GeoArrowPolygonOutput<Validity = R::Validity>>(
     ))
 }
 
-/// What [`hulls_with`] builds, for [`GeoArrowPolygonOutput::from_buffers`].
-/// The output's type is left to [`hulls`], so `hulls_with` needs no generics but its flags.
+/// What [`hulls_with`] builds, for [`polygon_array`].
 struct HullBuffers {
     dim: GeoDimension,
     axes: OwnedAxes,
@@ -216,8 +196,8 @@ struct HullBuffers {
 /// GEOS gives the exterior as running clockwise.
 /// You can reverse this by giving `CCW_OUTER=true` for a minimal performance penalty.
 fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
-    rows: &impl GeoArrowListView,
-    coords: &impl GeoArrowValidCoordsView,
+    rows: &List,
+    coords: &ValidCoords,
     ignore_per_row_errors: bool,
     coord_ranges: impl Fn(Range<usize>, &mut Vec<Range<usize>>),
 ) -> geos::GResult<HullBuffers> {
@@ -226,7 +206,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     } else {
         GeoDimension::XY
     };
-    let coord_type = CoordType::from(dim);
+    let coord_type = coord_type(dim);
     let width = dim.field_names().len();
     let (in_x, in_y, in_z, _) = axes(coords);
     let in_z = in_z.unwrap_or_default();

@@ -1,17 +1,18 @@
 //! Whether a geometry runs counter-clockwise, with a polygon's holes clockwise.
 //! See `is_ccw` in Python for the rules.
 
-use geoarrow_abstr::{
-    with_const_flags, LineStringArrayView, MultiLineStringArrayView, MultiPolygonArrayView,
-    PolygonArrayView,
+use geopolars_compute::native::{
+    line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,
 };
+use geopolars_compute::with_const_flags;
+use geopolars_core::{LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray};
 use polars::prelude::*;
 use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use crate::geoarrow::storage::{downcast, BoolArray, ListView, ValidCoordsView, ValidListView};
 use crate::geoarrow::{describe, Kind};
+use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
 /// See python
 #[derive(Debug, Deserialize)]
@@ -35,22 +36,6 @@ fn kernel_output_type_is_ccw(input_fields: &[Field]) -> PolarsResult<Field> {
     }
 }
 
-/// [geoarrow_abstr::native::polygons_are_ccw], into a polars array.
-/// `with_const_flags!` cannot name the output type itself, so it calls this.
-fn polygons_are_ccw<const HOLES_CW: bool>(
-    array: &PolygonArrayView<ListView, ValidListView, ValidCoordsView>,
-) -> BoolArray {
-    geoarrow_abstr::native::polygons_are_ccw::<HOLES_CW, _>(array)
-}
-
-/// [geoarrow_abstr::native::multi_polygons_are_ccw], into a polars array.
-/// `with_const_flags!` cannot name the output type itself, so it calls this.
-fn multi_polygons_are_ccw<const HOLES_CW: bool>(
-    array: &MultiPolygonArrayView<ListView, ValidListView, ValidListView, ValidCoordsView>,
-) -> BoolArray {
-    geoarrow_abstr::native::multi_polygons_are_ccw::<HOLES_CW, _>(array)
-}
-
 /// See `is_ccw`.
 #[polars_expr(output_type_func=kernel_output_type_is_ccw)]
 fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
@@ -62,11 +47,11 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
     let out = match kind {
         Kind::LineString => {
             let chunks = chunks.map(|rows| {
-                let array = LineStringArrayView {
-                    rows: ListView::new(rows),
-                    coords: ValidCoordsView::new(rows.values().as_ref())?,
+                let array = LineStringArray {
+                    rows: List::new(rows),
+                    coords: ValidCoords::new(rows.values().as_ref())?,
                 };
-                let BoolArray(out) = geoarrow_abstr::native::line_strings_are_ccw(&array);
+                let out = line_strings_are_ccw(&array);
                 PolarsResult::Ok(out)
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
@@ -74,12 +59,12 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
         Kind::Polygon => {
             let chunks = chunks.map(|rows| {
                 let rings: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of rings")?;
-                let array = PolygonArrayView {
-                    rows: ListView::new(rows),
-                    rings: ValidListView::new(rings),
-                    coords: ValidCoordsView::new(rings.values().as_ref())?,
+                let array = PolygonArray {
+                    rows: List::new(rows),
+                    rings: ValidList::new(rings),
+                    coords: ValidCoords::new(rings.values().as_ref())?,
                 };
-                let BoolArray(out) = with_const_flags!(polygons_are_ccw(&array); holes_cw);
+                let out = with_const_flags!(polygons_are_ccw(&array); holes_cw);
                 PolarsResult::Ok(out)
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
@@ -87,12 +72,12 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
         Kind::MultiLineString => {
             let chunks = chunks.map(|rows| {
                 let lines = downcast(rows.values().as_ref(), "a list of linestrings")?;
-                let array = MultiLineStringArrayView {
-                    rows: ListView::new(rows),
-                    lines: ValidListView::new(lines),
-                    coords: ValidCoordsView::new(lines.values().as_ref())?,
+                let array = MultiLineStringArray {
+                    rows: List::new(rows),
+                    lines: ValidList::new(lines),
+                    coords: ValidCoords::new(lines.values().as_ref())?,
                 };
-                let BoolArray(out) = geoarrow_abstr::native::multi_line_strings_are_ccw(&array);
+                let out = multi_line_strings_are_ccw(&array);
                 PolarsResult::Ok(out)
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
@@ -103,13 +88,13 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
                     downcast(rows.values().as_ref(), "a list of polygons")?;
                 let rings: &ListArray<i64> =
                     downcast(polygons.values().as_ref(), "a list of rings")?;
-                let array = MultiPolygonArrayView {
-                    rows: ListView::new(rows),
-                    polygons: ValidListView::new(polygons),
-                    rings: ValidListView::new(rings),
-                    coords: ValidCoordsView::new(rings.values().as_ref())?,
+                let array = MultiPolygonArray {
+                    rows: List::new(rows),
+                    polygons: ValidList::new(polygons),
+                    rings: ValidList::new(rings),
+                    coords: ValidCoords::new(rings.values().as_ref())?,
                 };
-                let BoolArray(out) = with_const_flags!(multi_polygons_are_ccw(&array); holes_cw);
+                let out = with_const_flags!(multi_polygons_are_ccw(&array); holes_cw);
                 PolarsResult::Ok(out)
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()

@@ -91,7 +91,8 @@ expr (namespaces) →  geo (functional) →  datatypes.
 ```
 
 On the Rust side, `src/expr/` mirrors `geo/` module by module (`area.rs`, `affine.rs`, `crs.rs`, ...),
-and `src/geoarrow/` is the shared glue: dtypes, dispatch, and reading the Arrow storage in a kernel.
+and `src/geoarrow/` is the shared glue: dtypes and dispatch.
+Reading the Arrow storage in a kernel goes through the views of `geopolars-core`.
 
 ## Type checker
 

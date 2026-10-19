@@ -1,5 +1,5 @@
 [package]
-name = "geoarrow_abstr"
+name = "geopolars-compute"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,9 @@ native = []
 geos = ["dep:geos"]
 
 [dependencies]
-geo-traits = "0.3.0"
+# The views and output arrays the kernels are written against.
+geopolars-core = { path = "../geopolars-core" }
+polars-arrow = { workspace = true }
 # PROJ, to bring coordinates to longitude/latitude for `GeodesicMetric`.
 # geopolars turns on `bundled_proj`; must match the version rsgeo pins.
 proj = { version = "0.31", default-features = false, features = ["bundled_proj"] }

@@ -1,18 +1,17 @@
-//! Whether a linestring is a ring (see [`GeoArrowCoordsShared::is_ring`]).
+//! Whether a linestring is a ring (see [`ValidCoords::is_ring`](geopolars_core::ValidCoords::is_ring)).
 //!
 //! A multilinestring gets a list, one per part.
 
 use std::ops::Range;
 
-use geoarrow_abstr::GeoArrowCoordsShared;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
 use polars_arrow::datatypes::ArrowDataType;
 use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
-use crate::geoarrow::storage::{downcast, CoordsView};
 use crate::geoarrow::{describe, Kind};
+use geopolars_core::{downcast, Coords};
 
 /// For [`is_ring`]:
 /// a `bool` per linestring, or a list of them (one per part) for a multilinestring.
@@ -33,7 +32,7 @@ fn kernel_output_type_is_ring(input_fields: &[Field]) -> PolarsResult<Field> {
 
 /// Whether each of the linestrings `rows` is a ring, missing where the linestring is.
 fn rings(lines: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArray> {
-    let coords = CoordsView::new(lines.values().as_ref())?;
+    let coords = Coords::new(lines.values().as_ref())?;
     Ok(rows
         .map(|i| {
             let (start, end) = lines.offsets().start_end(i);

@@ -3,39 +3,31 @@
 use std::convert::Infallible;
 
 use geographiclib_rs::{PolygonArea, Winding};
+use geopolars_core::{LineString, MultiPolygonArray, Polygon, PolygonArray};
+use polars_arrow::array::PrimitiveArray;
 
-use crate::arrays::per_row;
-use crate::{
-    BaseMetric, GeoArrowF64Array, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
-    GeodesicMetric, LineStringView, MultiPolygonArrayView, Planar, PolygonArrayView, PolygonView,
-    ReprojectError,
-};
+use super::per_row;
+use crate::{BaseMetric, GeodesicMetric, Planar, ReprojectError};
 
 /// How the area a ring encloses is measured
 pub trait AreaMetric: BaseMetric {
     /// Why a ring could not be measured (e.g. a failed reprojection).
     type Error;
     /// The area the closed `ring` encloses, whichever way it winds. Its heights do not count.
-    fn ring_area(
-        &self,
-        ring: &LineStringView<impl GeoArrowValidCoordsView>,
-    ) -> Result<f64, Self::Error>;
+    fn ring_area(&self, ring: &LineString) -> Result<f64, Self::Error>;
 }
 
 impl AreaMetric for Planar {
     type Error = Infallible;
 
-    fn ring_area(
-        &self,
-        ring: &LineStringView<impl GeoArrowValidCoordsView>,
-    ) -> Result<f64, Infallible> {
+    fn ring_area(&self, ring: &LineString) -> Result<f64, Infallible> {
         Ok(twice_signed_area(ring).abs() / 2.0)
     }
 }
 
 /// Twice the area the closed `ring` encloses in x and y, positive when it runs counter-clockwise.
 #[inline(always)]
-pub(super) fn twice_signed_area(ring: &LineStringView<impl GeoArrowValidCoordsView>) -> f64 {
+pub(super) fn twice_signed_area(ring: &LineString) -> f64 {
     // By the shoelace formula, relative to the ring's first vertex,
     // so coordinates far from the origin keep their precision.
     // The repeated closing vertex adds nothing.
@@ -56,10 +48,7 @@ pub(super) fn twice_signed_area(ring: &LineStringView<impl GeoArrowValidCoordsVi
 impl AreaMetric for GeodesicMetric {
     type Error = ReprojectError;
 
-    fn ring_area(
-        &self,
-        ring: &LineStringView<impl GeoArrowValidCoordsView>,
-    ) -> Result<f64, ReprojectError> {
+    fn ring_area(&self, ring: &LineString) -> Result<f64, ReprojectError> {
         // On the ellipsoid, in the CRS's unit squared, like [`between`](GeodesicMetric::between).
         // Based on `geographiclib_rs`.
         let mut area = PolygonArea::new(&self.ellipsoid, Winding::CounterClockwise);
@@ -79,10 +68,7 @@ impl AreaMetric for GeodesicMetric {
 /// The area of `polygon`: its exterior ring, less the holes inside it.
 /// No rings at all is an empty polygon, which encloses nothing.
 #[inline(always)]
-fn polygon_area<M: AreaMetric>(
-    metric: &M,
-    polygon: &PolygonView<impl GeoArrowValidListView, impl GeoArrowValidCoordsView>,
-) -> Result<f64, M::Error> {
+fn polygon_area<M: AreaMetric>(metric: &M, polygon: &Polygon) -> Result<f64, M::Error> {
     let mut rings = polygon.rings();
     let Some(exterior) = rings.next() else {
         return Ok(0.0);
@@ -95,27 +81,18 @@ fn polygon_area<M: AreaMetric>(
 }
 
 /// The area of every polygon of a chunk.
-pub fn polygon_areas<M: AreaMetric, O: GeoArrowF64Array>(
+pub fn polygon_areas<M: AreaMetric>(
     metric: &M,
-    array: &PolygonArrayView<
-        impl GeoArrowListView<Validity = O::Validity>,
-        impl GeoArrowValidListView,
-        impl GeoArrowValidCoordsView,
-    >,
-) -> Result<O, M::Error> {
+    array: &PolygonArray,
+) -> Result<PrimitiveArray<f64>, M::Error> {
     per_row(&array.rows, |i| polygon_area(metric, &array.get(i)))
 }
 
 /// The area of every multipolygon of a chunk, as the sum of its parts.
-pub fn multi_polygon_areas<M: AreaMetric, O: GeoArrowF64Array>(
+pub fn multi_polygon_areas<M: AreaMetric>(
     metric: &M,
-    array: &MultiPolygonArrayView<
-        impl GeoArrowListView<Validity = O::Validity>,
-        impl GeoArrowValidListView,
-        impl GeoArrowValidListView,
-        impl GeoArrowValidCoordsView,
-    >,
-) -> Result<O, M::Error> {
+    array: &MultiPolygonArray,
+) -> Result<PrimitiveArray<f64>, M::Error> {
     per_row(&array.rows, |i| {
         array
             .get(i)

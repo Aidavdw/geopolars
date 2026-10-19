@@ -4,15 +4,16 @@
 
 use std::fmt::Display;
 
-use geoarrow_abstr::native::AreaMetric;
-use geoarrow_abstr::{MultiPolygonArrayView, Planar, PolygonArrayView};
+use geopolars_compute::native::AreaMetric;
+use geopolars_compute::Planar;
+use geopolars_core::{MultiPolygonArray, PolygonArray};
 use polars::prelude::*;
 use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
 
 use super::distance::geodesic_metric;
-use crate::geoarrow::storage::{downcast, F64Array, ListView, ValidCoordsView, ValidListView};
 use crate::geoarrow::{describe, Kind};
+use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
 /// The CRS of a column to measure an area in. Type operation only.
 fn crs_of(field: &Field) -> PolarsResult<String> {
@@ -65,24 +66,24 @@ fn measure(metric: &impl AreaMetric<Error: Display>, geometries: &Series) -> Pol
     };
     let storage = geometries.ext()?.storage();
     let chunks = storage.list()?.downcast_iter().map(|rows| {
-        let F64Array(areas) = if multi {
+        let areas = if multi {
             let polygons: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of polygons")?;
             let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
-            let array = MultiPolygonArrayView {
-                rows: ListView::new(rows),
-                polygons: ValidListView::new(polygons),
-                rings: ValidListView::new(rings),
-                coords: ValidCoordsView::new(rings.values().as_ref())?,
+            let array = MultiPolygonArray {
+                rows: List::new(rows),
+                polygons: ValidList::new(polygons),
+                rings: ValidList::new(rings),
+                coords: ValidCoords::new(rings.values().as_ref())?,
             };
-            geoarrow_abstr::native::multi_polygon_areas(metric, &array)
+            geopolars_compute::native::multi_polygon_areas(metric, &array)
         } else {
             let rings: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of rings")?;
-            let array = PolygonArrayView {
-                rows: ListView::new(rows),
-                rings: ValidListView::new(rings),
-                coords: ValidCoordsView::new(rings.values().as_ref())?,
+            let array = PolygonArray {
+                rows: List::new(rows),
+                rings: ValidList::new(rings),
+                coords: ValidCoords::new(rings.values().as_ref())?,
             };
-            geoarrow_abstr::native::polygon_areas(metric, &array)
+            geopolars_compute::native::polygon_areas(metric, &array)
         }
         .map_err(|e| polars_err!(ComputeError: "{e}"))?;
         PolarsResult::Ok(areas)

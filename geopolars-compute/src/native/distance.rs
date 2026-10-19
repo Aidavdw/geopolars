@@ -6,10 +6,11 @@
 
 use std::convert::Infallible;
 
-use crate::{
-    BaseMetric, GeoArrowCoordsView, GeoArrowF64Array, GeodesicMetric, Planar, PointArrayView,
-    ReprojectError, WithHeight,
-};
+use geopolars_core::output::{f64_array, f64_array_masked};
+use geopolars_core::PointArray;
+use polars_arrow::array::PrimitiveArray;
+
+use crate::{BaseMetric, GeodesicMetric, Planar, ReprojectError, WithHeight};
 
 /// How a segment is measured: on the plane, or along an ellipsoid.
 /// Generic, so every metric and dimension gets a loop of its own.
@@ -85,15 +86,11 @@ impl DistanceMetric for GeodesicMetric {
 /// The distance between the points of `a` and `b`, which are the same length.
 /// On an error, with `STOP_ON_ERROR` it stops and returns it;
 /// without, it marks that row missing and carries on, so it never fails.
-pub fn pairwise<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric, V, O>(
+pub fn pairwise<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
     metric: &M,
-    a: &PointArrayView<V>,
-    b: &PointArrayView<V>,
-) -> Result<O, M::Error>
-where
-    V: GeoArrowCoordsView,
-    O: GeoArrowF64Array<Validity = V::Validity>,
-{
+    a: &PointArray,
+    b: &PointArray,
+) -> Result<PrimitiveArray<f64>, M::Error> {
     debug_assert!(
         a.coords.len() == b.coords.len(),
         "Chunks must be the same size"
@@ -109,7 +106,7 @@ where
     } else {
         pairwise_values::<true, Z, STOP_ON_ERROR, _>(metric, a, b)?
     };
-    Ok(O::from_values_and(
+    Ok(f64_array_masked(
         values,
         a.coords.validity(),
         b.coords.validity(),
@@ -123,8 +120,8 @@ where
 #[inline(always)]
 fn pairwise_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
     metric: &M,
-    a: &PointArrayView<impl GeoArrowCoordsView>,
-    b: &PointArrayView<impl GeoArrowCoordsView>,
+    a: &PointArray,
+    b: &PointArray,
 ) -> Result<(Vec<f64>, Vec<usize>), M::Error>
 where
     M: DistanceMetric,
@@ -159,17 +156,11 @@ where
 /// `one` is prepared (reprojected) once, rather than on every row.
 /// On an error, with `STOP_ON_ERROR` it stops and returns it;
 /// without, it marks that row missing (every row, for `one`) and carries on, so it never fails.
-pub fn against_one<
-    const Z: bool,
-    const STOP_ON_ERROR: bool,
-    M: DistanceMetric,
-    V: GeoArrowCoordsView,
-    O: GeoArrowF64Array<Validity = V::Validity>,
->(
+pub fn against_one<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
     metric: &M,
     one: [f64; 3],
-    many: &PointArrayView<V>,
-) -> Result<O, M::Error> {
+    many: &PointArray,
+) -> Result<PrimitiveArray<f64>, M::Error> {
     // If any of the 'one' is NaN, then everything will become NaN anyway,
     // so we might as well exit early.
     // Missing points stay missing.
@@ -177,7 +168,7 @@ pub fn against_one<
         .iter()
         .any(|axis| axis.is_nan())
     {
-        return Ok(O::from_values(
+        return Ok(f64_array(
             vec![f64::NAN; many.coords.len()],
             many.coords.validity(),
         ));
@@ -187,7 +178,7 @@ pub fn against_one<
         Err(e) if STOP_ON_ERROR => return Err(e),
         Err(_) => {
             let every_row = (0..many.coords.len()).collect::<Vec<_>>();
-            return Ok(O::from_values_and(
+            return Ok(f64_array_masked(
                 vec![0.0; many.coords.len()],
                 None,
                 None,
@@ -201,7 +192,7 @@ pub fn against_one<
     } else {
         against_one_values::<true, Z, STOP_ON_ERROR, _>(metric, one, many)?
     };
-    Ok(O::from_values_and(
+    Ok(f64_array_masked(
         values,
         many.coords.validity(),
         None,
@@ -216,7 +207,7 @@ pub fn against_one<
 fn against_one_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
     metric: &M,
     one: M::Vertex,
-    many: &PointArrayView<impl GeoArrowCoordsView>,
+    many: &PointArray,
 ) -> Result<(Vec<f64>, Vec<usize>), M::Error>
 where
     M: DistanceMetric,

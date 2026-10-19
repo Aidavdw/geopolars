@@ -1,14 +1,14 @@
-//! Points, whatever storage backs them: one coordinate per row.
+//! Points: one coordinate per row.
 
-use crate::{GeoArrowCoordsView, GeoArrowListView, GeoArrowValidCoordsView};
+use crate::{Coords, List, ValidCoords};
 
 /// One point: a single coordinate, which may be missing.
-pub struct PointView<'a, C: GeoArrowCoordsView> {
-    pub(crate) coords: &'a C,
-    pub(crate) index: usize,
+pub struct Point<'a> {
+    pub coords: &'a Coords,
+    pub index: usize,
 }
 
-impl<C: GeoArrowCoordsView> PointView<'_, C> {
+impl Point<'_> {
     /// Its position: x, y, and with `Z` its z (`0.0` without).
     /// With `NULLS`, `None` if it is missing.
     /// Without, it assumes it is there.
@@ -20,29 +20,29 @@ impl<C: GeoArrowCoordsView> PointView<'_, C> {
 
 /// A column of points: one coordinate per row,
 /// with missing rows recorded in the coordinates' own validity.
-pub struct PointArrayView<C: GeoArrowCoordsView> {
-    pub coords: C,
+pub struct PointArray {
+    pub coords: Coords,
 }
 
-impl<C: GeoArrowCoordsView> PointArrayView<C> {
+impl PointArray {
     /// Row `i`.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> PointView<'_, C> {
-        PointView {
+    pub fn get(&self, i: usize) -> Point<'_> {
+        Point {
             coords: &self.coords,
             index: i,
         }
     }
 
     #[inline(always)]
-    pub fn new(coords: C) -> Self {
+    pub fn new(coords: Coords) -> Self {
         Self { coords }
     }
 }
 
 /// A column of multipoints: rows of coordinates.
 /// The points of a multipoint are never missing, only a whole row is.
-pub struct MultiPointArrayView<R: GeoArrowListView, C: GeoArrowValidCoordsView> {
-    pub rows: R,
-    pub coords: C,
+pub struct MultiPointArray {
+    pub rows: List,
+    pub coords: ValidCoords,
 }

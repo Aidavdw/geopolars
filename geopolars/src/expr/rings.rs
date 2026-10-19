@@ -17,8 +17,8 @@ use polars_arrow::bitmap::Bitmap;
 use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
-use crate::geoarrow::storage::downcast;
 use crate::geoarrow::{describe, Geo, Kind};
+use geopolars_core::downcast;
 
 /// The rings to keep of the polygons `rows`, as a part of the result per polygon.
 type Part = fn(&ListArray<i64>, Range<usize>) -> PolarsResult<Box<dyn Array>>;

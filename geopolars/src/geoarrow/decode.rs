@@ -14,7 +14,7 @@ use polars_arrow::offset::Offsets;
 use serde::Deserialize;
 
 use super::crs::{ExtensionMetadata, MetadataKwargs};
-use super::{Geo, GeoDimension, GeoDimensionDtype, Kind};
+use super::{Geo, GeoDimension, Kind};
 
 /// The geometry an encoding is decoded into.
 /// Mirrors what `from_wkb` / `from_wkt` pass on the Python side.

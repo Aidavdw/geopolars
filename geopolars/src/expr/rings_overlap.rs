@@ -11,8 +11,8 @@ use serde::Deserialize;
 
 use super::self_intersects::{same_xy, xy_vertices_validated};
 use crate::geoarrow::geotraits::LineString as GeoLineString;
-use crate::geoarrow::storage::{CoordsView, MIN_RING_VERTICES};
 use crate::geoarrow::{describe, ensure_same_crs, Kind};
+use geopolars_core::{Coords, MIN_RING_VERTICES};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -44,7 +44,7 @@ fn kernel_output_type_rings_overlap(input_fields: &[Field]) -> PolarsResult<Fiel
 /// `None` if one of its vertices is missing, or not finite in x or y.
 /// Errors if it is not a ring.
 pub(crate) fn ring(
-    coords: &CoordsView,
+    coords: &Coords,
     start: usize,
     end: usize,
 ) -> PolarsResult<Option<Polygon<f64>>> {
@@ -63,12 +63,12 @@ pub(crate) fn ring(
 /// One side: its rings and their coordinates, as a single chunk.
 struct Rings<'a> {
     rings: &'a ListArray<i64>,
-    coords: CoordsView<'a>,
+    coords: Coords,
 }
 
 impl<'a> Rings<'a> {
     fn new(rings: &'a ListArray<i64>) -> PolarsResult<Self> {
-        let coords = CoordsView::new(rings.values().as_ref())?;
+        let coords = Coords::new(rings.values().as_ref())?;
         Ok(Self { rings, coords })
     }
 

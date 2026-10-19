@@ -2,25 +2,23 @@
 
 use std::ops::Range;
 
+use geopolars_core::{MultiPolygon, MultiPolygonArray, Polygon, PolygonArray, ValidList};
 use geos::{Geom, Geometry, GeometryTypes};
 
-use super::{axes, coord_seq, Axes, Buffers};
-use crate::{
-    GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView, MultiPolygonArrayView,
-    MultiPolygonView, PolygonArrayView, PolygonView,
-};
+use super::{axes, coord_seq, Axes, Buffers, ToGeos};
 
-impl<L: GeoArrowValidListView, C: GeoArrowValidCoordsView> PolygonView<'_, L, C> {
-    pub fn to_geos(&self) -> geos::GResult<Geometry> {
+impl ToGeos for Polygon<'_> {
+    type Geos = Geometry;
+
+    fn to_geos(&self) -> geos::GResult<Geometry> {
         polygon_to_geos(&axes(self.coords), self.rings, self.parts.clone())
     }
 }
 
-impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    PolygonArrayView<R, L, C>
-{
-    /// One geometry per row; `None` where the row is missing.
-    pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeos for PolygonArray {
+    type Geos = Vec<Option<Geometry>>;
+
+    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
         let axes = axes(&self.coords);
         let mut geometries = Vec::with_capacity(self.rows.len());
         for i in 0..self.rows.len() {
@@ -35,10 +33,10 @@ impl<R: GeoArrowListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
     }
 }
 
-impl<P: GeoArrowValidListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsView>
-    MultiPolygonView<'_, P, L, C>
-{
-    pub fn to_geos(&self) -> geos::GResult<Geometry> {
+impl ToGeos for MultiPolygon<'_> {
+    type Geos = Geometry;
+
+    fn to_geos(&self) -> geos::GResult<Geometry> {
         multi_polygon_to_geos(
             &axes(self.coords),
             self.polygons,
@@ -48,15 +46,10 @@ impl<P: GeoArrowValidListView, L: GeoArrowValidListView, C: GeoArrowValidCoordsV
     }
 }
 
-impl<
-        R: GeoArrowListView,
-        P: GeoArrowValidListView,
-        L: GeoArrowValidListView,
-        C: GeoArrowValidCoordsView,
-    > MultiPolygonArrayView<R, P, L, C>
-{
-    /// One geometry per row; `None` where the row is missing.
-    pub fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeos for MultiPolygonArray {
+    type Geos = Vec<Option<Geometry>>;
+
+    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
         let axes = axes(&self.coords);
         let mut geometries = Vec::with_capacity(self.rows.len());
         for i in 0..self.rows.len() {
@@ -81,7 +74,7 @@ impl<
 #[inline(always)]
 pub(super) fn polygon_to_geos(
     axes: &Axes,
-    rings: &impl GeoArrowValidListView,
+    rings: &ValidList,
     parts: Range<usize>,
 ) -> geos::GResult<Geometry> {
     let mut parts = parts.map(|j| Geometry::create_linear_ring(coord_seq(axes, rings.range(j))?));
@@ -97,8 +90,8 @@ pub(super) fn polygon_to_geos(
 #[inline(always)]
 pub(super) fn multi_polygon_to_geos(
     axes: &Axes,
-    polygons: &impl GeoArrowValidListView,
-    rings: &impl GeoArrowValidListView,
+    polygons: &ValidList,
+    rings: &ValidList,
     parts: Range<usize>,
 ) -> geos::GResult<Geometry> {
     // GEOS takes ownership of the parts, so they can't share a buffer across rows.

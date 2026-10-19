@@ -10,12 +10,11 @@ use geo_traits::{
     MultiPolygonTrait, PointTrait, PolygonTrait, UnimplementedGeometryCollection,
     UnimplementedLine, UnimplementedRect, UnimplementedTriangle,
 };
-use geoarrow_abstr::GeoArrowCoordsShared;
 use polars::prelude::*;
 use polars_arrow::array::{Array, ListArray};
 
-use super::storage::{downcast, CoordsView};
 use super::Kind;
+use geopolars_core::{downcast, Coords};
 
 /// The range of the level below that entry `i` of `list` spans.
 fn range(list: &ListArray<i64>, i: usize) -> (usize, usize) {
@@ -25,7 +24,7 @@ fn range(list: &ListArray<i64>, i: usize) -> (usize, usize) {
 /// Coordinate `i`.
 #[derive(Clone, Copy)]
 pub struct Coord<'a> {
-    coords: &'a CoordsView<'a>,
+    coords: &'a Coords,
     i: usize,
 }
 
@@ -52,7 +51,7 @@ impl CoordTrait for Coord<'_> {
 /// The point at coordinate `i`.
 #[derive(Clone, Copy)]
 pub struct Point<'a> {
-    pub coords: &'a CoordsView<'a>,
+    pub coords: &'a Coords,
     pub i: usize,
     /// Whether NaN `x` and `y` make this the empty point, as GeoArrow spells it.
     /// Only for a point of its own:
@@ -63,7 +62,7 @@ pub struct Point<'a> {
 /// The coordinates `start..end`.
 #[derive(Clone, Copy)]
 pub struct LineString<'a> {
-    pub coords: &'a CoordsView<'a>,
+    pub coords: &'a Coords,
     pub start: usize,
     pub end: usize,
 }
@@ -72,7 +71,7 @@ pub struct LineString<'a> {
 #[derive(Clone, Copy)]
 pub struct Polygon<'a> {
     pub rings: &'a ListArray<i64>,
-    pub coords: &'a CoordsView<'a>,
+    pub coords: &'a Coords,
     pub start: usize,
     pub end: usize,
 }
@@ -80,7 +79,7 @@ pub struct Polygon<'a> {
 /// The points at coordinates `start..end`.
 #[derive(Clone, Copy)]
 pub struct MultiPoint<'a> {
-    pub coords: &'a CoordsView<'a>,
+    pub coords: &'a Coords,
     pub start: usize,
     pub end: usize,
 }
@@ -89,7 +88,7 @@ pub struct MultiPoint<'a> {
 #[derive(Clone, Copy)]
 pub struct MultiLineString<'a> {
     pub lines: &'a ListArray<i64>,
-    pub coords: &'a CoordsView<'a>,
+    pub coords: &'a Coords,
     pub start: usize,
     pub end: usize,
 }
@@ -99,7 +98,7 @@ pub struct MultiLineString<'a> {
 pub struct MultiPolygon<'a> {
     pub polygons: &'a ListArray<i64>,
     pub rings: &'a ListArray<i64>,
-    pub coords: &'a CoordsView<'a>,
+    pub coords: &'a Coords,
     pub start: usize,
     pub end: usize,
 }
@@ -388,7 +387,7 @@ pub fn for_each_geometry(
 ) -> PolarsResult<()> {
     match kind {
         Kind::Point => {
-            let coords = CoordsView::new(chunk)?;
+            let coords = Coords::new(chunk)?;
             rows(chunk, &mut f, |i| {
                 Geometry::Point(Point {
                     coords: &coords,
@@ -399,7 +398,7 @@ pub fn for_each_geometry(
         }
         Kind::LineString | Kind::MultiPoint => {
             let list = downcast::<ListArray<i64>>(chunk, "a list of coordinates")?;
-            let coords = CoordsView::new(list.values().as_ref())?;
+            let coords = Coords::new(list.values().as_ref())?;
             rows(chunk, &mut f, |i| {
                 let (start, end) = range(list, i);
                 let coords = &coords;
@@ -413,7 +412,7 @@ pub fn for_each_geometry(
             let list = downcast::<ListArray<i64>>(chunk, "a list of rings or linestrings")?;
             let lines =
                 downcast::<ListArray<i64>>(list.values().as_ref(), "a list of coordinates")?;
-            let coords = CoordsView::new(lines.values().as_ref())?;
+            let coords = Coords::new(lines.values().as_ref())?;
             rows(chunk, &mut f, |i| {
                 let (start, end) = range(list, i);
                 let coords = &coords;
@@ -438,7 +437,7 @@ pub fn for_each_geometry(
             let polygons = downcast::<ListArray<i64>>(list.values().as_ref(), "a list of rings")?;
             let rings =
                 downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of coordinates")?;
-            let coords = CoordsView::new(rings.values().as_ref())?;
+            let coords = Coords::new(rings.values().as_ref())?;
             rows(chunk, &mut f, |i| {
                 let (start, end) = range(list, i);
                 Geometry::MultiPolygon(MultiPolygon {

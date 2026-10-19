@@ -13,7 +13,7 @@
 use std::mem;
 use std::ops::Range;
 
-use geoarrow_abstr::with_const_flags;
+use geopolars_compute::with_const_flags;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
@@ -27,8 +27,8 @@ use serde::Deserialize;
 
 use super::coords::kernel_output_type_same_geometry;
 use super::self_intersects::vertices_self_intersect;
-use crate::geoarrow::storage::{downcast, same_position, AxisArrays, MIN_RING_VERTICES};
 use crate::geoarrow::{describe, Kind};
+use geopolars_core::{downcast, same_position, AxisArrays, MIN_RING_VERTICES};
 
 /// Where `x` and `y` may lie, as `[xmin, ymin, xmax, ymax]`, ends included.
 type Bounds = [f64; 4];
@@ -68,7 +68,7 @@ impl Default for IsValidKwargs {
 
 /// A chunk's coordinates as stored, nulls and all.
 ///
-/// [`CoordsView`](crate::geoarrow::storage::CoordsView) is for kernels, which can assume
+/// [`Coords`](geopolars_core::Coords) is for kernels, which can assume
 /// valid GeoArrow: nulls only on the struct. This kernel checks that, so it reads the struct's
 /// validity and every axis's own.
 struct RawCoords<'a> {
@@ -135,7 +135,7 @@ impl<'a> RawCoords<'a> {
     }
 
     /// Whether coordinates `i` and `j` lie at almost the same place:
-    /// [`is_close`](crate::geoarrow::coord::is_close) in x, y and z.
+    /// [`is_close`](geopolars_core::is_close) in x, y and z.
     /// m is a measure rather than a position, so it is not compared.
     /// A missing coordinate is close to nothing.
     fn same_place(&self, i: usize, j: usize) -> bool {

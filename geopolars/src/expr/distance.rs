@@ -1,6 +1,6 @@
 //! How far apart points are.
 //! Uses [DistanceMetric] to choose the how to measure distance (Planar/geodesic etc)
-//! Wraps functions from [geoarrow_abstr::native::distance]
+//! Wraps functions from [geopolars_compute::native::distance]
 //!
 
 use std::cell::RefCell;
@@ -8,9 +8,10 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::rc::Rc;
 
-use geoarrow_abstr::native::DistanceMetric;
-use geoarrow_abstr::with_const_flags;
-use geoarrow_abstr::{GeoArrowCoordsView, GeodesicMetric, Planar, PointArrayView};
+use geopolars_compute::native::DistanceMetric;
+use geopolars_compute::with_const_flags;
+use geopolars_compute::{GeodesicMetric, Planar};
+use geopolars_core::PointArray;
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
@@ -20,8 +21,8 @@ use rsgeo::proj::Proj;
 use serde::Deserialize;
 
 use crate::geoarrow::geodetic::GeodeticCrs;
-use crate::geoarrow::storage::{CoordsView, F64Array};
 use crate::geoarrow::{describe, Kind};
+use geopolars_core::Coords;
 
 /// How many CRSes to keep in cache.
 /// If more are used, it will start over.
@@ -152,30 +153,26 @@ fn kernel_output_type_distance(
     ))
 }
 
-/// [geoarrow_abstr::native::pairwise], into a polars array.
-/// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
+/// [geopolars_compute::native::pairwise], into a polars array.
+/// `with_const_flags!` cannot name the metric type itself, so it calls this.
 fn pairwise<const Z: bool>(
     metric: &impl DistanceMetric<Error: Display>,
-    a: &PointArrayView<CoordsView>,
-    b: &PointArrayView<CoordsView>,
+    a: &PointArray,
+    b: &PointArray,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(distances) =
-        geoarrow_abstr::native::pairwise::<Z, true, _, _, F64Array>(metric, a, b)
-            .map_err(|e| polars_err!(ComputeError: "{e}"))?;
-    Ok(distances)
+    geopolars_compute::native::pairwise::<Z, true, _>(metric, a, b)
+        .map_err(|e| polars_err!(ComputeError: "{e}"))
 }
 
-/// [geoarrow_abstr::native::against_one], into a polars array.
-/// `with_const_flags!` cannot name the metric and output types itself, so it calls this.
+/// [geopolars_compute::native::against_one], into a polars array.
+/// `with_const_flags!` cannot name the metric type itself, so it calls this.
 fn against_one<const Z: bool>(
     metric: &impl DistanceMetric<Error: Display>,
     one: [f64; 3],
-    many: &PointArrayView<CoordsView>,
+    many: &PointArray,
 ) -> PolarsResult<PrimitiveArray<f64>> {
-    let F64Array(distances) =
-        geoarrow_abstr::native::against_one::<Z, true, _, _, F64Array>(metric, one, many)
-            .map_err(|e| polars_err!(ComputeError: "{e}"))?;
-    Ok(distances)
+    geopolars_compute::native::against_one::<Z, true, _>(metric, one, many)
+        .map_err(|e| polars_err!(ComputeError: "{e}"))
 }
 
 /// [`against_one`] for every chunk of `many`. Distance goes both ways,
@@ -190,7 +187,7 @@ fn every_against_one<const Z: bool>(
         .downcast_iter()
         .next()
         .expect("a single point is one chunk");
-    let Some(one) = CoordsView::new(one)?.position::<true, Z>(0) else {
+    let Some(one) = Coords::new(one)?.position::<true, Z>(0) else {
         return Ok(many
             .downcast_iter()
             .map(|many| PrimitiveArray::new_null(ArrowDataType::Float64, many.len()))
@@ -198,7 +195,7 @@ fn every_against_one<const Z: bool>(
     };
     many.downcast_iter()
         .map(|many| {
-            let many = PointArrayView::new(CoordsView::new(many)?);
+            let many = PointArray::new(Coords::new(many)?);
             against_one::<Z>(metric, one, &many)
         })
         .collect()
@@ -219,8 +216,8 @@ fn measure(
             a.downcast_iter()
                 .zip(b.downcast_iter())
                 .map(|(a, b)| {
-                    let a = PointArrayView::new(CoordsView::new(a)?);
-                    let b = PointArrayView::new(CoordsView::new(b)?);
+                    let a = PointArray::new(Coords::new(a)?);
+                    let b = PointArray::new(Coords::new(b)?);
                     with_const_flags!(pairwise(metric, &a, &b); z)
                 })
                 .collect::<PolarsResult<Vec<_>>>()?
