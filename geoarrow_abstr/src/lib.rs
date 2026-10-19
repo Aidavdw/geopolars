@@ -41,8 +41,8 @@ mod points;
 mod polygons;
 
 pub use arrays::{
-    GeoArrowF64Array, GeoArrowLineStringOutput, GeoArrowMultiLineStringOutput,
-    GeoArrowMultiPolygonOutput, GeoArrowPolygonOutput, OwnedAxes,
+    GeoArrowBoolArray, GeoArrowBoolListArray, GeoArrowF64Array, GeoArrowLineStringOutput,
+    GeoArrowMultiLineStringOutput, GeoArrowMultiPolygonOutput, GeoArrowPolygonOutput, OwnedAxes,
 };
 pub use coords::{GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowValidCoordsView};
 pub use dimension::GeoDimension;

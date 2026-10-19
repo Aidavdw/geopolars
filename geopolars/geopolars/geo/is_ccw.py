@@ -1,8 +1,4 @@
-"""Whether a geometry runs in the standard orientation:
-counter-clockwise, with a polygon's holes the other way round.
-
-A native kernel (A-tier) takes the sign of each ring's shoelace sum in place.
-"""
+"""Whether a geometry runs counter-clockwise, with a polygon's holes clockwise."""
 
 from __future__ import annotations
 
@@ -27,36 +23,32 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
-def _is_standard_orientation(
-    column: pl.Expr, geometry: GeoArrowType, *, holes_clockwise: bool
-) -> pl.Expr:
+def _is_ccw(column: pl.Expr, geometry: GeoArrowType, *, holes_cw: bool) -> pl.Expr:
     if not isinstance(
         geometry,
         (LineStringType, PolygonType, MultiLineStringType, MultiPolygonType),
     ):
         msg = (
-            "is_standard_orientation expects a linestring, polygon, multilinestring"
+            "is_ccw expects a linestring, polygon, multilinestring"
             f" or multipolygon column, got: {geometry!r}"
         )
         raise TypeError(msg)
     return register_plugin_function(
         plugin_path=LIB,
         args=[column],
-        function_name="is_standard_orientation",
-        kwargs={"holes_clockwise": holes_clockwise},
+        function_name="is_ccw",
+        kwargs={"holes_cw": holes_cw},
         is_elementwise=True,
     )
 
 
-def is_standard_orientation(
-    geometry: IntoExprColumn, *, holes_clockwise: bool = True
-) -> pl.Expr:
-    """Whether a geometry runs in the standard orientation, as GeoParquet and OGC wind it.
+def is_ccw(geometry: IntoExprColumn, *, holes_cw: bool = True) -> pl.Expr:
+    """Whether a geometry runs counter-clockwise.
 
-    To be in the standard orientation,
-    a linestring has to run counter-clockwise.
-    A polygon has to have its exterior counter-clockwise and its holes clockwise,
-    (standard for GeoParquet) or counter-clockwise too with `holes_clockwise=False`.
+    A linestring has to run counter-clockwise.
+    A polygon has to have its exterior counter-clockwise and its holes clockwise.
+    With `holes_cw=False`, its holes have to run counter-clockwise too.
+    The default is how GeoParquet and OGC wind a polygon.
     A multilinestring or multipolygon gives a list instead, one per part.
 
     | in                      | out          |
@@ -67,20 +59,15 @@ def is_standard_orientation(
     | `MultiPolygonXYZM`      | `list[bool]` |
 
     The orientation is the sign of the area the ring encloses in x and y; z and m are ignored.
-    An empty linestring, ring or polygon is always in the standard orientation.
+    An empty linestring, ring or polygon runs either way, so it gives `True`.
     Any other ring that encloses nothing (too few vertices, all on a line,
-    or with a missing vertex) runs neither way, so it is never in the standard orientation.
+    or with a NaN vertex) runs neither way, so it gives `False`.
 
     Whether a line is closed is not checked: an open line is taken as closed back to its start.
     Combine with `is_ring` or `is_valid` to check that too.
 
-    A missing geometry gives a missing result, and so does a polygon with a missing ring.
-
     ```python
-    df.select(geo.is_standard_orientation("parcel"))
+    df.select(geo.is_ccw("parcel"))
     ```
     """
-    return on_geometry(
-        geometry,
-        partial(_is_standard_orientation, holes_clockwise=holes_clockwise),
-    )
+    return on_geometry(geometry, partial(_is_ccw, holes_cw=holes_cw))

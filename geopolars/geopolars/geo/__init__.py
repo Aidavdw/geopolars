@@ -42,9 +42,9 @@ from geopolars.geo.crs import is_geographic, set_crs, to_crs
 from geopolars.geo.distance import distance
 from geopolars.geo.exterior import exterior
 from geopolars.geo.interior import interior
+from geopolars.geo.is_ccw import is_ccw
 from geopolars.geo.is_empty import is_empty
 from geopolars.geo.is_ring import is_ring
-from geopolars.geo.is_standard_orientation import is_standard_orientation
 from geopolars.geo.is_valid import is_valid, null_out_invalid
 from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
@@ -72,10 +72,10 @@ __all__ = [
     "from_wkb",
     "from_wkt",
     "interior",
+    "is_ccw",
     "is_empty",
     "is_geographic",
     "is_ring",
-    "is_standard_orientation",
     "is_valid",
     "length",
     "line_string",

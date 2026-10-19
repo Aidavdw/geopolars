@@ -194,10 +194,10 @@ class ExprGeoNameSpace:
 
         return rings_overlap(self._expr, other, include_touching=include_touching)
 
-    def is_standard_orientation(self, *, holes_clockwise: bool = True) -> pl.Expr:
-        from geopolars.geo.is_standard_orientation import is_standard_orientation
+    def is_ccw(self, *, holes_cw: bool = True) -> pl.Expr:
+        from geopolars.geo.is_ccw import is_ccw
 
-        return is_standard_orientation(self._expr, holes_clockwise=holes_clockwise)
+        return is_ccw(self._expr, holes_cw=holes_cw)
 
     def is_valid(
         self,

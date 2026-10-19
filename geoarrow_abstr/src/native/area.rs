@@ -29,22 +29,28 @@ impl AreaMetric for Planar {
         &self,
         ring: &LineStringView<impl GeoArrowValidCoordsView>,
     ) -> Result<f64, Infallible> {
-        // By the shoelace formula, relative to the ring's first vertex,
-        // so coordinates far from the origin keep their precision.
-        // The repeated closing vertex adds nothing.
-        let mut positions = ring.positions::<false>();
-        let Some([x0, y0, _]) = positions.next() else {
-            return Ok(0.0);
-        };
-        let (mut x_previous, mut y_previous) = (0.0, 0.0);
-        let mut twice_signed = 0.0;
-        for [x, y, _] in positions {
-            let (x, y) = (x - x0, y - y0);
-            twice_signed += x_previous * y - x * y_previous;
-            (x_previous, y_previous) = (x, y);
-        }
-        Ok(twice_signed.abs() / 2.0)
+        Ok(twice_signed_area(ring).abs() / 2.0)
     }
+}
+
+/// Twice the area the closed `ring` encloses in x and y, positive when it runs counter-clockwise.
+#[inline(always)]
+pub(super) fn twice_signed_area(ring: &LineStringView<impl GeoArrowValidCoordsView>) -> f64 {
+    // By the shoelace formula, relative to the ring's first vertex,
+    // so coordinates far from the origin keep their precision.
+    // The repeated closing vertex adds nothing.
+    let mut positions = ring.positions::<false>();
+    let Some([x0, y0, _]) = positions.next() else {
+        return 0.0;
+    };
+    let (mut x_previous, mut y_previous) = (0.0, 0.0);
+    let mut twice_signed = 0.0;
+    for [x, y, _] in positions {
+        let (x, y) = (x - x0, y - y0);
+        twice_signed += x_previous * y - x * y_previous;
+        (x_previous, y_previous) = (x, y);
+    }
+    twice_signed
 }
 
 impl AreaMetric for GeodesicMetric {

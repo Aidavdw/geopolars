@@ -7,11 +7,12 @@ use std::ops::Range;
 use geoarrow_abstr::GeoArrowCoordsView;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
+use polars_arrow::datatypes::ArrowDataType;
+use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 use rsgeo::algorithm::sweep::Cross;
 use rsgeo::{Coord, Intersections, Line, LineIntersection, Polygon, PreparedGeometry, Relate};
 
-use super::is_standard_orientation::per_part;
 use super::rings_overlap::{overlap, ring};
 use crate::geoarrow::coord::is_close;
 use crate::geoarrow::geotraits::LineString;
@@ -167,6 +168,25 @@ fn polygons(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<Boole
         Ok(of_polygon.map(polygon_self_intersects))
     })
     .collect()
+}
+
+/// One list per row of `chunk`, holding `parts` of the parts it points at.
+fn per_part(
+    chunk: &ListArray<i64>,
+    parts: impl FnOnce(&ListArray<i64>, Range<usize>) -> PolarsResult<BooleanArray>,
+) -> PolarsResult<ListArray<i64>> {
+    let values = downcast::<ListArray<i64>>(chunk.values().as_ref(), "a list of parts")?;
+    // Only the parts this chunk points at: it may be a slice of a larger one.
+    let (first, last) = (
+        *chunk.offsets().first() as usize,
+        *chunk.offsets().last() as usize,
+    );
+    Ok(ListArray::<i64>::new(
+        ListArray::<i64>::default_datatype(ArrowDataType::Boolean),
+        Offsets::try_from_lengths(chunk.offsets().lengths())?.into(),
+        parts(values, first..last)?.boxed(),
+        chunk.validity().cloned(),
+    ))
 }
 
 /// See `self_intersects`.
