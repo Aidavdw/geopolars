@@ -32,6 +32,7 @@ See the `Docs` directory for more information about the internals of this plugin
 - [A document that describes what happens when you call an expression, at plan and execution time](./docs/Typical expression flow.md).
   This is accompanied by [a diagram](./docs/expression-flow.dot).
 - [What to consider when implementing new or editing existing expressions](./docs/Expression implementation guide.md)
+- [What to consider when writing kernels, in `geoarrow_abstr`](./geoarrow_abstr/README.md)
 - [An overview of which expression is implemented at which *tier*](./docs/Tier per expression.md)
 
 ## Quickstart

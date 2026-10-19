@@ -1,6 +1,6 @@
-# Making kernels
+# Implementing expressions
 
-These are useful guidelines to follow when making or editing kernels.
+These are useful guidelines to follow when making or editing expressions.
 
 ## Testing
 
@@ -10,25 +10,6 @@ rather than internal implementation details :)
 
 Rust tests can still be necessary if a certain functionality is only reachable from rust directly.
 
-## Validity checking
-
-We check for validity when importing or constructing,
-and every operation is expected to give a valid output.
-Therefore, in a kernel, you can always assume that the input data is valid
-according to the GeoArrow spec.
-Only the outer level is allowed to have nulls, and all other levels
-(including the inner level with the actual coordinate values) should not contain any nulls.
-This means that there is no need to branch on what to do if something is invalid.
-
-## Branching inside a loop
-
-Try to keep branching outside of kernel loops. If you can already do it outside, do it outside.
-If you conditionally need to do something extra (e.g. in the validation loops, also check for overlaps),
-you can move the branching outside of the loop by writing these as generic functions,
-and dispatching to specific versions.
-Something like the `with_const_flags!` macro is very useful here.
-Be careful you don't blow it up with combinatorics though.
-
 ## Naming kernel output types
 
 Polars allows you to pass a function which gets the output dtype of the kernel,
@@ -36,75 +17,36 @@ e.g. `#[polars_expr(output_type_func=kernel_output_type_area_planar)]`.
 These should always be named `kernel_output_type_*`.
 Functions that wrap these should be `kernel_output_type_wrapper_*`
 
-## Fallible functions
+## Kernels live in `geoarrow_abstr`
 
-How you should handle errors depends on where they are raised.
+Kernels used to work directly on Polars' Arrow arrays.
+We are moving them to the polars-free `../geoarrow_abstr` crate.
+That way, the 'geo' logic is separated from the Polars plugin layer,
+and it also makes the implementation agnostic of the Polars arrow implementation.
+Write new kernels there.
+Some kernels still live in `src/expr/` until they are migrated.
+See [its README](../geoarrow_abstr/README.md) for how to write a kernel.
 
-- If it errors in such a way that *all rows* would be invalid, i.e. before looping over the rows,
-then you may raise the error. In this case, it is useful if the user sees the error.
+What remains in the plugin is a thin layer per expression in `src/expr/`.
 
-- if the function errors while evaluating a single row, and it would not affect the other row results
-  the behaviour should switch on a flag `ignore_per_row_errors`.
-  Errors should be an exception case, and we cannot pre-filter for them,
-  so here it is fine to switch on the bool in the hot path, rather than using a const generic branch.
-  If `ignore_per_row_errors=false`, which is the default, you should raise an error.
-  This gives the user a way to inspect errors if they want.
-  If `ignore_per_row_errors=true`, you should instead mark this entry as invalid/missing
-  (not insert an empty object!).
+- It checks the input's dtype with `describe`, and picks a kernel per `Kind`.
+- It wraps each chunk of the storage in the Polars views from `src/geoarrow/storage.rs`
+  (`ListView`, `ValidCoordsView`, ...).
+- It calls the kernel, which builds its output in a Polars newtype like `F64Array`.
+- It turns kernel errors into a `PolarsError`.
 
-- For an accumulator-like function (combining many rows into a far fewer results),
-you should specifically ask the user how to handle this case,
-with a `IGNORE_ERRORS` const bool flag in the kernel. The default case should be to raise the error.
+`src/expr/is_ccw.rs` is a simple example.
 
-## Array abstractions for GeoArrow
-
-In `../geopolars/src/geoarrow/storage.rs`, you will find abstractions over the
-Polars-representation of the GeoArrow data.
-The traits they implement, and `GeoDimension`, live in the polars-free `../geoarrow_abstr` crate.
-These are all 'views', zero-allocation reference types to the underlying storage.
-They are split up based on the GeoArrow spec stating that validity shall always only be expressed
-at the outer level.
-Some functions only run on nested types like Polygon, meaning that we don't need to account for
-validity if we assume that this is valid GeoArrow, which simplifies the code
-(e.g. a valid Polygon cannot have invalid coordinates).
-
-In order from 'least valid' to 'most valid':
-
-- *AxisArrays*, which considers validity of individual components of the coordinates
-  ('x' may be valid, but 'y' may not be).
-  This used to validate that something is correct GeoArrow data only.
-- *CoordsView*, which considers validity of coordinates.
-  Use this only for operations that take Points.
-- *ValidCoordsView*, which ignores the validity of coordinates, assuming all to be valid.
-  Use this for operations that take nested geometry types like Polygon.
-  **Do not** use this for Points.
-
-The list levels above the coordinates are split the same way:
-
-- *ListView*, which considers validity of lists.
-  Use this for the outer level of a geometry column.
-- *ValidListView*, which assumes every list is valid.
-  Use this for the inner levels of a nested geometry (the linestrings of a multilinestring).
-
-Kernels written against these traits live in `../geoarrow_abstr`'s `native` module
-(GEOS-forwarding versions in its `geos` module) (e.g. `line_string_lengths`,
-which takes a `LineStringArray`: the views of a linestring column held together),
-as do the metrics they measure with (`Planar`, `GeodesicMetric`),
-and build their output through `GeoArrowF64Array`.
-
-An important note: **This does not shield you from NaNs!**
-These show up in two ways:
-
-- individual NaN values (e.g. `x = 32.1, y = NaN`)
-- *empty* points ( `x = NaN, y = NaN`) can still show up here to ruin the day.
-
-How you want to handle these is up to the kernel.
+`storage.rs` also has `AxisArrays`, which has no counterpart yet in `geoarrow_abstr`.
+It considers the validity of each coordinate field separately
+('x' may be valid, but 'y' may not be).
+Use it only to check that something is valid GeoArrow.
 
 ## Implementation tiers
 
 Every operation is implemented at one of three tiers:
 
-- **A-tier**: a plugin native Rust kernel.
+- **A-tier**: a native Rust kernel.
 - **B-tier**: a Rust kernel that forwards to an external library.
 - **C-tier**: plain Polars expressions.
 
@@ -120,7 +62,7 @@ But don't take my word as gospel! Benchmark, benchmark, benchmark!
 
 ### A. Native kernel
 
-This functionality has a dedicated Rust kernel that lives in the plugin,
+This functionality has a dedicated Rust kernel in `geoarrow_abstr`'s `native` module,
 working directly on our storage.
 This makes them very fast, but they cannot be subdivided at plan-time.
 These are ideally element-wise if possible.
@@ -132,6 +74,7 @@ putting it into that library's own data type.
 This usually means at least one allocation and copy pass
 for every item processed this way, so prefer A-tier where it is feasible.
 In return we don't have to re-implement (and maintain) well-tested algorithms.
+Kernels forwarding to GEOS live in `geoarrow_abstr`'s `geos` module.
 
 Examples are:
 

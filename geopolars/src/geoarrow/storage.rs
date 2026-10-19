@@ -1,4 +1,5 @@
-//! See the expression implementation guide on Array abstractions for GeoArrow.
+//! Polars-backed implementations of the `geoarrow_abstr` traits.
+//! See the `geoarrow_abstr` README on views.
 
 use geoarrow_abstr::{
     GeoArrowBoolArray, GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowF64Array,
@@ -38,7 +39,7 @@ pub(crate) fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
 /// Use for coordinates that **cannot** include invalid coordinates (columns of Points).
 /// Otherwise, use [CoordsView].
 ///
-/// See the expression implementation guide for more details.
+/// See the `geoarrow_abstr` README on views.
 pub(crate) struct ValidCoordsView<'a> {
     x: &'a [f64],
     y: &'a [f64],
@@ -165,7 +166,7 @@ impl<'a> AxisArrays<'a> {
 /// Use for coordinates that **can** include invalid coordinates (columns of Points).
 /// Otherwise, use [ValidCoordsView].
 ///
-/// See the expression implementation guide for more details.
+/// See the `geoarrow_abstr` README on views.
 pub(crate) struct CoordsView<'a> {
     /// Which coordinates are there.
     validity: Option<&'a Bitmap>,
@@ -246,7 +247,7 @@ impl GeoArrowCoordsShared for CoordsView<'_> {
 /// the inner levels of a nested geometry (the linestrings of a multilinestring).
 /// Otherwise, use [ListView].
 ///
-/// See the expression implementation guide for more details.
+/// See the `geoarrow_abstr` README on views.
 pub(crate) struct ValidListView<'a> {
     offsets: &'a OffsetsBuffer<i64>,
 }
@@ -278,7 +279,7 @@ impl GeoArrowValidListView for ValidListView<'_> {}
 /// the outer level of a geometry column.
 /// Otherwise, use [ValidListView].
 ///
-/// See the expression implementation guide for more details.
+/// See the `geoarrow_abstr` README on views.
 pub(crate) struct ListView<'a> {
     /// Which lists are there.
     validity: Option<&'a Bitmap>,

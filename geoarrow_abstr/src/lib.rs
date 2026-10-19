@@ -3,7 +3,7 @@
 //! Also holds the kernels written against those traits, so they work whatever storage backs them:
 //! [native] ones of our own, and [geos] ones forwarding to GEOS, each behind its feature.
 //!
-//! See the expression implementation guide on Array abstractions for GeoArrow.
+//! See the README.
 
 /// Dispatches runtime `bool` flags into generic implementations,
 /// so that the hot path never branches on them.
