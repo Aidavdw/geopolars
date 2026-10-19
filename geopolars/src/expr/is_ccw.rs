@@ -1,7 +1,5 @@
 //! Whether a geometry runs counter-clockwise, with a polygon's holes clockwise.
 //! See `is_ccw` in Python for the rules.
-//!
-//! A multilinestring or multipolygon gets a list, one per part.
 
 use geoarrow_abstr::{
     with_const_flags, LineStringArrayView, MultiLineStringArrayView, MultiPolygonArrayView,
@@ -12,9 +10,7 @@ use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use crate::geoarrow::storage::{
-    downcast, BoolArray, BoolListArray, ListView, ValidCoordsView, ValidListView,
-};
+use crate::geoarrow::storage::{downcast, BoolArray, ListView, ValidCoordsView, ValidListView};
 use crate::geoarrow::{describe, Kind};
 
 /// See python
@@ -28,17 +24,15 @@ fn unoriented(kind: Kind) -> PolarsError {
     polars_err!(SchemaMismatch: "is_ccw does not accept a `{}` column", kind.name())
 }
 
-/// For [`is_ccw`]:
-/// a `bool` per geometry, or a list of them (one per part) for a multi.
-/// FIXME: this should be a single for multis
+/// For [`is_ccw`]: a `bool` per geometry.
 fn kernel_output_type_is_ccw(input_fields: &[Field]) -> PolarsResult<Field> {
     let field = &input_fields[0];
-    let dtype = match describe(field.dtype())?.kind {
-        Kind::LineString | Kind::Polygon => DataType::Boolean,
-        Kind::MultiLineString | Kind::MultiPolygon => DataType::List(Box::new(DataType::Boolean)),
-        kind @ (Kind::Point | Kind::MultiPoint) => return Err(unoriented(kind)),
-    };
-    Ok(Field::new(field.name().clone(), dtype))
+    match describe(field.dtype())?.kind {
+        Kind::LineString | Kind::Polygon | Kind::MultiLineString | Kind::MultiPolygon => {
+            Ok(Field::new(field.name().clone(), DataType::Boolean))
+        }
+        kind @ (Kind::Point | Kind::MultiPoint) => Err(unoriented(kind)),
+    }
 }
 
 /// [geoarrow_abstr::native::polygons_are_ccw], into a polars array.
@@ -53,7 +47,7 @@ fn polygons_are_ccw<const HOLES_CW: bool>(
 /// `with_const_flags!` cannot name the output type itself, so it calls this.
 fn multi_polygons_are_ccw<const HOLES_CW: bool>(
     array: &MultiPolygonArrayView<ListView, ValidListView, ValidListView, ValidCoordsView>,
-) -> BoolListArray {
+) -> BoolArray {
     geoarrow_abstr::native::multi_polygons_are_ccw::<HOLES_CW, _>(array)
 }
 
@@ -98,10 +92,10 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
                     lines: ValidListView::new(lines),
                     coords: ValidCoordsView::new(lines.values().as_ref())?,
                 };
-                let BoolListArray(out) = geoarrow_abstr::native::multi_line_strings_are_ccw(&array);
+                let BoolArray(out) = geoarrow_abstr::native::multi_line_strings_are_ccw(&array);
                 PolarsResult::Ok(out)
             });
-            ListChunked::try_from_chunk_iter(name, chunks)?.into_series()
+            BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
         Kind::MultiPolygon => {
             let chunks = chunks.map(|rows| {
@@ -115,11 +109,10 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
                     rings: ValidListView::new(rings),
                     coords: ValidCoordsView::new(rings.values().as_ref())?,
                 };
-                let BoolListArray(out) =
-                    with_const_flags!(multi_polygons_are_ccw(&array); holes_cw);
+                let BoolArray(out) = with_const_flags!(multi_polygons_are_ccw(&array); holes_cw);
                 PolarsResult::Ok(out)
             });
-            ListChunked::try_from_chunk_iter(name, chunks)?.into_series()
+            BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
         kind @ (Kind::Point | Kind::MultiPoint) => return Err(unoriented(kind)),
     };

@@ -1,10 +1,10 @@
 //! See the expression implementation guide on Array abstractions for GeoArrow.
 
 use geoarrow_abstr::{
-    GeoArrowBoolArray, GeoArrowBoolListArray, GeoArrowCoordsShared, GeoArrowCoordsView,
-    GeoArrowF64Array, GeoArrowLineStringOutput, GeoArrowListShared, GeoArrowListView,
-    GeoArrowMultiLineStringOutput, GeoArrowMultiPolygonOutput, GeoArrowPolygonOutput,
-    GeoArrowValidCoordsView, GeoArrowValidListView, GeoDimension, OwnedAxes,
+    GeoArrowBoolArray, GeoArrowCoordsShared, GeoArrowCoordsView, GeoArrowF64Array,
+    GeoArrowLineStringOutput, GeoArrowListShared, GeoArrowListView, GeoArrowMultiLineStringOutput,
+    GeoArrowMultiPolygonOutput, GeoArrowPolygonOutput, GeoArrowValidCoordsView,
+    GeoArrowValidListView, GeoDimension, OwnedAxes,
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray, PrimitiveArray, StructArray};
@@ -357,18 +357,6 @@ impl GeoArrowBoolArray for BoolArray {
 
     fn from_values(values: Vec<bool>, validity: Option<&Bitmap>) -> Self {
         Self(BooleanArray::from_slice(values).with_validity(validity.cloned()))
-    }
-}
-
-/// [GeoArrowBoolListArray] for Polars.
-pub(crate) struct BoolListArray(pub(crate) ListArray<i64>);
-
-impl GeoArrowBoolListArray for BoolListArray {
-    type Validity = Bitmap;
-
-    fn from_buffers(values: Vec<bool>, rows: Vec<i64>, validity: Option<&Bitmap>) -> Self {
-        let values = BooleanArray::from_slice(values).boxed();
-        Self(wrap_in_list(values, rows, validity, &[]))
     }
 }
 

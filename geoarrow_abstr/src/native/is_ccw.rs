@@ -4,9 +4,9 @@
 use super::area::twice_signed_area;
 use crate::arrays::per_row_bool;
 use crate::{
-    GeoArrowBoolArray, GeoArrowBoolListArray, GeoArrowListView, GeoArrowValidCoordsView,
-    GeoArrowValidListView, LineStringArrayView, LineStringView, MultiLineStringArrayView,
-    MultiPolygonArrayView, PolygonArrayView, PolygonView,
+    GeoArrowBoolArray, GeoArrowListView, GeoArrowValidCoordsView, GeoArrowValidListView,
+    LineStringArrayView, LineStringView, MultiLineStringArrayView, MultiPolygonArrayView,
+    PolygonArrayView, PolygonView,
 };
 
 /// Whether `ring` runs counter-clockwise, or clockwise if `CW=true`.
@@ -39,26 +39,6 @@ fn polygon_is_ccw<const HOLES_CW: bool>(
     ring_runs::<false>(&exterior) && rings.all(|hole| ring_runs::<HOLES_CW>(&hole))
 }
 
-/// One list per row of a chunk, holding `parts_of(i)` for row `i`.
-/// A missing row gets an empty list.
-#[inline(always)]
-fn per_row_parts<O: GeoArrowBoolListArray, P: Iterator<Item = bool>>(
-    rows: &impl GeoArrowListView<Validity = O::Validity>,
-    parts_of: impl Fn(usize) -> P,
-) -> O {
-    let mut values = Vec::new();
-    let mut offsets = Vec::with_capacity(rows.len() + 1);
-    offsets.push(0);
-    for i in 0..rows.len() {
-        // A missing row's offsets point anywhere, so it is not looked at.
-        if rows.is_valid(i) {
-            values.extend(parts_of(i));
-        }
-        offsets.push(values.len() as i64);
-    }
-    O::from_buffers(values, offsets, rows.validity())
-}
-
 pub fn line_strings_are_ccw<O: GeoArrowBoolArray>(
     array: &LineStringArrayView<
         impl GeoArrowListView<Validity = O::Validity>,
@@ -79,25 +59,26 @@ pub fn polygons_are_ccw<const HOLES_CW: bool, O: GeoArrowBoolArray>(
     per_row_bool(&array.rows, |i| polygon_is_ccw::<HOLES_CW>(&array.get(i)))
 }
 
-/// One per linestring of every multilinestring of a chunk.
-pub fn multi_line_strings_are_ccw<O: GeoArrowBoolListArray>(
+/// Whether every linestring of a multilinestring runs counter-clockwise, for every row of a chunk.
+/// No linestrings at all runs either way.
+pub fn multi_line_strings_are_ccw<O: GeoArrowBoolArray>(
     array: &MultiLineStringArrayView<
         impl GeoArrowListView<Validity = O::Validity>,
         impl GeoArrowValidListView,
         impl GeoArrowValidCoordsView,
     >,
 ) -> O {
-    per_row_parts(&array.rows, |i| {
+    per_row_bool(&array.rows, |i| {
         array
             .get(i)
             .line_strings()
-            .map(|line| ring_runs::<false>(&line))
+            .all(|line| ring_runs::<false>(&line))
     })
 }
 
-/// One per polygon of every multipolygon of a chunk.
-/// See [polygon_is_ccw] for `HOLES_CW`.
-pub fn multi_polygons_are_ccw<const HOLES_CW: bool, O: GeoArrowBoolListArray>(
+/// Whether every polygon of a multipolygon [is CCW](polygon_is_ccw), for every row of a chunk.
+/// No polygons at all runs either way.
+pub fn multi_polygons_are_ccw<const HOLES_CW: bool, O: GeoArrowBoolArray>(
     array: &MultiPolygonArrayView<
         impl GeoArrowListView<Validity = O::Validity>,
         impl GeoArrowValidListView,
@@ -105,10 +86,10 @@ pub fn multi_polygons_are_ccw<const HOLES_CW: bool, O: GeoArrowBoolListArray>(
         impl GeoArrowValidCoordsView,
     >,
 ) -> O {
-    per_row_parts(&array.rows, |i| {
+    per_row_bool(&array.rows, |i| {
         array
             .get(i)
             .polygons()
-            .map(|polygon| polygon_is_ccw::<HOLES_CW>(&polygon))
+            .all(|polygon| polygon_is_ccw::<HOLES_CW>(&polygon))
     })
 }

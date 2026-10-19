@@ -131,24 +131,31 @@ def test_z_and_m_do_not_matter(dimension: Dimension) -> None:
     assert out["polygon"].to_list() == [True, False]
 
 
-def test_a_multilinestring_gives_one_per_part() -> None:
+def test_a_multilinestring_is_ccw_when_every_part_is() -> None:
     storage = pl.Series(
         "multi",
-        [[_CCW, _CW], [], [_CW, _CCW], None],
+        [[_CCW, _CCW], [_CCW, _CW], [], [_CW, _CCW], None],
         dtype=pl.List(_XY_VERTICES),
     )
     df = pl.DataFrame(storage.ext.to(MultiLineStringXY()))
 
     out = df.select(geo.is_ccw("multi"))
 
-    assert out.schema["multi"] == pl.List(pl.Boolean)
-    assert out["multi"].to_list() == [[True, False], [], [False, True], None]
+    assert out.schema["multi"] == pl.Boolean
+    assert out["multi"].to_list() == [True, False, True, False, None]
 
 
-def test_a_multipolygon_gives_one_per_part() -> None:
+def test_a_multipolygon_is_ccw_when_every_part_is() -> None:
     storage = pl.Series(
         "multi",
-        [[[_CCW, _HOLE_CW], [_CW]], [], [[_CW], [_CCW]], None],
+        [
+            [[_CCW, _HOLE_CW], [_CCW]],
+            [[_CCW, _HOLE_CW], [_CW]],
+            [],
+            [[_CW], [_CCW]],
+            [[_CCW, _HOLE_CCW], [_CCW]],
+            None,
+        ],
         dtype=pl.List(_XY_RINGS),
     )
     df = pl.DataFrame(storage.ext.to(MultiPolygonXY()))
@@ -156,35 +163,35 @@ def test_a_multipolygon_gives_one_per_part() -> None:
     out = df.select(geo.is_ccw("multi"))
     every_ccw = df.select(geo.is_ccw("multi", holes_cw=False))
 
-    assert out.schema["multi"] == pl.List(pl.Boolean)
-    assert out["multi"].to_list() == [[True, False], [], [False, True], None]
-    assert every_ccw["multi"].to_list() == [[False, False], [], [False, True], None]
+    assert out.schema["multi"] == pl.Boolean
+    assert out["multi"].to_list() == [True, False, True, False, False, None]
+    assert every_ccw["multi"].to_list() == [False, False, True, False, True, None]
 
 
 def test_a_sliced_multipolygon_reads_only_its_own_parts() -> None:
     storage = pl.Series(
         "multi",
-        [[[_CW]], [[_CCW], [_CW]], [[_CCW, _HOLE_CW]]],
+        [[[_CW]], [[_CCW]], [[_CCW], [_CW]]],
         dtype=pl.List(_XY_RINGS),
     )
     df = pl.DataFrame(storage.ext.to(MultiPolygonXY())).slice(1, 2)
 
     out = df.select(geo.is_ccw("multi"))["multi"].to_list()
 
-    assert out == [[True, False], [True]]
+    assert out == [True, False]
 
 
 def test_a_sliced_multilinestring_reads_only_its_own_parts() -> None:
     storage = pl.Series(
         "multi",
-        [[_CW], [_CCW, _CW], [_CCW]],
+        [[_CW], [_CCW], [_CCW, _CW]],
         dtype=pl.List(_XY_VERTICES),
     )
     df = pl.DataFrame(storage.ext.to(MultiLineStringXY())).slice(1, 2)
 
     out = df.select(geo.is_ccw("multi"))["multi"].to_list()
 
-    assert out == [[True, False], [True]]
+    assert out == [True, False]
 
 
 def test_a_sliced_polygon_column() -> None:

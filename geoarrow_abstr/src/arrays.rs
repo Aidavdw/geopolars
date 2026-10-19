@@ -111,17 +111,6 @@ pub trait GeoArrowBoolArray {
     fn from_values(values: Vec<bool>, validity: Option<&Self::Validity>) -> Self;
 }
 
-/// A list of `bool`s per row, with missing rows recorded in the storage's own validity.
-pub trait GeoArrowBoolListArray {
-    /// How the storage records which rows are there.
-    /// The same as the rows' [`GeoArrowListView::Validity`](crate::GeoArrowListView::Validity).
-    type Validity;
-
-    /// `rows` are offsets into `values`, with one more entry than there are rows.
-    /// A row is missing where `validity` says.
-    fn from_buffers(values: Vec<bool>, rows: Vec<i64>, validity: Option<&Self::Validity>) -> Self;
-}
-
 /// `measure` of every row of a chunk, with the rows' own validity.
 #[cfg(feature = "native")]
 #[inline(always)]
