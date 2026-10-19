@@ -20,8 +20,8 @@ use pyo3_polars::derive::polars_expr;
 use rsgeo::proj::Proj;
 use serde::Deserialize;
 
-use crate::geoarrow::geodetic::GeodeticCrs;
 use crate::geoarrow::{describe, Kind};
+use crate::proj::GeodeticCrs;
 use geopolars_core::Coords;
 
 /// How many CRSes to keep in cache.

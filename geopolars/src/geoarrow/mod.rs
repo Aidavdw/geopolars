@@ -10,7 +10,6 @@ pub mod crs;
 pub mod decode;
 pub mod encoded;
 mod geo;
-pub mod geodetic;
 pub mod geotraits;
 mod kind;
 

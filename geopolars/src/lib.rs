@@ -8,6 +8,7 @@ use pyo3_polars::{PolarsAllocator, PyDataFrame};
 mod expr;
 mod geoarrow;
 mod geoparquet;
+mod proj;
 
 #[global_allocator]
 static ALLOC: PolarsAllocator = PolarsAllocator::new();
@@ -79,7 +80,7 @@ fn longitude_turn(py: Python<'_>, metadata: Option<&str>) -> PyResult<Option<f64
     }
     metadata
         .crs()
-        .and_then(geoarrow::geodetic::longitude_turn)
+        .and_then(proj::longitude_turn)
         .map_err(|e| polars_exception(py, e))
 }
 
@@ -100,9 +101,7 @@ fn crs_bounds(
     }
     metadata
         .crs()
-        .and_then(|crs| {
-            geoarrow::geodetic::crs_bounds(crs, allow_wrapped_longitude, within_area_of_use)
-        })
+        .and_then(|crs| proj::crs_bounds(crs, allow_wrapped_longitude, within_area_of_use))
         .map_err(|e| polars_exception(py, e))
 }
 
@@ -117,7 +116,7 @@ fn is_equal_area(py: Python<'_>, metadata: Option<&str>) -> PyResult<bool> {
     }
     metadata
         .crs()
-        .and_then(geoarrow::geodetic::is_equal_area)
+        .and_then(proj::is_equal_area)
         .map_err(|e| polars_exception(py, e))
 }
 

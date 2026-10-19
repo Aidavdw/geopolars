@@ -1,4 +1,5 @@
-//! The longitude/latitude CRS behind a CRS, and the ellipsoid it lies on.
+//! What PROJ knows about a CRS:
+//! the longitude/latitude CRS behind it and its ellipsoid, its bounds, and whether it is equal-area.
 //!
 //! The `proj` crate only exposes transformations.
 //! So we need to interface directly through `proj-sys`.
