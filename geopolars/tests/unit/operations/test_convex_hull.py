@@ -193,9 +193,10 @@ def test_a_missing_or_empty_linestring() -> None:
 
 def test_a_straight_linestring_gives_a_missing_hull() -> None:
     straight = _line((0, 0), (1, 0), (2, 0))
+    single = _line((1, 1))
     bent = _line((0, 0), (4, 0), (4, 4), (0, 4))
 
-    assert _hulls(_lines(straight, bent)) == [None, [_HULL]]
+    assert _hulls(_lines(straight, single, bent)) == [None, None, [_HULL]]
 
 
 def test_a_multilinestring_gets_one_hull_of_the_whole() -> None:
@@ -238,18 +239,28 @@ def test_a_multipolygon_hull_carries_the_crs() -> None:
     assert out.schema["polygon"] == PolygonXY(crs="EPSG:28992")
 
 
-def test_a_geometry_geos_fails_on_gives_a_missing_hull() -> None:
-    # GEOS cannot build a linestring of one vertex.
-    df = _lines(_line((1, 1)), _line((0, 0), (4, 0), (4, 4), (0, 4)))
-
-    assert _hulls(df) == [None, [_HULL]]
+# GEOS fails on a vertex with just one NaN axis.
+_HALF_NAN = _line((0, 0), (4, 0), (2, float("nan")), (4, 4), (0, 4))
 
 
-def test_stop_on_error_raises_what_geos_fails_on() -> None:
-    df = _lines(_line((1, 1)), _line((0, 0), (4, 0), (4, 4), (0, 4)))
+def test_a_geometry_geos_fails_on_raises_by_default() -> None:
+    df = _lines(_HALF_NAN, _line((0, 0), (4, 0), (4, 4), (0, 4)))
 
-    with pytest.raises(ComputeError, match="point array"):
-        df.select(geo.convex_hull("polygon", stop_on_error=True))
+    with pytest.raises(ComputeError, match="NaN"):
+        df.select(geo.convex_hull("polygon"))
+
+
+def test_ignore_per_row_errors_gives_a_missing_hull() -> None:
+    df = _lines(_HALF_NAN, _line((0, 0), (4, 0), (4, 4), (0, 4)))
+
+    hulls = (
+        df.select(geo.convex_hull("polygon", ignore_per_row_errors=True))
+        .to_series()
+        .ext.storage()
+        .to_list()
+    )
+
+    assert hulls == [None, [_HULL]]
 
 
 def test_the_namespace_matches_the_function() -> None:
@@ -287,8 +298,9 @@ def test_the_namespace_forwards_ccw_outer() -> None:
     )
 
 
-def test_the_namespace_forwards_stop_on_error() -> None:
-    df = _lines(_line((1, 1)))
+def test_the_namespace_forwards_ignore_per_row_errors() -> None:
+    df = _lines(_HALF_NAN)
 
-    with pytest.raises(ComputeError, match="point array"):
-        df.select(pl.col("polygon").geo.convex_hull(stop_on_error=True))
+    assert df.select(
+        pl.col("polygon").geo.convex_hull(ignore_per_row_errors=True)
+    ).equals(df.select(geo.convex_hull("polygon", ignore_per_row_errors=True)))

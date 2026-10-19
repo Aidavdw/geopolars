@@ -54,7 +54,7 @@ fn kernel_output_type_convex_hull(input_fields: &[Field]) -> PolarsResult<Field>
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConvexHullKwargs {
-    stop_on_error: bool,
+    ignore_per_row_errors: bool,
     ccw_outer: bool,
 }
 
@@ -71,12 +71,12 @@ fn chunk_hulls(
             rows: ListView::new(rows),
             coords: ValidCoordsView::new(values)?,
         }
-        .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer),
+        .convex_hulls(kwargs.ignore_per_row_errors, kwargs.ccw_outer),
         Kind::MultiPoint => MultiPointArrayView {
             rows: ListView::new(rows),
             coords: ValidCoordsView::new(values)?,
         }
-        .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer),
+        .convex_hulls(kwargs.ignore_per_row_errors, kwargs.ccw_outer),
         Kind::MultiLineString => {
             let lines: &ListArray<i64> = downcast(values, "a list of linestrings")?;
             MultiLineStringArrayView {
@@ -84,7 +84,7 @@ fn chunk_hulls(
                 lines: ValidListView::new(lines),
                 coords: ValidCoordsView::new(lines.values().as_ref())?,
             }
-            .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer)
+            .convex_hulls(kwargs.ignore_per_row_errors, kwargs.ccw_outer)
         }
         Kind::Polygon => {
             let rings: &ListArray<i64> = downcast(values, "a list of rings")?;
@@ -93,7 +93,7 @@ fn chunk_hulls(
                 rings: ValidListView::new(rings),
                 coords: ValidCoordsView::new(rings.values().as_ref())?,
             }
-            .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer)
+            .convex_hulls(kwargs.ignore_per_row_errors, kwargs.ccw_outer)
         }
         Kind::MultiPolygon => {
             let polygons: &ListArray<i64> = downcast(values, "a list of polygons")?;
@@ -104,7 +104,7 @@ fn chunk_hulls(
                 rings: ValidListView::new(rings),
                 coords: ValidCoordsView::new(rings.values().as_ref())?,
             }
-            .convex_hulls(kwargs.stop_on_error, kwargs.ccw_outer)
+            .convex_hulls(kwargs.ignore_per_row_errors, kwargs.ccw_outer)
         }
         Kind::Point => return Err(encloses_nothing(dtype)),
     }

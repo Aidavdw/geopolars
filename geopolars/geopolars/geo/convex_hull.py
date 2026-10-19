@@ -35,12 +35,16 @@ _ACCEPTED = (
 
 
 def convex_hull(
-    geometry: IntoExprColumn, *, stop_on_error: bool = False, ccw_outer: bool = False
+    geometry: IntoExprColumn,
+    *,
+    ignore_per_row_errors: bool = False,
+    ccw_outer: bool = False,
 ) -> pl.Expr:
     """The smallest convex polygon that contains every vertex of a linestring or polygon,
     with its CRS.
     A multipoint, multilinestring or multipolygon gives a single polygon:
     the hull of the geometry as a whole, not one per part.
+    Only the exterior of a polygon counts, so its holes are ignored.
     An XY or XYM geometry gives a `PolygonXY`, an XYZ or XYZM one a `PolygonXYZ`:
 
     | in                     | out             |
@@ -63,11 +67,11 @@ def convex_hull(
     for longitude/latitude the hull's edges are straight in degrees, not along the globe.
     A geometry crossing the antimeridian is hulled the long way round.
 
-    A geometry GEOS fails on gives a missing polygon too.
-    With `stop_on_error`, GEOS's error is raised instead, failing the query.
+    A geometry GEOS fails on raises GEOS's error, failing the query.
+    With `ignore_per_row_errors=True`, it gives a missing polygon instead.
 
     The exterior runs as GEOS gives it, clockwise.
-    With `ccw_outer`, it runs counter-clockwise instead at a minimal performance cost.
+    With `ccw_outer=True`, it runs counter-clockwise instead at a minimal performance cost.
 
     ```python
     df.select(geo.convex_hull("parcel"))
@@ -85,7 +89,10 @@ def convex_hull(
             plugin_path=LIB,
             args=[column],
             function_name="convex_hull",
-            kwargs={"stop_on_error": stop_on_error, "ccw_outer": ccw_outer},
+            kwargs={
+                "ignore_per_row_errors": ignore_per_row_errors,
+                "ccw_outer": ccw_outer,
+            },
             is_elementwise=True,
         )
 

@@ -19,7 +19,7 @@ the comment says when one without a CRS takes a different tier.
 | `exterior` | - | | - | | A | ring 0 | - | | - | | A | LPP |
 | `interior` | - | | - | | A | rings after the first | - | | - | | A | LPP |
 | `boundary` | - | | C | | C | every ring | - | | C | LPP | C | LPP |
-| `convex_hull` | - | | B | straight line marked missing | B | GEOS; z kept, m dropped | B | single polygon around all | B | single polygon around all | B | single polygon around all |
+| `convex_hull` | - | | B | GEOS [^3], straight=null | B | GEOS [^3] [^1] | B | GEOS [^3] [^1] | B | GEOS [^3] [^1] | B | GEOS[^3] [^1] |
 | `simplify` | C | returns the point | B | GEOS; z kept, m dropped | B | split by `buffer(0)` is a per-row error | C | returns the multipoint | B | | B | |
 | `is_ring` | - | | A | ≥ 4 vertices, ends ≈  x/y/z | - | | - | | A | LPP | - | |
 | `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes fwd `rings_overlap` | - | | B | LPP | B | LPP |
@@ -66,5 +66,9 @@ In this table:
 - SCC = skips the closing coordinate of each ring
 - RGR = uses `rsgeo`'s `relate` to get an intersection matrix
 
+[^1]: GEOS does not support m values (for this operation),
+      so its value is dropped, and an m-less variant is returned.
 [^2]: user chooses method, all of which differ in implementation method.
       Planar: A; geodesic: PROJ + GGL, needs a CRS.
+[^3]: Convex hull only cares around the points, not the actual geometry.
+      See the implementation in `geoarrow_abstr`.
