@@ -10,9 +10,8 @@ use rsgeo::{LineString, Polygon, Relate};
 use serde::Deserialize;
 
 use super::self_intersects::{same_xy, xy_vertices_validated};
-use crate::geoarrow::geotraits::LineString as GeoLineString;
 use crate::geoarrow::{describe, ensure_same_crs, Kind};
-use geopolars_core::{Coords, MIN_RING_VERTICES};
+use geopolars_core::{LineString as GeoLineString, ValidCoords, MIN_RING_VERTICES};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -41,14 +40,17 @@ fn kernel_output_type_rings_overlap(input_fields: &[Field]) -> PolarsResult<Fiel
 }
 
 /// The ring at `start..end` as the polygon it encloses, in x and y.
-/// `None` if one of its vertices is missing, or not finite in x or y.
+/// `None` if one of its vertices is not finite in x or y.
 /// Errors if it is not a ring.
 pub(crate) fn ring(
-    coords: &Coords,
+    coords: &ValidCoords,
     start: usize,
     end: usize,
 ) -> PolarsResult<Option<Polygon<f64>>> {
-    let Some(vertices) = xy_vertices_validated(&GeoLineString { coords, start, end }) else {
+    let Some(vertices) = xy_vertices_validated(&GeoLineString {
+        coords,
+        vertices: start..end,
+    }) else {
         return Ok(None);
     };
     polars_ensure!(
@@ -63,12 +65,12 @@ pub(crate) fn ring(
 /// One side: its rings and their coordinates, as a single chunk.
 struct Rings<'a> {
     rings: &'a ListArray<i64>,
-    coords: Coords,
+    coords: ValidCoords,
 }
 
 impl<'a> Rings<'a> {
     fn new(rings: &'a ListArray<i64>) -> PolarsResult<Self> {
-        let coords = Coords::new(rings.values().as_ref())?;
+        let coords = ValidCoords::new(rings.values().as_ref())?;
         Ok(Self { rings, coords })
     }
 

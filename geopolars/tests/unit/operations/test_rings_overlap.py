@@ -82,14 +82,10 @@ def test_missing_stays_missing() -> None:
     assert _overlap([None, _square(0, 0)], [_square(0, 0), None]) == [None, None]
 
 
-def test_a_missing_or_not_finite_vertex_gives_missing() -> None:
+def test_a_not_finite_vertex_gives_missing() -> None:
     nan, inf = float("nan"), float("inf")
-    broken = [
-        [{"x": 0.0, "y": 0.0}, None, {"x": 1.0, "y": 1.0}, {"x": 0.0, "y": 0.0}],
-        _ring((0, 0), (nan, 0), (1, 1)),
-        _ring((0, 0), (inf, 0), (1, 1)),
-    ]
-    assert _overlap(broken, [_square(0, 0)] * 3) == [None] * 3
+    broken = [_ring((0, 0), (nan, 0), (1, 1)), _ring((0, 0), (inf, 0), (1, 1))]
+    assert _overlap(broken, [_square(0, 0)] * 2) == [None] * 2
 
 
 @pytest.mark.parametrize(

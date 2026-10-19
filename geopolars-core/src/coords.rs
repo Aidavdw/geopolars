@@ -192,6 +192,12 @@ impl Coords {
             .is_none_or(|validity| validity.get_bit(i))
     }
 
+    /// The coordinates, for once it is known which are there.
+    #[inline]
+    pub fn ignoring_validity(&self) -> &ValidCoords {
+        &self.axes
+    }
+
     /// `None` when every coordinate is there.
     #[inline]
     pub fn validity(&self) -> Option<&Bitmap> {

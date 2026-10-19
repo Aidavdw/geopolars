@@ -13,10 +13,9 @@ use rsgeo::algorithm::sweep::Cross;
 use rsgeo::{Coord, Intersections, Line, LineIntersection, Polygon, PreparedGeometry, Relate};
 
 use super::rings_overlap::{overlap, ring};
-use crate::geoarrow::geotraits::LineString;
 use crate::geoarrow::{describe, Kind};
 use geopolars_core::is_close;
-use geopolars_core::{downcast, Coords};
+use geopolars_core::{downcast, LineString, ValidCoords};
 
 /// One segment of a linestring, numbered in order along it.
 #[derive(Clone, Copy)]
@@ -38,17 +37,16 @@ pub(crate) fn same_xy(a: Coord<f64>, b: Coord<f64>) -> bool {
     is_close(a.x, b.x) && is_close(a.y, b.y)
 }
 
+/// The x and y of every vertex of `line`.
+/// `None` if one of them is not finite.
 pub(crate) fn xy_vertices_validated(line: &LineString) -> Option<Vec<Coord<f64>>> {
-    (line.start..line.end)
-        .map(|i| {
-            let (x, y) = line.coords.xy(i)?;
-            (x.is_finite() && y.is_finite()).then_some(Coord { x, y })
-        })
+    line.positions::<false>()
+        .map(|[x, y, _]| (x.is_finite() && y.is_finite()).then_some(Coord { x, y }))
         .collect()
 }
 
 /// Whether `line` crosses or touches itself, in x and y.
-/// `None` if one of its vertices is missing, or not finite in x or y.
+/// `None` if one of its vertices is not finite in x or y.
 /// See [`vertices_self_intersect`].
 pub(crate) fn line_self_intersects(line: &LineString) -> Option<bool> {
     xy_vertices_validated(line).map(|vertices| vertices_self_intersect(&vertices))
@@ -126,14 +124,13 @@ fn kernel_output_type_self_intersects(input_fields: &[Field]) -> PolarsResult<Fi
 /// Whether each of the linestrings `rows` intersects itself,
 /// missing where the linestring is, or one of its vertices.
 fn lines(lines: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArray> {
-    let coords = Coords::new(lines.values().as_ref())?;
+    let coords = ValidCoords::new(lines.values().as_ref())?;
     Ok(rows
         .map(|i| {
             let (start, end) = lines.offsets().start_end(i);
             let line = LineString {
                 coords: &coords,
-                start,
-                end,
+                vertices: start..end,
             };
             lines
                 .is_valid(i)
@@ -148,7 +145,7 @@ fn lines(lines: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArra
 /// Errors on a ring that is not one, as `rings_overlap` does.
 fn polygons(polygons: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArray> {
     let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
-    let coords = Coords::new(rings.values().as_ref())?;
+    let coords = ValidCoords::new(rings.values().as_ref())?;
     rows.map(|i| {
         if polygons.is_null(i) {
             return Ok(None);

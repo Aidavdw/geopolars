@@ -108,20 +108,16 @@ def test_missing_stays_missing() -> None:
     assert _self_intersects(None, _SQUARE) == [None, False]
 
 
-def test_a_missing_or_not_finite_vertex_gives_missing() -> None:
+def test_a_not_finite_vertex_gives_missing() -> None:
     nan, inf = float("nan"), float("inf")
     storage = pl.Series(
         "line",
-        [
-            [{"x": 0.0, "y": 0.0}, None, {"x": 1.0, "y": 1.0}],
-            _line((0, 0), (nan, 1), (1, 1)),
-            _line((0, 0), (inf, 1), (1, 1)),
-        ],
+        [_line((0, 0), (nan, 1), (1, 1)), _line((0, 0), (inf, 1), (1, 1))],
         dtype=_XY_VERTICES,
     )
     df = pl.DataFrame(storage.ext.to(LineStringXY()))
 
-    assert df.select(geo.self_intersects("line"))["line"].to_list() == [None] * 3
+    assert df.select(geo.self_intersects("line"))["line"].to_list() == [None] * 2
 
 
 def test_z_does_not_count() -> None:

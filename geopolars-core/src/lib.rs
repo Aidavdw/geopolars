@@ -5,6 +5,7 @@
 
 mod coords;
 mod dimension;
+mod geotraits;
 mod linestrings;
 mod lists;
 pub mod output;
@@ -18,9 +19,10 @@ pub use coords::{
     is_close, same_position, AxisArrays, Coords, ValidCoords, ABS_TOL, MIN_RING_VERTICES, REL_TOL,
 };
 pub use dimension::GeoDimension;
+pub use geotraits::{Coord, Geometry};
 pub use linestrings::{LineString, LineStringArray, MultiLineString, MultiLineStringArray};
 pub use lists::{List, ValidList};
-pub use points::{MultiPointArray, Point, PointArray};
+pub use points::{MultiPoint, MultiPointArray, Point, PointArray};
 pub use polygons::{MultiPolygon, MultiPolygonArray, Polygon, PolygonArray};
 
 /// Downcast one level of the storage to the array it has to be.

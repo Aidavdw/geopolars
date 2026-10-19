@@ -11,7 +11,7 @@ use pyo3_polars::derive::polars_expr;
 use crate::geoarrow::decode::{target, Builder, DecodeKwargs};
 use crate::geoarrow::describe;
 use crate::geoarrow::encoded::{describe_encoded, Encoded, Encoding};
-use crate::geoarrow::geotraits::for_each_geometry;
+use crate::geoarrow::for_each_geometry;
 
 /// For [`to_wkt`]: WKT carrying the geometry's metadata.
 fn kernel_output_type_to_wkt(input_fields: &[Field]) -> PolarsResult<Field> {

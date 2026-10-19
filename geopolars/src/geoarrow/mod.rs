@@ -10,7 +10,6 @@ pub mod crs;
 pub mod decode;
 pub mod encoded;
 mod geo;
-pub mod geotraits;
 mod kind;
 
 pub use geo::Geo;
@@ -21,7 +20,13 @@ use std::any::Any;
 use std::sync::Arc;
 
 use polars::prelude::*;
+use polars_arrow::array::{Array, ListArray};
 use polars_core::datatypes::extension::{register_extension_type, ExtensionTypeInstance};
+
+use geopolars_core::{
+    downcast, Coords, Geometry, LineStringArray, List, MultiLineStringArray, MultiPointArray,
+    MultiPolygonArray, PointArray, PolygonArray, ValidCoords, ValidList,
+};
 
 use bbox::BoxFactory;
 use crs::ExtensionMetadata;
@@ -103,5 +108,82 @@ pub fn ensure_same_crs(a: &GeoColumn, b: &GeoColumn) -> PolarsResult<()> {
         (true, false) | (false, true) => polars_bail!(
             SchemaMismatch: "only one of the geometries declares a CRS; declare the same one on both"
         ),
+    }
+}
+
+/// Calls `f` with `row(i)` for every row `i` of `chunk`, or `None` where it is null.
+fn rows<'a>(
+    chunk: &dyn Array,
+    f: &mut impl FnMut(Option<Geometry<'a>>) -> PolarsResult<()>,
+    row: impl Fn(usize) -> Geometry<'a>,
+) -> PolarsResult<()> {
+    (0..chunk.len()).try_for_each(|i| f((!chunk.is_null(i)).then(|| row(i))))
+}
+
+/// Calls `f` with every row of `chunk`, a chunk of a `kind` column's storage:
+/// the geometry, or `None` for a null.
+/// For the `wkb` and `wkt` writers, which take geometries through geo-traits.
+pub fn for_each_geometry(
+    chunk: &dyn Array,
+    kind: Kind,
+    mut f: impl FnMut(Option<Geometry<'_>>) -> PolarsResult<()>,
+) -> PolarsResult<()> {
+    match kind {
+        Kind::Point => {
+            let array = PointArray::new(Coords::new(chunk)?);
+            rows(chunk, &mut f, |i| Geometry::Point(array.get(i)))
+        }
+        Kind::LineString => {
+            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of coordinates")?;
+            let array = LineStringArray {
+                rows: List::new(rows_list),
+                coords: ValidCoords::new(rows_list.values().as_ref())?,
+            };
+            rows(chunk, &mut f, |i| Geometry::LineString(array.get(i)))
+        }
+        Kind::MultiPoint => {
+            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of coordinates")?;
+            let array = MultiPointArray {
+                rows: List::new(rows_list),
+                coords: ValidCoords::new(rows_list.values().as_ref())?,
+            };
+            rows(chunk, &mut f, |i| Geometry::MultiPoint(array.get(i)))
+        }
+        Kind::Polygon => {
+            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of rings")?;
+            let rings =
+                downcast::<ListArray<i64>>(rows_list.values().as_ref(), "a list of coordinates")?;
+            let array = PolygonArray {
+                rows: List::new(rows_list),
+                rings: ValidList::new(rings),
+                coords: ValidCoords::new(rings.values().as_ref())?,
+            };
+            rows(chunk, &mut f, |i| Geometry::Polygon(array.get(i)))
+        }
+        Kind::MultiLineString => {
+            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of linestrings")?;
+            let lines =
+                downcast::<ListArray<i64>>(rows_list.values().as_ref(), "a list of coordinates")?;
+            let array = MultiLineStringArray {
+                rows: List::new(rows_list),
+                lines: ValidList::new(lines),
+                coords: ValidCoords::new(lines.values().as_ref())?,
+            };
+            rows(chunk, &mut f, |i| Geometry::MultiLineString(array.get(i)))
+        }
+        Kind::MultiPolygon => {
+            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of polygons")?;
+            let polygons =
+                downcast::<ListArray<i64>>(rows_list.values().as_ref(), "a list of rings")?;
+            let rings =
+                downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of coordinates")?;
+            let array = MultiPolygonArray {
+                rows: List::new(rows_list),
+                polygons: ValidList::new(polygons),
+                rings: ValidList::new(rings),
+                coords: ValidCoords::new(rings.values().as_ref())?,
+            };
+            rows(chunk, &mut f, |i| Geometry::MultiPolygon(array.get(i)))
+        }
     }
 }

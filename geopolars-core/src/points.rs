@@ -1,4 +1,6 @@
-//! Points: one coordinate per row.
+//! Points and multipoints: one coordinate, or a run of them, per row.
+
+use std::ops::Range;
 
 use crate::{Coords, List, ValidCoords};
 
@@ -40,9 +42,26 @@ impl PointArray {
     }
 }
 
+/// One multipoint: a run of coordinates.
+pub struct MultiPoint<'a> {
+    pub coords: &'a ValidCoords,
+    pub vertices: Range<usize>,
+}
+
 /// A column of multipoints: rows of coordinates.
 /// The points of a multipoint are never missing, only a whole row is.
 pub struct MultiPointArray {
     pub rows: List,
     pub coords: ValidCoords,
+}
+
+impl MultiPointArray {
+    /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
+    #[inline(always)]
+    pub fn get(&self, i: usize) -> MultiPoint<'_> {
+        MultiPoint {
+            coords: &self.coords,
+            vertices: self.rows.range(i),
+        }
+    }
 }

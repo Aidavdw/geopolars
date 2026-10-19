@@ -31,6 +31,9 @@ Kernels take these held together per geometry type,
 such as `LineStringArray` or `PolygonArray`.
 They build their output with the functions in `output` (`f64_array`, `polygon_array`, ...).
 
+The single-geometry types (`Point`, `LineString`, ...) implement geo-traits,
+for the `wkb` and `wkt` writers.
+
 `AxisArrays` considers the validity of each coordinate field separately
 ('x' may be valid, but 'y' may not be).
 Use it only to check that something is valid GeoArrow.
