@@ -21,13 +21,17 @@ pub fn simplify_line_strings(
     preserve_topology: bool,
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<LineStringArray> {
-    simplify_via_geos(
+    let geos_geometries = simplify_via_geos(
         array.to_geos_rows(ignore_per_row_errors)?,
         tolerance,
         preserve_topology,
         ignore_per_row_errors,
-    )?
-    .into_line_string_array(array.coords.dim().has_z(), ignore_per_row_errors)
+    )?;
+    if array.coords.dim().has_z() {
+        geos_geometries.into_line_string_array::<true>(ignore_per_row_errors)
+    } else {
+        geos_geometries.into_line_string_array::<false>(ignore_per_row_errors)
+    }
 }
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
@@ -42,13 +46,17 @@ pub fn simplify_multi_line_strings(
     preserve_topology: bool,
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<MultiLineStringArray> {
-    simplify_via_geos(
+    let geos_geometries = simplify_via_geos(
         array.to_geos_rows(ignore_per_row_errors)?,
         tolerance,
         preserve_topology,
         ignore_per_row_errors,
-    )?
-    .into_multi_line_string_array(array.coords.dim().has_z(), ignore_per_row_errors)
+    )?;
+    if array.coords.dim().has_z() {
+        geos_geometries.into_multi_line_string_array::<true>(ignore_per_row_errors)
+    } else {
+        geos_geometries.into_multi_line_string_array::<false>(ignore_per_row_errors)
+    }
 }
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
@@ -75,7 +83,7 @@ pub fn simplify_polygons(
         preserve_topology,
         ignore_per_row_errors,
     )?
-    .into_polygon_array::<false>(array.coords.dim().has_z(), ignore_per_row_errors)
+    .into_polygon_array(array.coords.dim().has_z(), ignore_per_row_errors, false)
 }
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
@@ -93,13 +101,17 @@ pub fn simplify_multi_polygons(
     preserve_topology: bool,
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<MultiPolygonArray> {
-    simplify_via_geos(
+    let geos_geometries = simplify_via_geos(
         array.to_geos_rows(ignore_per_row_errors)?,
         tolerance,
         preserve_topology,
         ignore_per_row_errors,
-    )?
-    .into_multi_polygon_array(array.coords.dim().has_z(), ignore_per_row_errors)
+    )?;
+    if array.coords.dim().has_z() {
+        geos_geometries.into_multi_polygon_array::<true>(ignore_per_row_errors)
+    } else {
+        geos_geometries.into_multi_polygon_array::<false>(ignore_per_row_errors)
+    }
 }
 
 /// Every geometry simplified to within `tolerance`, forwarded to GEOS.

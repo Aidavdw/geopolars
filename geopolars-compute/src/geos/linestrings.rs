@@ -84,23 +84,22 @@ pub(super) fn multi_line_string_to_geos(
 impl GeosGeometries {
     /// Our linestring array of the geometries, one row each.
     /// Every GEOS geometry is freed once it is copied.
-    /// If `has_z=true`, the coordinates keep their z.
+    /// If `Z=true`, the coordinates keep their z.
     /// A geometry that is not a linestring is an error.
     /// If `ignore_per_row_errors=true`, its row is missing instead.
-    pub fn into_line_string_array(
+    pub fn into_line_string_array<const Z: bool>(
         self,
-        has_z: bool,
         ignore_per_row_errors: bool,
     ) -> GeoComputeResult<LineStringArray> {
         let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
-        let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
+        let mut coords = CoordsBuilder::with_capacity(Z, self.size_hint.coords);
         let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
         for geometry in self.geometries {
             let is_valid = match geometry {
                 None => false,
                 Some(line_string) => match line_string.geometry_type()? {
                     GeometryTypes::LineString => {
-                        coords.push::<false>(&line_string)?;
+                        coords.push::<Z, false>(&line_string)?;
                         true
                     }
                     other => wrong_kind("linestring", other, ignore_per_row_errors)?,
@@ -119,13 +118,12 @@ impl GeosGeometries {
     /// GEOS gives a multilinestring of one part as a plain linestring.
     /// So a linestring is read as a single part, or as none if it is empty.
     /// A geometry that is not a linestring or multilinestring fails the same way.
-    pub fn into_multi_line_string_array(
+    pub fn into_multi_line_string_array<const Z: bool>(
         self,
-        has_z: bool,
         ignore_per_row_errors: bool,
     ) -> GeoComputeResult<MultiLineStringArray> {
         let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
-        let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
+        let mut coords = CoordsBuilder::with_capacity(Z, self.size_hint.coords);
         let mut lines = OffsetsBuilder::with_capacity(self.size_hint.parts[0]);
         let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
         for geometry in self.geometries {
@@ -134,13 +132,13 @@ impl GeosGeometries {
                 Some(geometry) => match geometry.geometry_type()? {
                     GeometryTypes::LineString if geometry.is_empty()? => true,
                     GeometryTypes::LineString => {
-                        coords.push::<false>(&geometry)?;
+                        coords.push::<Z, false>(&geometry)?;
                         lines.push(coords.len());
                         true
                     }
                     GeometryTypes::MultiLineString => {
                         for n in 0..geometry.get_num_geometries()? {
-                            coords.push::<false>(&geometry.get_geometry_n(n)?)?;
+                            coords.push::<Z, false>(&geometry.get_geometry_n(n)?)?;
                             lines.push(coords.len());
                         }
                         true

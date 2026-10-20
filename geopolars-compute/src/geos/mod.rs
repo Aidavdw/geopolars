@@ -253,7 +253,9 @@ impl ValidityBuilder {
 struct CoordsBuilder {
     x: Vec<f64>,
     y: Vec<f64>,
-    z: Option<Vec<f64>>,
+    /// Empty (and unallocated) without z.
+    z: Vec<f64>,
+    has_z: bool,
 }
 
 impl CoordsBuilder {
@@ -262,7 +264,8 @@ impl CoordsBuilder {
         Self {
             x: Vec::with_capacity(coords),
             y: Vec::with_capacity(coords),
-            z: has_z.then(|| Vec::with_capacity(coords)),
+            z: Vec::with_capacity(if has_z { coords } else { 0 }),
+            has_z,
         }
     }
 
@@ -271,45 +274,37 @@ impl CoordsBuilder {
     }
 
     /// Appends the coordinates of `geometry`, a linestring or a ring.
+    /// `Z` says whether the coordinates have z, which must match the builder.
     /// If `REVERSED=true`, they are appended in reverse order.
-    fn push<const REVERSED: bool>(&mut self, geometry: &impl Geom) -> GeoComputeResult<()> {
-        let dim = match self.z {
-            Some(_) => GeoDimension::XYZ,
-            None => GeoDimension::XY,
+    fn push<const Z: bool, const REVERSED: bool>(
+        &mut self,
+        geometry: &impl Geom,
+    ) -> GeoComputeResult<()> {
+        debug_assert_eq!(Z, self.has_z, "pushed with the wrong z");
+        let dim = if Z {
+            GeoDimension::XYZ
+        } else {
+            GeoDimension::XY
         };
         let buffer = geometry.get_coord_seq()?.as_buffer(Some(coord_type(dim)))?;
         let width = dim.field_names().len();
-        // Once per linestring or ring, rather than per coordinate.
-        match &mut self.z {
-            Some(z) => {
-                let push = |coord: &[f64]| {
-                    self.x.push(coord[0]);
-                    self.y.push(coord[1]);
-                    z.push(coord[2]);
-                };
-                if REVERSED {
-                    buffer.chunks_exact(width).rev().for_each(push);
-                } else {
-                    buffer.chunks_exact(width).for_each(push);
-                }
+        let push = |coord: &[f64]| {
+            self.x.push(coord[0]);
+            self.y.push(coord[1]);
+            if Z {
+                self.z.push(coord[2]);
             }
-            None => {
-                let push = |coord: &[f64]| {
-                    self.x.push(coord[0]);
-                    self.y.push(coord[1]);
-                };
-                if REVERSED {
-                    buffer.chunks_exact(width).rev().for_each(push);
-                } else {
-                    buffer.chunks_exact(width).for_each(push);
-                }
-            }
+        };
+        if REVERSED {
+            buffer.chunks_exact(width).rev().for_each(push);
+        } else {
+            buffer.chunks_exact(width).for_each(push);
         }
         Ok(())
     }
 
     fn finish(self) -> ValidCoords {
-        ValidCoords::from_axes((self.x, self.y, self.z, None))
+        ValidCoords::from_axes((self.x, self.y, self.has_z.then_some(self.z), None))
     }
 }
 

@@ -169,11 +169,7 @@ fn hulls(
         has_z, rows.is_all_valid()
     )?;
     // GEOS gives the exterior as running clockwise.
-    if ccw_outer {
-        hulls.into_polygon_array::<true>(has_z, ignore_per_row_errors)
-    } else {
-        hulls.into_polygon_array::<false>(has_z, ignore_per_row_errors)
-    }
+    hulls.into_polygon_array(has_z, ignore_per_row_errors, ccw_outer)
 }
 
 /// [`hulls`] as GEOS polygons, with `None` for a missing row.
