@@ -2,12 +2,16 @@
 
 use std::ops::Range;
 
+use geopolars_core::output::SizeHint;
 use geopolars_core::{
-    LineString, LineStringArray, MultiLineString, MultiLineStringArray, ValidList,
+    LineString, LineStringArray, List, MultiLineString, MultiLineStringArray, ValidList,
 };
 use geos::{Geom, Geometry, GeometryTypes};
 
-use super::{axes, coord_seq, Axes, Buffers, ToGeos};
+use super::{
+    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, OffsetsBuilder,
+    ToGeos, ToGeosRows, ValidityBuilder,
+};
 
 impl ToGeos for LineString<'_> {
     type Geos = Geometry;
@@ -17,21 +21,16 @@ impl ToGeos for LineString<'_> {
     }
 }
 
-impl ToGeos for LineStringArray {
-    type Geos = Vec<Option<Geometry>>;
-
-    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeosRows for LineStringArray {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
         let axes = axes(&self.coords);
-        let mut geometries = Vec::with_capacity(self.rows.len());
-        for i in 0..self.rows.len() {
-            // A missing row's offsets point anywhere, so it is not converted.
-            geometries.push(if self.rows.is_valid(i) {
-                Some(line_string_to_geos(&axes, self.rows.range(i))?)
-            } else {
-                None
-            });
-        }
-        Ok(geometries)
+        let size_hint = SizeHint {
+            coords: self.coords.len(),
+            parts: [0, 0],
+        };
+        rows_to_geos(&self.rows, size_hint, ignore_per_row_errors, |parts| {
+            line_string_to_geos(&axes, parts)
+        })
     }
 }
 
@@ -43,25 +42,16 @@ impl ToGeos for MultiLineString<'_> {
     }
 }
 
-impl ToGeos for MultiLineStringArray {
-    type Geos = Vec<Option<Geometry>>;
-
-    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeosRows for MultiLineStringArray {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
         let axes = axes(&self.coords);
-        let mut geometries = Vec::with_capacity(self.rows.len());
-        for i in 0..self.rows.len() {
-            // A missing row's offsets point anywhere, so it is not converted.
-            geometries.push(if self.rows.is_valid(i) {
-                Some(multi_line_string_to_geos(
-                    &axes,
-                    &self.lines,
-                    self.rows.range(i),
-                )?)
-            } else {
-                None
-            });
-        }
-        Ok(geometries)
+        let size_hint = SizeHint {
+            coords: self.coords.len(),
+            parts: [self.lines.len(), 0],
+        };
+        rows_to_geos(&self.rows, size_hint, ignore_per_row_errors, |parts| {
+            multi_line_string_to_geos(&axes, &self.lines, parts)
+        })
     }
 }
 
@@ -87,47 +77,80 @@ pub(super) fn multi_line_string_to_geos(
     Geometry::create_multiline_string(line_strings)
 }
 
-/// Appends the coordinates of a GEOS linestring.
-/// Their list is left open for the caller to close.
-/// Gives `false` for any other kind of geometry.
-/// Nothing is appended then.
-#[inline(always)]
-pub(super) fn line_string_from_geos(
-    buffers: &mut Buffers,
-    geometry: &impl Geom,
-) -> geos::GResult<bool> {
-    if geometry.geometry_type()? != GeometryTypes::LineString {
-        return Ok(false);
+impl GeosGeometries {
+    /// Our linestring array of the geometries, one row each.
+    /// Every GEOS geometry is freed once it is copied.
+    /// If `has_z=true`, the coordinates keep their z.
+    /// A geometry that is not a linestring is an error.
+    /// If `ignore_per_row_errors=true`, its row is missing instead.
+    pub fn into_line_string_array(
+        self,
+        has_z: bool,
+        ignore_per_row_errors: bool,
+    ) -> geos::GResult<LineStringArray> {
+        let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
+        let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
+        let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
+        for geometry in self.geometries {
+            let is_valid = match geometry {
+                None => false,
+                Some(line_string) => match line_string.geometry_type()? {
+                    GeometryTypes::LineString => {
+                        coords.push(&line_string)?;
+                        true
+                    }
+                    other => wrong_kind("linestring", other, ignore_per_row_errors)?,
+                },
+            };
+            validity.push(is_valid);
+            rows.push(coords.len());
+        }
+        Ok(LineStringArray {
+            rows: List::from_offsets(rows.finish(), validity.finish()),
+            coords: coords.finish(),
+        })
     }
-    buffers.push_coords(geometry)?;
-    Ok(true)
-}
 
-/// Appends the parts of a GEOS multilinestring, each closed at level 0.
-/// The multilinestring itself is left open for the caller to close.
-/// GEOS gives a multilinestring of one part as a plain linestring.
-/// So a linestring is read as a single part.
-/// An empty geometry has no parts.
-/// Gives `false` for any other kind of geometry.
-/// Nothing is appended then.
-#[inline(always)]
-pub(super) fn multi_line_string_from_geos(
-    buffers: &mut Buffers,
-    geometry: &impl Geom,
-) -> geos::GResult<bool> {
-    match geometry.geometry_type()? {
-        GeometryTypes::LineString if geometry.is_empty()? => {}
-        GeometryTypes::LineString => {
-            buffers.push_coords(geometry)?;
-            buffers.close(0);
+    /// See [`GeosGeometries::into_line_string_array`].
+    /// GEOS gives a multilinestring of one part as a plain linestring.
+    /// So a linestring is read as a single part, or as none if it is empty.
+    /// A geometry that is not a linestring or multilinestring fails the same way.
+    pub fn into_multi_line_string_array(
+        self,
+        has_z: bool,
+        ignore_per_row_errors: bool,
+    ) -> geos::GResult<MultiLineStringArray> {
+        let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
+        let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
+        let mut lines = OffsetsBuilder::with_capacity(self.size_hint.parts[0]);
+        let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
+        for geometry in self.geometries {
+            let is_valid = match geometry {
+                None => false,
+                Some(geometry) => match geometry.geometry_type()? {
+                    GeometryTypes::LineString if geometry.is_empty()? => true,
+                    GeometryTypes::LineString => {
+                        coords.push(&geometry)?;
+                        lines.push(coords.len());
+                        true
+                    }
+                    GeometryTypes::MultiLineString => {
+                        for n in 0..geometry.get_num_geometries()? {
+                            coords.push(&geometry.get_geometry_n(n)?)?;
+                            lines.push(coords.len());
+                        }
+                        true
+                    }
+                    other => wrong_kind("multilinestring", other, ignore_per_row_errors)?,
+                },
+            };
+            validity.push(is_valid);
+            rows.push(lines.len());
         }
-        GeometryTypes::MultiLineString => {
-            for n in 0..geometry.get_num_geometries()? {
-                buffers.push_coords(&geometry.get_geometry_n(n)?)?;
-                buffers.close(0);
-            }
-        }
-        _ => return Ok(false),
+        Ok(MultiLineStringArray {
+            rows: List::from_offsets(rows.finish(), validity.finish()),
+            lines: ValidList::from_offsets(lines.finish()),
+            coords: coords.finish(),
+        })
     }
-    Ok(true)
 }

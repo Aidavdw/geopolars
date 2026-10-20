@@ -3,14 +3,13 @@
 use std::ops::Range;
 
 use geopolars_core::output::SizeHint;
-use geopolars_core::{
-    List, MultiPolygon, MultiPolygonArray, Polygon, PolygonArray, ValidCoords, ValidList,
-};
-use geos::{ConstGeometry, Geom, Geometry, GeometryTypes};
-use polars_arrow::bitmap::{Bitmap, MutableBitmap};
-use polars_arrow::offset::Offsets;
+use geopolars_core::{List, MultiPolygon, MultiPolygonArray, Polygon, PolygonArray, ValidList};
+use geos::{Geom, Geometry, GeometryTypes};
 
-use super::{append_coords, axes, coord_seq, Axes, Buffers, ToGeos};
+use super::{
+    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, OffsetsBuilder,
+    ToGeos, ToGeosRows, ValidityBuilder,
+};
 
 impl ToGeos for Polygon<'_> {
     type Geos = Geometry;
@@ -20,21 +19,16 @@ impl ToGeos for Polygon<'_> {
     }
 }
 
-impl ToGeos for PolygonArray {
-    type Geos = Vec<Option<Geometry>>;
-
-    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeosRows for PolygonArray {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
         let axes = axes(&self.coords);
-        let mut geometries = Vec::with_capacity(self.rows.len());
-        for i in 0..self.rows.len() {
-            // A missing row's offsets point anywhere, so it is not converted.
-            geometries.push(if self.rows.is_valid(i) {
-                Some(polygon_to_geos(&axes, &self.rings, self.rows.range(i))?)
-            } else {
-                None
-            });
-        }
-        Ok(geometries)
+        let size_hint = SizeHint {
+            coords: self.coords.len(),
+            parts: [self.rings.len(), 0],
+        };
+        rows_to_geos(&self.rows, size_hint, ignore_per_row_errors, |parts| {
+            polygon_to_geos(&axes, &self.rings, parts)
+        })
     }
 }
 
@@ -51,26 +45,16 @@ impl ToGeos for MultiPolygon<'_> {
     }
 }
 
-impl ToGeos for MultiPolygonArray {
-    type Geos = Vec<Option<Geometry>>;
-
-    fn to_geos(&self) -> geos::GResult<Vec<Option<Geometry>>> {
+impl ToGeosRows for MultiPolygonArray {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
         let axes = axes(&self.coords);
-        let mut geometries = Vec::with_capacity(self.rows.len());
-        for i in 0..self.rows.len() {
-            // A missing row's offsets point anywhere, so it is not converted.
-            geometries.push(if self.rows.is_valid(i) {
-                Some(multi_polygon_to_geos(
-                    &axes,
-                    &self.polygons,
-                    &self.rings,
-                    self.rows.range(i),
-                )?)
-            } else {
-                None
-            });
-        }
-        Ok(geometries)
+        let size_hint = SizeHint {
+            coords: self.coords.len(),
+            parts: [self.rings.len(), self.polygons.len()],
+        };
+        rows_to_geos(&self.rows, size_hint, ignore_per_row_errors, |parts| {
+            multi_polygon_to_geos(&axes, &self.polygons, &self.rings, parts)
+        })
     }
 }
 
@@ -107,163 +91,107 @@ pub(super) fn multi_polygon_to_geos(
     Geometry::create_multipolygon(geometries)
 }
 
-/// GEOS polygons, one per row, for [`polygons_from_geos`].
-pub struct GeosPolygons {
-    /// `None` gives a missing row.
-    pub geometries: Vec<Option<Geometry>>,
-    pub size_hint: SizeHint<1>,
-}
-
-impl GeosPolygons {
-    /// The exact size hint of `geometries`, counted through GEOS.
-    /// A geometry that is not a polygon is skipped.
-    pub fn size_hint(geometries: &[Option<Geometry>]) -> geos::GResult<SizeHint<1>> {
-        let mut size_hint = SizeHint {
-            coords: 0,
-            parts: [0],
-        };
-        for geometry in geometries.iter().flatten() {
-            // GEOS gives an empty polygon an empty exterior, which we don't store.
-            if geometry.geometry_type()? == GeometryTypes::Polygon && !geometry.is_empty()? {
-                size_hint.coords += geometry.get_num_coordinates()?;
-                // rings
-                size_hint.parts[0] += 1 + geometry.get_num_interior_rings()?;
-            }
-        }
-        Ok(size_hint)
-    }
-}
-
-/// Our polygon array of `polygons`, one row each.
-/// Every GEOS polygon is freed once it is copied.
-/// If `has_z=true`, the coordinates keep their z.
-/// Errors for a geometry that is not a polygon.
-pub fn polygons_from_geos(polygons: GeosPolygons, has_z: bool) -> geos::GResult<PolygonArray> {
-    let GeosPolygons {
-        geometries,
-        size_hint,
-    } = polygons;
-
-    let len = geometries.len();
-    let mut x = Vec::with_capacity(size_hint.coords);
-    let mut y = Vec::with_capacity(size_hint.coords);
-    let mut z = has_z.then(|| Vec::with_capacity(size_hint.coords));
-    let mut rings = Vec::with_capacity(size_hint.parts[0] + 1);
-    rings.push(0);
-    let mut rows = Vec::with_capacity(len + 1);
-    rows.push(0);
-    // Only built once a row is missing.
-    let mut validity: Option<MutableBitmap> = None;
-    for (i, geometry) in geometries.into_iter().enumerate() {
-        match geometry {
-            Some(polygon) => {
-                if polygon.geometry_type()? != GeometryTypes::Polygon {
-                    return Err(geos::Error::ConversionError(format!(
-                        "expected a polygon, got a {:?}",
-                        polygon.geometry_type()?
-                    )));
-                }
-                // GEOS gives an empty polygon an empty exterior, which we don't store.
-                if !polygon.is_empty()? {
-                    let mut push_ring = |ring: &ConstGeometry| {
-                        append_coords(&mut x, &mut y, z.as_mut(), ring)?;
-                        rings.push(x.len() as i64);
-                        geos::GResult::Ok(())
-                    };
-                    push_ring(&polygon.get_exterior_ring()?)?;
-                    for n in 0..polygon.get_num_interior_rings()? {
-                        push_ring(&polygon.get_interior_ring_n(n)?)?;
+impl GeosGeometries {
+    /// Our polygon array of the geometries, one row each.
+    /// Every GEOS geometry is freed once it is copied.
+    /// If `has_z=true`, the coordinates keep their z.
+    /// A geometry that is not a polygon is an error.
+    /// If `ignore_per_row_errors=true`, its row is missing instead.
+    pub fn into_polygon_array(
+        self,
+        has_z: bool,
+        ignore_per_row_errors: bool,
+    ) -> geos::GResult<PolygonArray> {
+        let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
+        let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
+        let mut rings = OffsetsBuilder::with_capacity(self.size_hint.parts[0]);
+        let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
+        for geometry in self.geometries {
+            let is_valid = match geometry {
+                None => false,
+                Some(polygon) => match polygon.geometry_type()? {
+                    GeometryTypes::Polygon => {
+                        push_rings(&mut coords, &mut rings, &polygon)?;
+                        true
                     }
-                }
-                if let Some(validity) = &mut validity {
-                    validity.push(true);
-                }
-            }
-            None => validity
-                .get_or_insert_with(|| {
-                    let mut validity = MutableBitmap::with_capacity(len);
-                    validity.extend_constant(i, true);
-                    validity
-                })
-                .push(false),
+                    other => wrong_kind("polygon", other, ignore_per_row_errors)?,
+                },
+            };
+            validity.push(is_valid);
+            rows.push(rings.len());
         }
-        rows.push(rings.len() as i64 - 1);
+        Ok(PolygonArray {
+            rows: List::from_offsets(rows.finish(), validity.finish()),
+            rings: ValidList::from_offsets(rings.finish()),
+            coords: coords.finish(),
+        })
     }
 
-    // SAFETY: both start at 0 and only grow, ending at the length of the level below.
-    let (rings, rows) = unsafe {
-        (
-            Offsets::new_unchecked(rings).into(),
-            Offsets::new_unchecked(rows).into(),
-        )
-    };
-    Ok(PolygonArray {
-        rows: List::from_offsets(rows, validity.map(Bitmap::from)),
-        rings: ValidList::from_offsets(rings),
-        coords: ValidCoords::from_axes((x, y, z, None)),
-    })
-}
-
-/// Appends the rings of a GEOS polygon, each closed at level 0.
-/// The polygon itself is left open for the caller to close.
-/// Gives `false` for any other kind of geometry, such as a multipolygon.
-/// Nothing is appended then.
-#[inline(always)]
-pub(super) fn polygon_from_geos(
-    buffers: &mut Buffers,
-    geometry: &impl Geom,
-) -> geos::GResult<bool> {
-    if geometry.geometry_type()? != GeometryTypes::Polygon {
-        return Ok(false);
-    }
-    push_rings(buffers, geometry)?;
-    Ok(true)
-}
-
-/// Appends the parts of a GEOS multipolygon, each closed at level 1.
-/// The multipolygon itself is left open for the caller to close.
-/// GEOS gives a multipolygon of one part as a plain polygon.
-/// So a polygon is read as a single part.
-/// An empty geometry has no parts.
-/// Gives `false` for any other kind of geometry.
-/// Nothing is appended then.
-#[inline(always)]
-pub(super) fn multi_polygon_from_geos(
-    buffers: &mut Buffers,
-    geometry: &impl Geom,
-) -> geos::GResult<bool> {
-    match geometry.geometry_type()? {
-        GeometryTypes::Polygon if geometry.is_empty()? => {}
-        GeometryTypes::Polygon => {
-            push_rings(buffers, geometry)?;
-            buffers.close(1);
+    /// See [`GeosGeometries::into_polygon_array`].
+    /// GEOS gives a multipolygon of one part as a plain polygon.
+    /// So a polygon is read as a single part, or as none if it is empty.
+    /// A geometry that is not a polygon or multipolygon fails the same way.
+    pub fn into_multi_polygon_array(
+        self,
+        has_z: bool,
+        ignore_per_row_errors: bool,
+    ) -> geos::GResult<MultiPolygonArray> {
+        let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
+        let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
+        let mut rings = OffsetsBuilder::with_capacity(self.size_hint.parts[0]);
+        let mut polygons = OffsetsBuilder::with_capacity(self.size_hint.parts[1]);
+        let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
+        for geometry in self.geometries {
+            let is_valid = match geometry {
+                None => false,
+                Some(geometry) => match geometry.geometry_type()? {
+                    GeometryTypes::Polygon if geometry.is_empty()? => true,
+                    GeometryTypes::Polygon => {
+                        push_rings(&mut coords, &mut rings, &geometry)?;
+                        polygons.push(rings.len());
+                        true
+                    }
+                    GeometryTypes::MultiPolygon => {
+                        for n in 0..geometry.get_num_geometries()? {
+                            push_rings(&mut coords, &mut rings, &geometry.get_geometry_n(n)?)?;
+                            polygons.push(rings.len());
+                        }
+                        true
+                    }
+                    other => wrong_kind("multipolygon", other, ignore_per_row_errors)?,
+                },
+            };
+            validity.push(is_valid);
+            rows.push(polygons.len());
         }
-        GeometryTypes::MultiPolygon => {
-            for n in 0..geometry.get_num_geometries()? {
-                push_rings(buffers, &geometry.get_geometry_n(n)?)?;
-                buffers.close(1);
-            }
-        }
-        _ => return Ok(false),
+        Ok(MultiPolygonArray {
+            rows: List::from_offsets(rows.finish(), validity.finish()),
+            polygons: ValidList::from_offsets(polygons.finish()),
+            rings: ValidList::from_offsets(rings.finish()),
+            coords: coords.finish(),
+        })
     }
-    Ok(true)
 }
 
-/// Appends the rings of `polygon`, each closed at level 0.
+/// Appends the rings of `polygon`, each ended in `rings`.
 /// The exterior comes first, then the interiors.
 /// An empty polygon has no rings.
 #[inline(always)]
-fn push_rings(buffers: &mut Buffers, polygon: &impl Geom) -> geos::GResult<()> {
+fn push_rings(
+    coords: &mut CoordsBuilder,
+    rings: &mut OffsetsBuilder,
+    polygon: &impl Geom,
+) -> geos::GResult<()> {
     // GEOS gives an empty polygon an empty exterior.
     // We would store that as a ring without vertices.
     if polygon.is_empty()? {
         return Ok(());
     }
-    buffers.push_coords(&polygon.get_exterior_ring()?)?;
-    buffers.close(0);
+    coords.push(&polygon.get_exterior_ring()?)?;
+    rings.push(coords.len());
     for n in 0..polygon.get_num_interior_rings()? {
-        buffers.push_coords(&polygon.get_interior_ring_n(n)?)?;
-        buffers.close(0);
+        coords.push(&polygon.get_interior_ring_n(n)?)?;
+        rings.push(coords.len());
     }
     Ok(())
 }

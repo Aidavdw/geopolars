@@ -77,7 +77,8 @@ fn chunk_simplified(
             tolerance,
             preserve_topology,
             ignore_per_row_errors,
-        ),
+        )
+        .map(LineStringArray::into_list_array),
         Kind::MultiLineString => {
             let lines: &ListArray<i64> = downcast(values, "a list of linestrings")?;
             simplify_multi_line_strings(
@@ -90,6 +91,7 @@ fn chunk_simplified(
                 preserve_topology,
                 ignore_per_row_errors,
             )
+            .map(MultiLineStringArray::into_list_array)
         }
         Kind::Polygon => {
             let rings: &ListArray<i64> = downcast(values, "a list of rings")?;
@@ -103,6 +105,7 @@ fn chunk_simplified(
                 preserve_topology,
                 ignore_per_row_errors,
             )
+            .map(PolygonArray::into_list_array)
         }
         Kind::MultiPolygon => {
             let polygons: &ListArray<i64> = downcast(values, "a list of polygons")?;
@@ -118,6 +121,7 @@ fn chunk_simplified(
                 preserve_topology,
                 ignore_per_row_errors,
             )
+            .map(MultiPolygonArray::into_list_array)
         }
         Kind::Point | Kind::MultiPoint => return Err(already_simple(dtype)),
     }

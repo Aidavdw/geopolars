@@ -3,9 +3,9 @@
 
 use polars_arrow::array::{Array, BooleanArray, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
-use polars_arrow::compute::utils::{combine_validities_and, combine_validities_and3};
+use polars_arrow::compute::utils::combine_validities_and3;
 use polars_arrow::datatypes::ArrowDataType;
-use polars_arrow::offset::{Offsets, OffsetsBuffer};
+use polars_arrow::offset::OffsetsBuffer;
 use polars_buffer::Buffer;
 use polars_core::prelude::CompatLevel;
 
@@ -14,6 +14,8 @@ use crate::GeoDimension;
 /// How many coordinates and parts an output column will hold, to allocate its buffers once.
 /// `parts` has one count per list level below the rows, innermost first:
 /// a polygon's rings, or a multipolygon's rings and then its polygons.
+/// It may hold more levels than the kind built has.
+/// Then only the first ones are used.
 /// The rows are not counted, the caller knows how many there are.
 /// Being off costs reallocations or unused memory, never correctness.
 pub struct SizeHint<const N: usize> {
@@ -55,69 +57,7 @@ pub fn bool_array(values: Vec<bool>, validity: Option<&Bitmap>) -> BooleanArray 
     BooleanArray::from_slice(values).with_validity(validity.cloned())
 }
 
-/// `axes` holds every coordinate of `dim`.
-/// `rows` are offsets, with one more entry than there are rows.
-pub fn line_string_array(
-    dim: GeoDimension,
-    axes: OwnedAxes,
-    rows: Vec<i64>,
-    validity: Option<&Bitmap>,
-    failed: &[usize],
-) -> ListArray<i64> {
-    wrap_in_list(coords_array(dim, axes).boxed(), rows, validity, failed)
-}
-
-/// See [line_string_array].
-/// `lines` are offsets too, with one more entry than there are linestrings.
-pub fn multi_line_string_array(
-    dim: GeoDimension,
-    axes: OwnedAxes,
-    lines: Vec<i64>,
-    rows: Vec<i64>,
-    validity: Option<&Bitmap>,
-    failed: &[usize],
-) -> ListArray<i64> {
-    let lines = line_string_array(dim, axes, lines, None, &[]);
-    wrap_in_list(lines.boxed(), rows, validity, failed)
-}
-
-/// See [line_string_array].
-/// `rings` are offsets too, with one more entry than there are rings.
-pub fn polygon_array(
-    dim: GeoDimension,
-    axes: OwnedAxes,
-    rings: Vec<i64>,
-    rows: Vec<i64>,
-    validity: Option<&Bitmap>,
-    failed: &[usize],
-) -> ListArray<i64> {
-    // A ring is stored like a linestring.
-    let rings = line_string_array(dim, axes, rings, None, &[]);
-    wrap_in_list(rings.boxed(), rows, validity, failed)
-}
-
-/// See [polygon_array].
-/// `polygons` are offsets too, with one more entry than there are polygons.
-pub fn multi_polygon_array(
-    dim: GeoDimension,
-    axes: OwnedAxes,
-    rings: Vec<i64>,
-    polygons: Vec<i64>,
-    rows: Vec<i64>,
-    validity: Option<&Bitmap>,
-    failed: &[usize],
-) -> ListArray<i64> {
-    let polygons = polygon_array(dim, axes, rings, polygons, None, &[]);
-    wrap_in_list(polygons.boxed(), rows, validity, failed)
-}
-
 /// The coordinate struct of `dim`, taking over the `axes` buffers.
-fn coords_array(dim: GeoDimension, (x, y, z, m): OwnedAxes) -> StructArray {
-    let axes = (x.into(), y.into(), z.map(Buffer::from), m.map(Buffer::from));
-    coords_struct(dim, axes)
-}
-
-/// See [coords_array].
 pub(crate) fn coords_struct(dim: GeoDimension, (x, y, z, m): BufferAxes) -> StructArray {
     let len = x.len();
     let axes = [Some(x), Some(y), z, m]
@@ -130,23 +70,6 @@ pub(crate) fn coords_struct(dim: GeoDimension, (x, y, z, m): BufferAxes) -> Stru
         len,
         axes,
         None,
-    )
-}
-
-/// `values` split into lists at `offsets`.
-fn wrap_in_list(
-    values: Box<dyn Array>,
-    offsets: Vec<i64>,
-    validity: Option<&Bitmap>,
-    failed: &[usize],
-) -> ListArray<i64> {
-    // SAFETY: the kernel builds the offsets in order, starting at 0, ending at the child's length.
-    let offsets: OffsetsBuffer<i64> = unsafe { Offsets::new_unchecked(offsets) }.into();
-    let built = succeeded(offsets.len_proxy(), failed);
-    list_array(
-        values,
-        offsets,
-        combine_validities_and(validity, built.as_ref()),
     )
 }
 

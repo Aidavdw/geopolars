@@ -48,8 +48,7 @@ use geopolars_core::{
 };
 use geos::{CoordSeq, Geom, Geometry, GeometryTypes};
 
-use super::axes;
-use super::polygons::{polygons_from_geos, GeosPolygons};
+use super::{axes, GeosGeometries};
 
 // Because we don't consider CRS,
 // A geometry crossing the antimeridian is hulled the long way round.
@@ -168,7 +167,7 @@ fn hulls(
         hulls_with(rows, coords, ignore_per_row_errors, coord_ranges);
         has_z, rows.is_all_valid(), ccw_outer
     )?;
-    polygons_from_geos(hulls, has_z)
+    hulls.into_polygon_array(has_z, ignore_per_row_errors)
 }
 
 /// [`hulls`] as GEOS polygons, with `None` for a missing row.
@@ -186,7 +185,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     coords: &ValidCoords,
     ignore_per_row_errors: bool,
     coord_ranges: impl Fn(Range<usize>, &mut Vec<Range<usize>>),
-) -> geos::GResult<GeosPolygons> {
+) -> geos::GResult<GeosGeometries> {
     let (in_x, in_y, in_z, _) = axes(coords);
     let in_z = in_z.unwrap_or_default();
 
@@ -199,7 +198,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
 
     let mut size_hint = SizeHint {
         coords: 0,
-        parts: [0],
+        parts: [0, 0],
     };
     // `None` if it is not a polygon (degenerate case)
     let mut hull = |row_x: &[f64], row_y: &[f64], row_z: &[f64]| {
@@ -247,7 +246,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
             },
         });
     }
-    Ok(GeosPolygons {
+    Ok(GeosGeometries {
         geometries: hulls,
         size_hint,
     })
