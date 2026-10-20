@@ -13,7 +13,7 @@ pub use convex_hull::{
     line_string_convex_hulls, multi_line_string_convex_hulls, multi_point_convex_hulls,
     multi_polygon_convex_hulls, polygon_convex_hulls,
 };
-pub use polygons::polygons_from_geos;
+pub use polygons::{polygons_from_geos, GeosPolygons};
 pub use simplify::{
     simplify_line_strings, simplify_multi_line_strings, simplify_multi_polygons, simplify_polygons,
 };

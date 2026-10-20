@@ -41,6 +41,7 @@
 
 use std::ops::Range;
 
+use geopolars_core::output::SizeHint;
 use geopolars_core::{
     LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PolygonArray,
     ValidCoords,
@@ -48,7 +49,7 @@ use geopolars_core::{
 use geos::{CoordSeq, Geom, Geometry, GeometryTypes};
 
 use super::axes;
-use super::polygons::polygons_from_geos;
+use super::polygons::{polygons_from_geos, GeosPolygons};
 
 // Because we don't consider CRS,
 // A geometry crossing the antimeridian is hulled the long way round.
@@ -167,10 +168,11 @@ fn hulls(
         hulls_with(rows, coords, ignore_per_row_errors, coord_ranges);
         has_z, rows.is_all_valid(), ccw_outer
     )?;
-    polygons_from_geos(&hulls, has_z)
+    polygons_from_geos(hulls, has_z)
 }
 
 /// [`hulls`] as GEOS polygons, with `None` for a missing row.
+/// The size hint is exact, counted as the hulls are built.
 /// `Z` says whether the coordinates (and so the hulls) have z.
 /// if `ALL_VALID=true`, we don't first check for validity, and just send it to GEOS.
 /// (If it does contain invalid ones, it's fine because we still check for invalid returned values,
@@ -184,7 +186,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     coords: &ValidCoords,
     ignore_per_row_errors: bool,
     coord_ranges: impl Fn(Range<usize>, &mut Vec<Range<usize>>),
-) -> geos::GResult<Vec<Option<Geometry>>> {
+) -> geos::GResult<GeosPolygons> {
     let (in_x, in_y, in_z, _) = axes(coords);
     let in_z = in_z.unwrap_or_default();
 
@@ -195,19 +197,23 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     let mut row_y = Vec::new();
     let mut row_z = Vec::new();
 
+    let mut size_hint = SizeHint {
+        coords: 0,
+        parts: [0],
+    };
     // `None` if it is not a polygon (degenerate case)
-    let hull = |row_x: &[f64], row_y: &[f64], row_z: &[f64]| {
+    let mut hull = |row_x: &[f64], row_y: &[f64], row_z: &[f64]| {
         let seq = CoordSeq::new_from_arrays(row_x, row_y, Z.then_some(row_z), None)?;
         let hull = Geometry::create_line_string(seq)?.convex_hull()?;
         debug_assert!(!hull.is_empty()?, "Check before offset should catch this");
         if hull.geometry_type()? != GeometryTypes::Polygon {
             return Ok(None);
         }
-        if CCW_OUTER {
-            hull.reverse().map(Some)
-        } else {
-            Ok(Some(hull))
-        }
+        let hull = if CCW_OUTER { hull.reverse()? } else { hull };
+        size_hint.coords += hull.get_num_coordinates()?;
+        // rings: a hull has no holes.
+        size_hint.parts[0] += 1;
+        Ok(Some(hull))
     };
 
     let mut hulls = Vec::with_capacity(rows.len());
@@ -241,5 +247,8 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
             },
         });
     }
-    Ok(hulls)
+    Ok(GeosPolygons {
+        geometries: hulls,
+        size_hint,
+    })
 }

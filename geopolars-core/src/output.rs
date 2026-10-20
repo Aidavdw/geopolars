@@ -11,6 +11,16 @@ use polars_core::prelude::CompatLevel;
 
 use crate::GeoDimension;
 
+/// How many coordinates and parts an output column will hold, to allocate its buffers once.
+/// `parts` has one count per list level below the rows, innermost first:
+/// a polygon's rings, or a multipolygon's rings and then its polygons.
+/// The rows are not counted, the caller knows how many there are.
+/// Being off costs reallocations or unused memory, never correctness.
+pub struct SizeHint<const N: usize> {
+    pub coords: usize,
+    pub parts: [usize; N],
+}
+
 /// Every value of the x, y, z and m axes, in coordinate order.
 /// z and m are `None` for a dimension without them.
 pub type OwnedAxes = (Vec<f64>, Vec<f64>, Option<Vec<f64>>, Option<Vec<f64>>);

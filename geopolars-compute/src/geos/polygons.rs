@@ -2,10 +2,12 @@
 
 use std::ops::Range;
 
+use geopolars_core::output::SizeHint;
 use geopolars_core::{
     List, MultiPolygon, MultiPolygonArray, Polygon, PolygonArray, ValidCoords, ValidList,
 };
 use geos::{ConstGeometry, Geom, Geometry, GeometryTypes};
+use polars_arrow::bitmap::{Bitmap, MutableBitmap};
 use polars_arrow::offset::Offsets;
 
 use super::{append_coords, axes, coord_seq, Axes, Buffers, ToGeos};
@@ -105,60 +107,88 @@ pub(super) fn multi_polygon_to_geos(
     Geometry::create_multipolygon(geometries)
 }
 
-/// Our polygon array of `geometries`, one row each.
-/// `None` gives a missing row.
+/// GEOS polygons, one per row, for [`polygons_from_geos`].
+pub struct GeosPolygons {
+    /// `None` gives a missing row.
+    pub geometries: Vec<Option<Geometry>>,
+    pub size_hint: SizeHint<1>,
+}
+
+impl GeosPolygons {
+    /// The exact size hint of `geometries`, counted through GEOS.
+    /// A geometry that is not a polygon is skipped.
+    pub fn size_hint(geometries: &[Option<Geometry>]) -> geos::GResult<SizeHint<1>> {
+        let mut size_hint = SizeHint {
+            coords: 0,
+            parts: [0],
+        };
+        for geometry in geometries.iter().flatten() {
+            // GEOS gives an empty polygon an empty exterior, which we don't store.
+            if geometry.geometry_type()? == GeometryTypes::Polygon && !geometry.is_empty()? {
+                size_hint.coords += geometry.get_num_coordinates()?;
+                // rings
+                size_hint.parts[0] += 1 + geometry.get_num_interior_rings()?;
+            }
+        }
+        Ok(size_hint)
+    }
+}
+
+/// Our polygon array of `polygons`, one row each.
+/// Every GEOS polygon is freed once it is copied.
 /// If `has_z=true`, the coordinates keep their z.
 /// Errors for a geometry that is not a polygon.
-pub fn polygons_from_geos(
-    geometries: &[Option<Geometry>],
-    has_z: bool,
-) -> geos::GResult<PolygonArray> {
-    // Counted first, so every buffer is allocated once, at its final size.
-    let (mut coords, mut ring_count, mut missing) = (0, 0, 0);
-    for geometry in geometries {
-        let Some(geometry) = geometry else {
-            missing += 1;
-            continue;
-        };
-        if geometry.geometry_type()? != GeometryTypes::Polygon {
-            return Err(geos::Error::ConversionError(format!(
-                "expected a polygon, got a {:?}",
-                geometry.geometry_type()?
-            )));
-        }
-        // GEOS gives an empty polygon an empty exterior, which we don't store.
-        if !geometry.is_empty()? {
-            coords += geometry.get_num_coordinates()?;
-            ring_count += 1 + geometry.get_num_interior_rings()?;
-        }
-    }
+pub fn polygons_from_geos(polygons: GeosPolygons, has_z: bool) -> geos::GResult<PolygonArray> {
+    let GeosPolygons {
+        geometries,
+        size_hint,
+    } = polygons;
 
-    let mut x = Vec::with_capacity(coords);
-    let mut y = Vec::with_capacity(coords);
-    let mut z = has_z.then(|| Vec::with_capacity(coords));
-    let mut rings = Vec::with_capacity(ring_count + 1);
+    let len = geometries.len();
+    let mut x = Vec::with_capacity(size_hint.coords);
+    let mut y = Vec::with_capacity(size_hint.coords);
+    let mut z = has_z.then(|| Vec::with_capacity(size_hint.coords));
+    let mut rings = Vec::with_capacity(size_hint.parts[0] + 1);
     rings.push(0);
-    let mut rows = Vec::with_capacity(geometries.len() + 1);
+    let mut rows = Vec::with_capacity(len + 1);
     rows.push(0);
-    for geometry in geometries {
+    // Only built once a row is missing.
+    let mut validity: Option<MutableBitmap> = None;
+    for (i, geometry) in geometries.into_iter().enumerate() {
         match geometry {
-            Some(polygon) if !polygon.is_empty()? => {
-                let mut push_ring = |ring: &ConstGeometry| {
-                    append_coords(&mut x, &mut y, z.as_mut(), ring)?;
-                    rings.push(x.len() as i64);
-                    geos::GResult::Ok(())
-                };
-                push_ring(&polygon.get_exterior_ring()?)?;
-                for n in 0..polygon.get_num_interior_rings()? {
-                    push_ring(&polygon.get_interior_ring_n(n)?)?;
+            Some(polygon) => {
+                if polygon.geometry_type()? != GeometryTypes::Polygon {
+                    return Err(geos::Error::ConversionError(format!(
+                        "expected a polygon, got a {:?}",
+                        polygon.geometry_type()?
+                    )));
+                }
+                // GEOS gives an empty polygon an empty exterior, which we don't store.
+                if !polygon.is_empty()? {
+                    let mut push_ring = |ring: &ConstGeometry| {
+                        append_coords(&mut x, &mut y, z.as_mut(), ring)?;
+                        rings.push(x.len() as i64);
+                        geos::GResult::Ok(())
+                    };
+                    push_ring(&polygon.get_exterior_ring()?)?;
+                    for n in 0..polygon.get_num_interior_rings()? {
+                        push_ring(&polygon.get_interior_ring_n(n)?)?;
+                    }
+                }
+                if let Some(validity) = &mut validity {
+                    validity.push(true);
                 }
             }
-            // A missing row, or an empty polygon: no rings.
-            _ => {}
+            None => validity
+                .get_or_insert_with(|| {
+                    let mut validity = MutableBitmap::with_capacity(len);
+                    validity.extend_constant(i, true);
+                    validity
+                })
+                .push(false),
         }
         rows.push(rings.len() as i64 - 1);
     }
-    let validity = (missing > 0).then(|| geometries.iter().map(Option::is_some).collect());
 
     // SAFETY: both start at 0 and only grow, ending at the length of the level below.
     let (rings, rows) = unsafe {
@@ -168,7 +198,7 @@ pub fn polygons_from_geos(
         )
     };
     Ok(PolygonArray {
-        rows: List::from_offsets(rows, validity),
+        rows: List::from_offsets(rows, validity.map(Bitmap::from)),
         rings: ValidList::from_offsets(rings),
         coords: ValidCoords::from_axes((x, y, z, None)),
     })
