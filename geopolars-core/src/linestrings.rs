@@ -4,9 +4,10 @@
 use std::ops::Range;
 
 use polars_arrow::array::ListArray;
+use polars_core::prelude::PolarsResult;
 
 use crate::output::{coords_struct, list_array};
-use crate::{List, ValidCoords, ValidList};
+use crate::{downcast, List, ValidCoords, ValidList};
 
 /// One linestring: a run of coordinates.
 pub struct LineString<'a> {
@@ -48,6 +49,13 @@ pub struct LineStringArray {
 }
 
 impl LineStringArray {
+    pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
+        Ok(Self {
+            rows: List::new(rows),
+            coords: ValidCoords::new(rows.values().as_ref())?,
+        })
+    }
+
     /// The polars storage of the column, taking over its buffers.
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();
@@ -74,6 +82,15 @@ pub struct MultiLineStringArray {
 }
 
 impl MultiLineStringArray {
+    pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
+        let lines: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of linestrings")?;
+        Ok(Self {
+            rows: List::new(rows),
+            lines: ValidList::new(lines),
+            coords: ValidCoords::new(lines.values().as_ref())?,
+        })
+    }
+
     /// See [`LineStringArray::into_list_array`].
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();

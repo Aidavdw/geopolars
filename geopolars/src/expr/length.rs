@@ -15,7 +15,6 @@ use serde::Deserialize;
 
 use super::distance::{geodesic_metric, DistanceMethod};
 use crate::geoarrow::{describe, Kind};
-use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -104,19 +103,11 @@ fn measure(
     let storage = geometries.ext()?.storage();
     let chunks = storage.list()?.downcast_iter().map(|rows| {
         if multi {
-            let lines = downcast(rows.values().as_ref(), "a list of linestrings")?;
-            let array = MultiLineStringArray {
-                rows: List::new(rows),
-                lines: ValidList::new(lines),
-                coords: ValidCoords::new(lines.values().as_ref())?,
-            };
+            let array = MultiLineStringArray::new(rows)?;
             let z = array.coords.dim().has_z();
             with_const_flags!(multi_line_string_lengths(metric, &array); z, ignore_nan)
         } else {
-            let array = LineStringArray {
-                rows: List::new(rows),
-                coords: ValidCoords::new(rows.values().as_ref())?,
-            };
+            let array = LineStringArray::new(rows)?;
             let z = array.coords.dim().has_z();
             with_const_flags!(line_string_lengths(metric, &array); z, ignore_nan)
         }

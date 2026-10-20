@@ -11,7 +11,7 @@ use std::rc::Rc;
 use geopolars_compute::native::DistanceMetric;
 use geopolars_compute::with_const_flags;
 use geopolars_compute::{GeodesicMetric, Planar};
-use geopolars_core::PointArray;
+use geopolars_core::{Coords, PointArray};
 use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
@@ -22,7 +22,6 @@ use serde::Deserialize;
 
 use crate::geoarrow::{describe, Kind};
 use crate::proj::GeodeticCrs;
-use geopolars_core::Coords;
 
 /// How many CRSes to keep in cache.
 /// If more are used, it will start over.
@@ -187,7 +186,10 @@ fn every_against_one<const Z: bool>(
         .downcast_iter()
         .next()
         .expect("a single point is one chunk");
-    let Some(one) = Coords::new(one)?.position::<true, Z>(0) else {
+    let Some(one) = PointArray::new(Coords::new(one)?)
+        .get(0)
+        .position::<true, Z>()
+    else {
         return Ok(many
             .downcast_iter()
             .map(|many| PrimitiveArray::new_null(ArrowDataType::Float64, many.len()))

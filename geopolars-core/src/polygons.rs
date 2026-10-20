@@ -4,9 +4,10 @@
 use std::ops::Range;
 
 use polars_arrow::array::ListArray;
+use polars_core::prelude::PolarsResult;
 
 use crate::output::{coords_struct, list_array};
-use crate::{LineString, List, ValidCoords, ValidList};
+use crate::{downcast, LineString, List, ValidCoords, ValidList};
 
 /// One polygon: a run of rings, the first of which is the exterior.
 pub struct Polygon<'a> {
@@ -34,6 +35,15 @@ pub struct PolygonArray {
 }
 
 impl PolygonArray {
+    pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
+        let rings: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of rings")?;
+        Ok(Self {
+            rows: List::new(rows),
+            rings: ValidList::new(rings),
+            coords: ValidCoords::new(rings.values().as_ref())?,
+        })
+    }
+
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();
@@ -83,6 +93,17 @@ pub struct MultiPolygonArray {
 }
 
 impl MultiPolygonArray {
+    pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
+        let polygons: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of polygons")?;
+        let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
+        Ok(Self {
+            rows: List::new(rows),
+            polygons: ValidList::new(polygons),
+            rings: ValidList::new(rings),
+            coords: ValidCoords::new(rings.values().as_ref())?,
+        })
+    }
+
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();

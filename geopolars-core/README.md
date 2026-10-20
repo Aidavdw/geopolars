@@ -29,7 +29,10 @@ The list levels above the coordinates are split the same way:
 
 Kernels take these held together per geometry type,
 such as `LineStringArray` or `PolygonArray`.
-They build their output with the functions in `output` (`f64_array`, `polygon_array`, ...).
+These are built from a chunk of the Polars storage with `new`.
+A kernel returning geometries returns these types too.
+`into_list_array` turns them back into Polars storage.
+A kernel returning a value per row builds it with the functions in `output` (`f64_array`, ...).
 
 The single-geometry types (`Point`, `LineString`, ...) implement geo-traits,
 for the `wkb` and `wkt` writers.
