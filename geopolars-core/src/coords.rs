@@ -7,6 +7,7 @@ use polars_arrow::bitmap::Bitmap;
 use polars_buffer::Buffer;
 use polars_core::prelude::PolarsResult;
 
+use crate::output::{BufferAxes, OwnedAxes};
 use crate::{downcast, GeoDimension};
 
 /// The fewest vertices a ring can have: a triangle, plus the vertex closing it.
@@ -58,6 +59,19 @@ impl ValidCoords {
             z: arrays.z.map(|z| z.values().clone()),
             m: arrays.m.map(|m| m.values().clone()),
         })
+    }
+
+    pub fn from_axes((x, y, z, m): OwnedAxes) -> Self {
+        Self {
+            x: x.into(),
+            y: y.into(),
+            z: z.map(Buffer::from),
+            m: m.map(Buffer::from),
+        }
+    }
+
+    pub(crate) fn into_axes(self) -> BufferAxes {
+        (self.x, self.y, self.z, self.m)
     }
 
     /// How many coordinates there are.

@@ -13,6 +13,7 @@ pub use convex_hull::{
     line_string_convex_hulls, multi_line_string_convex_hulls, multi_point_convex_hulls,
     multi_polygon_convex_hulls, polygon_convex_hulls,
 };
+pub use polygons::polygons_from_geos;
 pub use simplify::{
     simplify_line_strings, simplify_multi_line_strings, simplify_multi_polygons, simplify_polygons,
 };
@@ -121,6 +122,35 @@ fn coord_seq(axes: &Axes, vertices: Range<usize>) -> geos::GResult<CoordSeq> {
     )
 }
 
+/// Appends the coordinates of `geometry`, a linestring or a ring, to the axes.
+/// If `z` is given, they keep their z.
+fn append_coords(
+    x: &mut Vec<f64>,
+    y: &mut Vec<f64>,
+    z: Option<&mut Vec<f64>>,
+    geometry: &impl Geom,
+) -> geos::GResult<()> {
+    let dim = match z {
+        Some(_) => GeoDimension::XYZ,
+        None => GeoDimension::XY,
+    };
+    let buffer = geometry.get_coord_seq()?.as_buffer(Some(coord_type(dim)))?;
+    let width = dim.field_names().len();
+    // Once per linestring or ring, rather than per coordinate.
+    match z {
+        Some(z) => buffer.chunks_exact(width).for_each(|coord| {
+            x.push(coord[0]);
+            y.push(coord[1]);
+            z.push(coord[2]);
+        }),
+        None => buffer.chunks_exact(width).for_each(|coord| {
+            x.push(coord[0]);
+            y.push(coord[1]);
+        }),
+    }
+    Ok(())
+}
+
 /// Contains arrow-ified output of a GEOS function.
 /// - Coordinates (x, y, and z if there is one)
 /// - the list levels above them, built from one GEOS geometry after the other.
@@ -162,22 +192,7 @@ impl Buffers {
 
     /// Appends the coordinates of `geometry`, a linestring or a ring.
     pub(super) fn push_coords(&mut self, geometry: &impl Geom) -> geos::GResult<()> {
-        let dim = self.dim();
-        let buffer = geometry.get_coord_seq()?.as_buffer(Some(coord_type(dim)))?;
-        let width = dim.field_names().len();
-        // Once per linestring or ring, rather than per coordinate.
-        match &mut self.z {
-            Some(z) => buffer.chunks_exact(width).for_each(|coord| {
-                self.x.push(coord[0]);
-                self.y.push(coord[1]);
-                z.push(coord[2]);
-            }),
-            None => buffer.chunks_exact(width).for_each(|coord| {
-                self.x.push(coord[0]);
-                self.y.push(coord[1]);
-            }),
-        }
-        Ok(())
+        append_coords(&mut self.x, &mut self.y, self.z.as_mut(), geometry)
     }
 
     /// Ends the current list at `level`, after everything pushed to the level below it.

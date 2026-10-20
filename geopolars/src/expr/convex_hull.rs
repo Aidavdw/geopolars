@@ -126,6 +126,7 @@ fn chunk_hulls(
         }
         Kind::Point => return Err(encloses_nothing(dtype)),
     }
+    .map(PolygonArray::into_list_array)
     .map_err(|e| polars_err!(ComputeError: "{e}"))
 }
 

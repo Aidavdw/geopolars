@@ -22,6 +22,14 @@ impl ValidList {
         }
     }
 
+    pub fn from_offsets(offsets: OffsetsBuffer<i64>) -> Self {
+        Self { offsets }
+    }
+
+    pub(crate) fn into_offsets(self) -> OffsetsBuffer<i64> {
+        self.offsets
+    }
+
     /// How many lists there are.
     #[allow(clippy::len_without_is_empty)]
     #[inline]
@@ -53,6 +61,18 @@ impl List {
             validity: list.validity().cloned(),
             lists: ValidList::new(list),
         }
+    }
+
+    /// `validity` is `None` when every list is there.
+    pub fn from_offsets(offsets: OffsetsBuffer<i64>, validity: Option<Bitmap>) -> Self {
+        Self {
+            validity,
+            lists: ValidList::from_offsets(offsets),
+        }
+    }
+
+    pub(crate) fn into_parts(self) -> (OffsetsBuffer<i64>, Option<Bitmap>) {
+        (self.lists.into_offsets(), self.validity)
     }
 
     /// See [`ValidList::len`].

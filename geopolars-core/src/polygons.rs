@@ -3,6 +3,9 @@
 
 use std::ops::Range;
 
+use polars_arrow::array::ListArray;
+
+use crate::output::{coords_struct, list_array};
 use crate::{LineString, List, ValidCoords, ValidList};
 
 /// One polygon: a run of rings, the first of which is the exterior.
@@ -31,6 +34,15 @@ pub struct PolygonArray {
 }
 
 impl PolygonArray {
+    /// The polars storage of the column, taking over its buffers.
+    pub fn into_list_array(self) -> ListArray<i64> {
+        let dim = self.coords.dim();
+        let coords = coords_struct(dim, self.coords.into_axes());
+        let rings = list_array(coords.boxed(), self.rings.into_offsets(), None);
+        let (rows, validity) = self.rows.into_parts();
+        list_array(rings.boxed(), rows, validity)
+    }
+
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
     pub fn get(&self, i: usize) -> Polygon<'_> {

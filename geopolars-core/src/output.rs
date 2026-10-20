@@ -4,7 +4,9 @@
 use polars_arrow::array::{Array, BooleanArray, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
 use polars_arrow::compute::utils::{combine_validities_and, combine_validities_and3};
+use polars_arrow::datatypes::ArrowDataType;
 use polars_arrow::offset::{Offsets, OffsetsBuffer};
+use polars_buffer::Buffer;
 use polars_core::prelude::CompatLevel;
 
 use crate::GeoDimension;
@@ -12,6 +14,14 @@ use crate::GeoDimension;
 /// Every value of the x, y, z and m axes, in coordinate order.
 /// z and m are `None` for a dimension without them.
 pub type OwnedAxes = (Vec<f64>, Vec<f64>, Option<Vec<f64>>, Option<Vec<f64>>);
+
+/// [`OwnedAxes`], as the buffers a [`ValidCoords`](crate::ValidCoords) holds.
+pub(crate) type BufferAxes = (
+    Buffer<f64>,
+    Buffer<f64>,
+    Option<Buffer<f64>>,
+    Option<Buffer<f64>>,
+);
 
 /// `values` has one entry per row. `validity` is `None` when every row is there.
 pub fn f64_array(values: Vec<f64>, validity: Option<&Bitmap>) -> PrimitiveArray<f64> {
@@ -93,11 +103,17 @@ pub fn multi_polygon_array(
 
 /// The coordinate struct of `dim`, taking over the `axes` buffers.
 fn coords_array(dim: GeoDimension, (x, y, z, m): OwnedAxes) -> StructArray {
+    let axes = (x.into(), y.into(), z.map(Buffer::from), m.map(Buffer::from));
+    coords_struct(dim, axes)
+}
+
+/// See [coords_array].
+pub(crate) fn coords_struct(dim: GeoDimension, (x, y, z, m): BufferAxes) -> StructArray {
     let len = x.len();
     let axes = [Some(x), Some(y), z, m]
         .into_iter()
         .flatten()
-        .map(|values| PrimitiveArray::from_vec(values).boxed())
+        .map(|values| PrimitiveArray::new(ArrowDataType::Float64, values, None).boxed())
         .collect();
     StructArray::new(
         dim.coordinates().to_arrow(CompatLevel::newest()),
@@ -117,11 +133,25 @@ fn wrap_in_list(
     // SAFETY: the kernel builds the offsets in order, starting at 0, ending at the child's length.
     let offsets: OffsetsBuffer<i64> = unsafe { Offsets::new_unchecked(offsets) }.into();
     let built = succeeded(offsets.len_proxy(), failed);
+    list_array(
+        values,
+        offsets,
+        combine_validities_and(validity, built.as_ref()),
+    )
+}
+
+/// `values` split into lists at `offsets`.
+/// `validity` is `None` when every list is there.
+pub(crate) fn list_array(
+    values: Box<dyn Array>,
+    offsets: OffsetsBuffer<i64>,
+    validity: Option<Bitmap>,
+) -> ListArray<i64> {
     ListArray::<i64>::new(
         ListArray::<i64>::default_datatype(values.dtype().clone()),
         offsets,
         values,
-        combine_validities_and(validity, built.as_ref()),
+        validity,
     )
 }
 

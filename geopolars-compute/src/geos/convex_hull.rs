@@ -41,15 +41,14 @@
 
 use std::ops::Range;
 
-use geopolars_core::output::{polygon_array, OwnedAxes};
 use geopolars_core::{
-    GeoDimension, LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PolygonArray, ValidCoords,
+    LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PolygonArray,
+    ValidCoords,
 };
 use geos::{CoordSeq, Geom, Geometry, GeometryTypes};
-use polars_arrow::array::ListArray;
 
-use super::{axes, coord_type};
+use super::axes;
+use super::polygons::polygons_from_geos;
 
 // Because we don't consider CRS,
 // A geometry crossing the antimeridian is hulled the long way round.
@@ -70,7 +69,7 @@ pub fn line_string_convex_hulls(
     array: &LineStringArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<ListArray<i64>> {
+) -> geos::GResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -86,7 +85,7 @@ pub fn multi_point_convex_hulls(
     array: &MultiPointArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<ListArray<i64>> {
+) -> geos::GResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -101,7 +100,7 @@ pub fn multi_line_string_convex_hulls(
     array: &MultiLineStringArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<ListArray<i64>> {
+) -> geos::GResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -117,7 +116,7 @@ pub fn polygon_convex_hulls(
     array: &PolygonArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<ListArray<i64>> {
+) -> geos::GResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -138,7 +137,7 @@ pub fn multi_polygon_convex_hulls(
     array: &MultiPolygonArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<ListArray<i64>> {
+) -> geos::GResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -162,60 +161,32 @@ fn hulls(
     ignore_per_row_errors: bool,
     ccw_outer: bool,
     coord_ranges: impl Fn(Range<usize>, &mut Vec<Range<usize>>),
-) -> geos::GResult<ListArray<i64>> {
+) -> geos::GResult<PolygonArray> {
+    let has_z = coords.dim().has_z();
     let hulls = with_const_flags!(
         hulls_with(rows, coords, ignore_per_row_errors, coord_ranges);
-        coords.dim().has_z(), rows.is_all_valid(), ccw_outer
+        has_z, rows.is_all_valid(), ccw_outer
     )?;
-    Ok(polygon_array(
-        hulls.dim,
-        hulls.axes,
-        hulls.rings,
-        hulls.rows,
-        rows.validity(),
-        &hulls.failed,
-    ))
+    polygons_from_geos(&hulls, has_z)
 }
 
-struct HullBuffers {
-    dim: GeoDimension,
-    axes: OwnedAxes,
-    rings: Vec<i64>,
-    rows: Vec<i64>,
-    failed: Vec<usize>,
-}
-
-/// [`hulls`], with `Z` saying whether the coordinates (and so the hulls) have z.
+/// [`hulls`] as GEOS polygons, with `None` for a missing row.
+/// `Z` says whether the coordinates (and so the hulls) have z.
 /// if `ALL_VALID=true`, we don't first check for validity, and just send it to GEOS.
 /// (If it does contain invalid ones, it's fine because we still check for invalid returned values,
 /// but we're just wasting time because it could have been caught before)
 /// Errors are the exception, so `ignore_per_row_errors` is checked per row rather than made const.
 ///
 /// GEOS gives the exterior as running clockwise.
-/// You can reverse this by giving `CCW_OUTER=true` for a minimal performance penalty.
+/// If `CCW_OUTER=true`, GEOS reverses it.
 fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     rows: &List,
     coords: &ValidCoords,
     ignore_per_row_errors: bool,
     coord_ranges: impl Fn(Range<usize>, &mut Vec<Range<usize>>),
-) -> geos::GResult<HullBuffers> {
-    let dim = if Z {
-        GeoDimension::XYZ
-    } else {
-        GeoDimension::XY
-    };
-    let coord_type = coord_type(dim);
-    let width = dim.field_names().len();
+) -> geos::GResult<Vec<Option<Geometry>>> {
     let (in_x, in_y, in_z, _) = axes(coords);
     let in_z = in_z.unwrap_or_default();
-    let mut x = Vec::with_capacity(coords.len());
-    let mut y = Vec::with_capacity(coords.len());
-    let mut z = if Z {
-        Vec::with_capacity(coords.len())
-    } else {
-        // will not be allocated because we don't push anything in.
-        Vec::new()
-    };
 
     // The coordinates of one row, gathered from its ranges, and reused across rows.
     // GEOS drops m, so it isn't copied.
@@ -224,74 +195,51 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     let mut row_y = Vec::new();
     let mut row_z = Vec::new();
 
-    // The hull's exterior as one interleaved buffer, rather than a `Vec` per axis.
     // `None` if it is not a polygon (degenerate case)
-    // Nothing is pushed until all of it succeeded.
-    let hull_ring = |row_x: &[f64], row_y: &[f64], row_z: &[f64]| {
+    let hull = |row_x: &[f64], row_y: &[f64], row_z: &[f64]| {
         let seq = CoordSeq::new_from_arrays(row_x, row_y, Z.then_some(row_z), None)?;
         let hull = Geometry::create_line_string(seq)?.convex_hull()?;
         debug_assert!(!hull.is_empty()?, "Check before offset should catch this");
         if hull.geometry_type()? != GeometryTypes::Polygon {
             return Ok(None);
         }
-        let ring = hull.get_exterior_ring()?;
-        Ok(Some(ring.get_coord_seq()?.as_buffer(Some(coord_type))?))
+        if CCW_OUTER {
+            hull.reverse().map(Some)
+        } else {
+            Ok(Some(hull))
+        }
     };
 
-    let mut rings = vec![0];
-    let mut offsets = Vec::with_capacity(rows.len() + 1);
-    offsets.push(0);
-    let mut failed = Vec::new();
+    let mut hulls = Vec::with_capacity(rows.len());
     for i in 0..rows.len() {
         // A missing row's offsets point anywhere, so it is not converted.
-        if ALL_VALID || rows.is_valid(i) {
-            ranges.clear();
-            coord_ranges(rows.range(i), &mut ranges);
-            row_x.clear();
-            row_y.clear();
-            row_z.clear();
-            for range in &ranges {
-                row_x.extend_from_slice(&in_x[range.clone()]);
-                row_y.extend_from_slice(&in_y[range.clone()]);
-                if Z {
-                    row_z.extend_from_slice(&in_z[range.clone()]);
-                }
-            }
-            match row_x.len() {
-                // An empty row has an empty hull: no rings, and no trip to GEOS.
-                0 => {}
-                // A single coordinate encloses nothing, and GEOS can't build a linestring of it.
-                1 => failed.push(i),
-                _ => match hull_ring(&row_x, &row_y, &row_z) {
-                    Ok(Some(buffer)) => {
-                        let mut push = |coord: &[f64]| {
-                            x.push(coord[0]);
-                            y.push(coord[1]);
-                            if Z {
-                                z.push(coord[2]);
-                            }
-                        };
-                        if CCW_OUTER {
-                            buffer.chunks_exact(width).rev().for_each(&mut push);
-                        } else {
-                            buffer.chunks_exact(width).for_each(&mut push);
-                        }
-                        rings.push(x.len() as i64);
-                    }
-                    // Zero area: a point or a linestring.
-                    Ok(None) => failed.push(i),
-                    Err(e) if !ignore_per_row_errors => return Err(e),
-                    Err(_) => failed.push(i),
-                },
+        if !ALL_VALID && !rows.is_valid(i) {
+            hulls.push(None);
+            continue;
+        }
+        ranges.clear();
+        coord_ranges(rows.range(i), &mut ranges);
+        row_x.clear();
+        row_y.clear();
+        row_z.clear();
+        for range in &ranges {
+            row_x.extend_from_slice(&in_x[range.clone()]);
+            row_y.extend_from_slice(&in_y[range.clone()]);
+            if Z {
+                row_z.extend_from_slice(&in_z[range.clone()]);
             }
         }
-        offsets.push(rings.len() as i64 - 1);
+        hulls.push(match row_x.len() {
+            // An empty row has an empty hull, without a trip to GEOS's hull.
+            0 => Some(Geometry::create_empty_polygon()?),
+            // A single coordinate encloses nothing, and GEOS can't build a linestring of it.
+            1 => None,
+            _ => match hull(&row_x, &row_y, &row_z) {
+                Ok(hull) => hull,
+                Err(e) if !ignore_per_row_errors => return Err(e),
+                Err(_) => None,
+            },
+        });
     }
-    Ok(HullBuffers {
-        dim,
-        axes: (x, y, Z.then_some(z), None),
-        rings,
-        rows: offsets,
-        failed,
-    })
+    Ok(hulls)
 }
