@@ -10,12 +10,12 @@ use crate::output::{coords_struct, list_array};
 use crate::{downcast, List, ValidCoords, ValidList};
 
 /// One linestring: a run of coordinates.
-pub struct LineString<'a> {
+pub struct ScalarLineString<'a> {
     pub coords: &'a ValidCoords,
     pub vertices: Range<usize>,
 }
 
-impl<'a> LineString<'a> {
+impl<'a> ScalarLineString<'a> {
     /// The position of every vertex in order: x, y, and with `Z` its z (`0.0` without).
     #[inline(always)]
     pub fn positions<const Z: bool>(&self) -> impl Iterator<Item = [f64; 3]> + 'a {
@@ -25,17 +25,17 @@ impl<'a> LineString<'a> {
 }
 
 /// One multilinestring: a run of linestrings.
-pub struct MultiLineString<'a> {
+pub struct ScalarMultiLineString<'a> {
     pub lines: &'a ValidList,
     pub coords: &'a ValidCoords,
     pub parts: Range<usize>,
 }
 
-impl<'a> MultiLineString<'a> {
+impl<'a> ScalarMultiLineString<'a> {
     /// Its linestrings, in order.
-    pub fn line_strings(&self) -> impl Iterator<Item = LineString<'a>> + 'a {
+    pub fn line_strings(&self) -> impl Iterator<Item = ScalarLineString<'a>> + 'a {
         let (lines, coords) = (self.lines, self.coords);
-        self.parts.clone().map(move |j| LineString {
+        self.parts.clone().map(move |j| ScalarLineString {
             coords,
             vertices: lines.range(j),
         })
@@ -66,8 +66,8 @@ impl LineStringArray {
 
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> LineString<'_> {
-        LineString {
+    pub fn get(&self, i: usize) -> ScalarLineString<'_> {
+        ScalarLineString {
             coords: &self.coords,
             vertices: self.rows.range(i),
         }
@@ -102,8 +102,8 @@ impl MultiLineStringArray {
 
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> MultiLineString<'_> {
-        MultiLineString {
+    pub fn get(&self, i: usize) -> ScalarMultiLineString<'_> {
+        ScalarMultiLineString {
             lines: &self.lines,
             coords: &self.coords,
             parts: self.rows.range(i),

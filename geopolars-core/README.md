@@ -34,7 +34,7 @@ A kernel returning geometries returns these types too.
 `into_list_array` turns them back into Polars storage.
 A kernel returning a value per row builds it with the functions in `output` (`f64_array`, ...).
 
-The single-geometry types (`Point`, `LineString`, ...) implement geo-traits,
+The single-geometry types (`ScalarPoint`, `ScalarLineString`, ...) implement geo-traits,
 for the `wkb` and `wkt` writers.
 
 `AxisArrays` considers the validity of each coordinate field separately

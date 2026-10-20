@@ -1,6 +1,6 @@
 //! How long a linestring is, as a [LengthMetric] measures it.
 
-use geopolars_core::{LineString, LineStringArray, MultiLineStringArray};
+use geopolars_core::{LineStringArray, MultiLineStringArray, ScalarLineString};
 use polars_arrow::array::PrimitiveArray;
 
 use super::per_row;
@@ -19,7 +19,7 @@ impl LengthMetric for GeodesicMetric {}
 #[inline(always)]
 fn line_length<const Z: bool, const IGNORE_NAN: bool, M: LengthMetric>(
     metric: &M,
-    line: &LineString,
+    line: &ScalarLineString,
 ) -> Result<f64, M::Error> {
     let mut vertices = line
         .positions::<Z>()

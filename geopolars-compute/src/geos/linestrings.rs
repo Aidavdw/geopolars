@@ -4,7 +4,7 @@ use std::ops::Range;
 
 use geopolars_core::output::SizeHint;
 use geopolars_core::{
-    LineString, LineStringArray, List, MultiLineString, MultiLineStringArray, ValidList,
+    LineStringArray, List, MultiLineStringArray, ScalarLineString, ScalarMultiLineString, ValidList,
 };
 use geos::{Geom, Geometry, GeometryTypes};
 
@@ -13,7 +13,7 @@ use super::{
     ToGeos, ToGeosRows, ValidityBuilder,
 };
 
-impl ToGeos for LineString<'_> {
+impl ToGeos for ScalarLineString<'_> {
     type Geos = Geometry;
 
     fn to_geos(&self) -> geos::GResult<Geometry> {
@@ -34,7 +34,7 @@ impl ToGeosRows for LineStringArray {
     }
 }
 
-impl ToGeos for MultiLineString<'_> {
+impl ToGeos for ScalarMultiLineString<'_> {
     type Geos = Geometry;
 
     fn to_geos(&self) -> geos::GResult<Geometry> {

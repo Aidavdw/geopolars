@@ -2,7 +2,8 @@
 //! m and z don't really matter here.
 
 use geopolars_core::{
-    LineString, LineStringArray, MultiLineStringArray, MultiPolygonArray, Polygon, PolygonArray,
+    LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray, ScalarLineString,
+    ScalarPolygon,
 };
 use polars_arrow::array::BooleanArray;
 
@@ -13,7 +14,7 @@ use super::per_row_bool;
 /// An empty ring runs either way.
 /// Any other ring that encloses nothing runs neither way.
 #[inline(always)]
-fn ring_runs<const CW: bool>(ring: &LineString) -> bool {
+fn ring_runs<const CW: bool>(ring: &ScalarLineString) -> bool {
     if ring.vertices.is_empty() {
         return true;
     }
@@ -29,7 +30,7 @@ fn ring_runs<const CW: bool>(ring: &LineString) -> bool {
 /// If `HOLES_CW=false`, its holes have to run counter-clockwise instead.
 /// No rings at all is the empty polygon, which runs either way.
 #[inline(always)]
-fn polygon_is_ccw<const HOLES_CW: bool>(polygon: &Polygon) -> bool {
+fn polygon_is_ccw<const HOLES_CW: bool>(polygon: &ScalarPolygon) -> bool {
     let mut rings = polygon.rings();
     let Some(exterior) = rings.next() else {
         return true;

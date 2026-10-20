@@ -16,8 +16,8 @@ use geo_traits::{
 };
 
 use crate::{
-    GeoDimension, LineString, MultiLineString, MultiPoint, MultiPolygon, Point, Polygon,
-    ValidCoords,
+    GeoDimension, ScalarLineString, ScalarMultiLineString, ScalarMultiPoint, ScalarMultiPolygon,
+    ScalarPoint, ScalarPolygon, ValidCoords,
 };
 
 /// One coordinate, by value.
@@ -139,7 +139,7 @@ impl GeometryTrait for Coord {
 }
 
 /// A point of its own is empty where x and y are NaN, as GeoArrow spells it.
-impl PointTrait for Point<'_> {
+impl PointTrait for ScalarPoint<'_> {
     type CoordType<'b>
         = Coord
     where
@@ -152,7 +152,7 @@ impl PointTrait for Point<'_> {
     }
 }
 
-impl LineStringTrait for LineString<'_> {
+impl LineStringTrait for ScalarLineString<'_> {
     type CoordType<'b>
         = Coord
     where
@@ -167,22 +167,22 @@ impl LineStringTrait for LineString<'_> {
     }
 }
 
-impl<'a> Polygon<'a> {
-    fn ring(&self, i: usize) -> LineString<'a> {
-        LineString {
+impl<'a> ScalarPolygon<'a> {
+    fn ring(&self, i: usize) -> ScalarLineString<'a> {
+        ScalarLineString {
             coords: self.coords,
             vertices: self.rings.range(self.parts.start + i),
         }
     }
 }
 
-impl<'a> PolygonTrait for Polygon<'a> {
+impl<'a> PolygonTrait for ScalarPolygon<'a> {
     type RingType<'b>
-        = LineString<'a>
+        = ScalarLineString<'a>
     where
         Self: 'b;
 
-    fn exterior(&self) -> Option<LineString<'a>> {
+    fn exterior(&self) -> Option<ScalarLineString<'a>> {
         (!self.parts.is_empty()).then(|| self.ring(0))
     }
 
@@ -190,12 +190,12 @@ impl<'a> PolygonTrait for Polygon<'a> {
         self.parts.len().saturating_sub(1)
     }
 
-    unsafe fn interior_unchecked(&self, i: usize) -> LineString<'a> {
+    unsafe fn interior_unchecked(&self, i: usize) -> ScalarLineString<'a> {
         self.ring(i + 1)
     }
 }
 
-impl MultiPointTrait for MultiPoint<'_> {
+impl MultiPointTrait for ScalarMultiPoint<'_> {
     type InnerPointType<'b>
         = Coord
     where
@@ -210,9 +210,9 @@ impl MultiPointTrait for MultiPoint<'_> {
     }
 }
 
-impl<'a> MultiLineStringTrait for MultiLineString<'a> {
+impl<'a> MultiLineStringTrait for ScalarMultiLineString<'a> {
     type InnerLineStringType<'b>
-        = LineString<'a>
+        = ScalarLineString<'a>
     where
         Self: 'b;
 
@@ -220,17 +220,17 @@ impl<'a> MultiLineStringTrait for MultiLineString<'a> {
         self.parts.len()
     }
 
-    unsafe fn line_string_unchecked(&self, i: usize) -> LineString<'a> {
-        LineString {
+    unsafe fn line_string_unchecked(&self, i: usize) -> ScalarLineString<'a> {
+        ScalarLineString {
             coords: self.coords,
             vertices: self.lines.range(self.parts.start + i),
         }
     }
 }
 
-impl<'a> MultiPolygonTrait for MultiPolygon<'a> {
+impl<'a> MultiPolygonTrait for ScalarMultiPolygon<'a> {
     type InnerPolygonType<'b>
-        = Polygon<'a>
+        = ScalarPolygon<'a>
     where
         Self: 'b;
 
@@ -238,8 +238,8 @@ impl<'a> MultiPolygonTrait for MultiPolygon<'a> {
         self.parts.len()
     }
 
-    unsafe fn polygon_unchecked(&self, i: usize) -> Polygon<'a> {
-        Polygon {
+    unsafe fn polygon_unchecked(&self, i: usize) -> ScalarPolygon<'a> {
+        ScalarPolygon {
             rings: self.rings,
             coords: self.coords,
             parts: self.polygons.range(self.parts.start + i),
@@ -249,15 +249,15 @@ impl<'a> MultiPolygonTrait for MultiPolygon<'a> {
 
 /// Every row type is a geometry of the one variant it is.
 macro_rules! impl_geometry {
-    ($($ty:ident),*) => {$(
+    ($($ty:ident => $variant:ident),*) => {$(
         impl<'a> GeometryTrait for $ty<'a> {
             type T = f64;
-            type PointType<'b> = Point<'a> where Self: 'b;
-            type LineStringType<'b> = LineString<'a> where Self: 'b;
-            type PolygonType<'b> = Polygon<'a> where Self: 'b;
-            type MultiPointType<'b> = MultiPoint<'a> where Self: 'b;
-            type MultiLineStringType<'b> = MultiLineString<'a> where Self: 'b;
-            type MultiPolygonType<'b> = MultiPolygon<'a> where Self: 'b;
+            type PointType<'b> = ScalarPoint<'a> where Self: 'b;
+            type LineStringType<'b> = ScalarLineString<'a> where Self: 'b;
+            type PolygonType<'b> = ScalarPolygon<'a> where Self: 'b;
+            type MultiPointType<'b> = ScalarMultiPoint<'a> where Self: 'b;
+            type MultiLineStringType<'b> = ScalarMultiLineString<'a> where Self: 'b;
+            type MultiPolygonType<'b> = ScalarMultiPolygon<'a> where Self: 'b;
             type GeometryCollectionType<'b> = UnimplementedGeometryCollection<f64> where Self: 'b;
             type RectType<'b> = UnimplementedRect<f64> where Self: 'b;
             type TriangleType<'b> = UnimplementedTriangle<f64> where Self: 'b;
@@ -271,66 +271,66 @@ macro_rules! impl_geometry {
                 &self,
             ) -> geo_traits::GeometryType<
                 '_,
-                Point<'a>,
-                LineString<'a>,
-                Polygon<'a>,
-                MultiPoint<'a>,
-                MultiLineString<'a>,
-                MultiPolygon<'a>,
+                ScalarPoint<'a>,
+                ScalarLineString<'a>,
+                ScalarPolygon<'a>,
+                ScalarMultiPoint<'a>,
+                ScalarMultiLineString<'a>,
+                ScalarMultiPolygon<'a>,
                 UnimplementedGeometryCollection<f64>,
                 UnimplementedRect<f64>,
                 UnimplementedTriangle<f64>,
                 UnimplementedLine<f64>,
             > {
-                geo_traits::GeometryType::$ty(self)
+                geo_traits::GeometryType::$variant(self)
             }
         }
     )*};
 }
 
 impl_geometry!(
-    Point,
-    LineString,
-    Polygon,
-    MultiPoint,
-    MultiLineString,
-    MultiPolygon
+    ScalarPoint => Point,
+    ScalarLineString => LineString,
+    ScalarPolygon => Polygon,
+    ScalarMultiPoint => MultiPoint,
+    ScalarMultiLineString => MultiLineString,
+    ScalarMultiPolygon => MultiPolygon
 );
 
 /// Any one of the row types.
 pub enum Geometry<'a> {
-    Point(Point<'a>),
-    LineString(LineString<'a>),
-    Polygon(Polygon<'a>),
-    MultiPoint(MultiPoint<'a>),
-    MultiLineString(MultiLineString<'a>),
-    MultiPolygon(MultiPolygon<'a>),
+    Point(ScalarPoint<'a>),
+    LineString(ScalarLineString<'a>),
+    Polygon(ScalarPolygon<'a>),
+    MultiPoint(ScalarMultiPoint<'a>),
+    MultiLineString(ScalarMultiLineString<'a>),
+    MultiPolygon(ScalarMultiPolygon<'a>),
 }
 
 impl<'a> GeometryTrait for Geometry<'a> {
     type T = f64;
     type PointType<'b>
-        = Point<'a>
+        = ScalarPoint<'a>
     where
         Self: 'b;
     type LineStringType<'b>
-        = LineString<'a>
+        = ScalarLineString<'a>
     where
         Self: 'b;
     type PolygonType<'b>
-        = Polygon<'a>
+        = ScalarPolygon<'a>
     where
         Self: 'b;
     type MultiPointType<'b>
-        = MultiPoint<'a>
+        = ScalarMultiPoint<'a>
     where
         Self: 'b;
     type MultiLineStringType<'b>
-        = MultiLineString<'a>
+        = ScalarMultiLineString<'a>
     where
         Self: 'b;
     type MultiPolygonType<'b>
-        = MultiPolygon<'a>
+        = ScalarMultiPolygon<'a>
     where
         Self: 'b;
     type GeometryCollectionType<'b>
@@ -365,12 +365,12 @@ impl<'a> GeometryTrait for Geometry<'a> {
         &self,
     ) -> geo_traits::GeometryType<
         '_,
-        Point<'a>,
-        LineString<'a>,
-        Polygon<'a>,
-        MultiPoint<'a>,
-        MultiLineString<'a>,
-        MultiPolygon<'a>,
+        ScalarPoint<'a>,
+        ScalarLineString<'a>,
+        ScalarPolygon<'a>,
+        ScalarMultiPoint<'a>,
+        ScalarMultiLineString<'a>,
+        ScalarMultiPolygon<'a>,
         UnimplementedGeometryCollection<f64>,
         UnimplementedRect<f64>,
         UnimplementedTriangle<f64>,

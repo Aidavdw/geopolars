@@ -20,7 +20,7 @@ pub use simplify::{
 use std::ops::Range;
 
 use geopolars_core::output::SizeHint;
-use geopolars_core::{Coords, GeoDimension, List, Point, PointArray, ValidCoords};
+use geopolars_core::{Coords, GeoDimension, List, PointArray, ScalarPoint, ValidCoords};
 use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
 use polars_arrow::offset::{Offsets, OffsetsBuffer};
@@ -63,7 +63,7 @@ fn coord_type(dim: GeoDimension) -> CoordType {
 }
 
 /// `None` if the point is empty (missing).
-impl ToGeos for Point<'_> {
+impl ToGeos for ScalarPoint<'_> {
     type Geos = Option<Geometry>;
 
     fn to_geos(&self) -> geos::GResult<Option<Geometry>> {

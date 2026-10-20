@@ -7,20 +7,20 @@ use polars_arrow::array::ListArray;
 use polars_core::prelude::PolarsResult;
 
 use crate::output::{coords_struct, list_array};
-use crate::{downcast, LineString, List, ValidCoords, ValidList};
+use crate::{downcast, List, ScalarLineString, ValidCoords, ValidList};
 
 /// One polygon: a run of rings, the first of which is the exterior.
-pub struct Polygon<'a> {
+pub struct ScalarPolygon<'a> {
     pub rings: &'a ValidList,
     pub coords: &'a ValidCoords,
     pub parts: Range<usize>,
 }
 
-impl<'a> Polygon<'a> {
+impl<'a> ScalarPolygon<'a> {
     /// Its rings in order, the exterior first, each as the closed linestring it is.
-    pub fn rings(&self) -> impl Iterator<Item = LineString<'a>> + 'a {
+    pub fn rings(&self) -> impl Iterator<Item = ScalarLineString<'a>> + 'a {
         let (rings, coords) = (self.rings, self.coords);
-        self.parts.clone().map(move |j| LineString {
+        self.parts.clone().map(move |j| ScalarLineString {
             coords,
             vertices: rings.range(j),
         })
@@ -55,8 +55,8 @@ impl PolygonArray {
 
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> Polygon<'_> {
-        Polygon {
+    pub fn get(&self, i: usize) -> ScalarPolygon<'_> {
+        ScalarPolygon {
             rings: &self.rings,
             coords: &self.coords,
             parts: self.rows.range(i),
@@ -65,18 +65,18 @@ impl PolygonArray {
 }
 
 /// One multipolygon: a run of polygons.
-pub struct MultiPolygon<'a> {
+pub struct ScalarMultiPolygon<'a> {
     pub polygons: &'a ValidList,
     pub rings: &'a ValidList,
     pub coords: &'a ValidCoords,
     pub parts: Range<usize>,
 }
 
-impl<'a> MultiPolygon<'a> {
+impl<'a> ScalarMultiPolygon<'a> {
     /// Its polygons, in order.
-    pub fn polygons(&self) -> impl Iterator<Item = Polygon<'a>> + 'a {
+    pub fn polygons(&self) -> impl Iterator<Item = ScalarPolygon<'a>> + 'a {
         let (polygons, rings, coords) = (self.polygons, self.rings, self.coords);
-        self.parts.clone().map(move |j| Polygon {
+        self.parts.clone().map(move |j| ScalarPolygon {
             rings,
             coords,
             parts: polygons.range(j),
@@ -116,8 +116,8 @@ impl MultiPolygonArray {
 
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> MultiPolygon<'_> {
-        MultiPolygon {
+    pub fn get(&self, i: usize) -> ScalarMultiPolygon<'_> {
+        ScalarMultiPolygon {
             polygons: &self.polygons,
             rings: &self.rings,
             coords: &self.coords,

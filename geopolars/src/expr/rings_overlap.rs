@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use super::self_intersects::{same_xy, xy_vertices_validated};
 use crate::geoarrow::{describe, ensure_same_crs, Kind};
-use geopolars_core::{LineString as GeoLineString, ValidCoords, MIN_RING_VERTICES};
+use geopolars_core::{ScalarLineString, ValidCoords, MIN_RING_VERTICES};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -47,7 +47,7 @@ pub(crate) fn ring(
     start: usize,
     end: usize,
 ) -> PolarsResult<Option<Polygon<f64>>> {
-    let Some(vertices) = xy_vertices_validated(&GeoLineString {
+    let Some(vertices) = xy_vertices_validated(&ScalarLineString {
         coords,
         vertices: start..end,
     }) else {

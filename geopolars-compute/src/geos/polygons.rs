@@ -3,7 +3,9 @@
 use std::ops::Range;
 
 use geopolars_core::output::SizeHint;
-use geopolars_core::{List, MultiPolygon, MultiPolygonArray, Polygon, PolygonArray, ValidList};
+use geopolars_core::{
+    List, MultiPolygonArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon, ValidList,
+};
 use geos::{Geom, Geometry, GeometryTypes};
 
 use super::{
@@ -11,7 +13,7 @@ use super::{
     ToGeos, ToGeosRows, ValidityBuilder,
 };
 
-impl ToGeos for Polygon<'_> {
+impl ToGeos for ScalarPolygon<'_> {
     type Geos = Geometry;
 
     fn to_geos(&self) -> geos::GResult<Geometry> {
@@ -32,7 +34,7 @@ impl ToGeosRows for PolygonArray {
     }
 }
 
-impl ToGeos for MultiPolygon<'_> {
+impl ToGeos for ScalarMultiPolygon<'_> {
     type Geos = Geometry;
 
     fn to_geos(&self) -> geos::GResult<Geometry> {

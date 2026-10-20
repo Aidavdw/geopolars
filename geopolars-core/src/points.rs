@@ -5,12 +5,12 @@ use std::ops::Range;
 use crate::{Coords, List, ValidCoords};
 
 /// One point: a single coordinate, which may be missing.
-pub struct Point<'a> {
+pub struct ScalarPoint<'a> {
     pub coords: &'a Coords,
     pub index: usize,
 }
 
-impl Point<'_> {
+impl ScalarPoint<'_> {
     /// Its position: x, y, and with `Z` its z (`0.0` without).
     /// With `NULLS`, `None` if it is missing.
     /// Without, it assumes it is there.
@@ -29,8 +29,8 @@ pub struct PointArray {
 impl PointArray {
     /// Row `i`.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> Point<'_> {
-        Point {
+    pub fn get(&self, i: usize) -> ScalarPoint<'_> {
+        ScalarPoint {
             coords: &self.coords,
             index: i,
         }
@@ -43,7 +43,7 @@ impl PointArray {
 }
 
 /// One multipoint: a run of coordinates.
-pub struct MultiPoint<'a> {
+pub struct ScalarMultiPoint<'a> {
     pub coords: &'a ValidCoords,
     pub vertices: Range<usize>,
 }
@@ -58,8 +58,8 @@ pub struct MultiPointArray {
 impl MultiPointArray {
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
-    pub fn get(&self, i: usize) -> MultiPoint<'_> {
-        MultiPoint {
+    pub fn get(&self, i: usize) -> ScalarMultiPoint<'_> {
+        ScalarMultiPoint {
             coords: &self.coords,
             vertices: self.rows.range(i),
         }

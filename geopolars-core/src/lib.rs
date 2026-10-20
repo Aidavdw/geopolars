@@ -20,10 +20,12 @@ pub use coords::{
 };
 pub use dimension::GeoDimension;
 pub use geotraits::{Coord, Geometry};
-pub use linestrings::{LineString, LineStringArray, MultiLineString, MultiLineStringArray};
+pub use linestrings::{
+    LineStringArray, MultiLineStringArray, ScalarLineString, ScalarMultiLineString,
+};
 pub use lists::{List, ValidList};
-pub use points::{MultiPoint, MultiPointArray, Point, PointArray};
-pub use polygons::{MultiPolygon, MultiPolygonArray, Polygon, PolygonArray};
+pub use points::{MultiPointArray, PointArray, ScalarMultiPoint, ScalarPoint};
+pub use polygons::{MultiPolygonArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon};
 
 /// Downcast one level of the storage to the array it has to be.
 /// The dtype was already checked, so this failing is a bug.

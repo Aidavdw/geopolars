@@ -15,7 +15,7 @@ use rsgeo::{Coord, Intersections, Line, LineIntersection, Polygon, PreparedGeome
 use super::rings_overlap::{overlap, ring};
 use crate::geoarrow::{describe, Kind};
 use geopolars_core::is_close;
-use geopolars_core::{downcast, LineString, ValidCoords};
+use geopolars_core::{downcast, ScalarLineString, ValidCoords};
 
 /// One segment of a linestring, numbered in order along it.
 #[derive(Clone, Copy)]
@@ -39,7 +39,7 @@ pub(crate) fn same_xy(a: Coord<f64>, b: Coord<f64>) -> bool {
 
 /// The x and y of every vertex of `line`.
 /// `None` if one of them is not finite.
-pub(crate) fn xy_vertices_validated(line: &LineString) -> Option<Vec<Coord<f64>>> {
+pub(crate) fn xy_vertices_validated(line: &ScalarLineString) -> Option<Vec<Coord<f64>>> {
     line.positions::<false>()
         .map(|[x, y, _]| (x.is_finite() && y.is_finite()).then_some(Coord { x, y }))
         .collect()
@@ -48,7 +48,7 @@ pub(crate) fn xy_vertices_validated(line: &LineString) -> Option<Vec<Coord<f64>>
 /// Whether `line` crosses or touches itself, in x and y.
 /// `None` if one of its vertices is not finite in x or y.
 /// See [`vertices_self_intersect`].
-pub(crate) fn line_self_intersects(line: &LineString) -> Option<bool> {
+pub(crate) fn line_self_intersects(line: &ScalarLineString) -> Option<bool> {
     xy_vertices_validated(line).map(|vertices| vertices_self_intersect(&vertices))
 }
 
@@ -128,7 +128,7 @@ fn lines(lines: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArra
     Ok(rows
         .map(|i| {
             let (start, end) = lines.offsets().start_end(i);
-            let line = LineString {
+            let line = ScalarLineString {
                 coords: &coords,
                 vertices: start..end,
             };
