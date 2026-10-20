@@ -9,8 +9,8 @@ use geopolars_core::{
 use geos::{Geom, Geometry, GeometryTypes};
 
 use super::{
-    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, OffsetsBuilder,
-    ToGeos, ToGeosRows, ValidityBuilder,
+    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, GeosRow,
+    OffsetsBuilder, ToGeos, ToGeosRows, ValidityBuilder,
 };
 use crate::GeoComputeResult;
 
@@ -137,8 +137,9 @@ impl GeosGeometries {
         let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
         for geometry in self.geometries {
             let is_valid = match geometry {
-                None => false,
-                Some(geometry) => match geometry.geometry_type()? {
+                GeosRow::Missing => false,
+                GeosRow::Empty => true,
+                GeosRow::Geometry(geometry) => match geometry.geometry_type()? {
                     GeometryTypes::Polygon if geometry.is_empty()? => true,
                     GeometryTypes::Polygon => {
                         push_rings::<Z, false>(&mut coords, &mut rings, &geometry)?;
@@ -182,8 +183,9 @@ fn into_polygon_array_with<const Z: bool, const REVERSED: bool>(
     let mut rows = OffsetsBuilder::with_capacity(geometries.geometries.len());
     for geometry in geometries.geometries {
         let is_valid = match geometry {
-            None => false,
-            Some(polygon) => match polygon.geometry_type()? {
+            GeosRow::Missing => false,
+            GeosRow::Empty => true,
+            GeosRow::Geometry(polygon) => match polygon.geometry_type()? {
                 GeometryTypes::Polygon => {
                     push_rings::<Z, REVERSED>(&mut coords, &mut rings, &polygon)?;
                     true

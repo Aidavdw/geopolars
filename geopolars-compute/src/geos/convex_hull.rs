@@ -48,7 +48,7 @@ use geopolars_core::{
 };
 use geos::{CoordSeq, Geom, Geometry, GeometryTypes};
 
-use super::{axes, GeosGeometries};
+use super::{axes, GeosGeometries, GeosRow};
 use crate::GeoComputeResult;
 
 // Because we don't consider CRS,
@@ -172,7 +172,7 @@ fn hulls(
     hulls.into_polygon_array(has_z, ignore_per_row_errors, ccw_outer)
 }
 
-/// [`hulls`] as GEOS polygons, with `None` for a missing row.
+/// [`hulls`] as GEOS polygons.
 /// The size hint is an upper bound:
 /// a row's hull is one ring, which closes on at most one coordinate more than the row has.
 /// `Z` says whether the coordinates (and so the hulls) have z.
@@ -211,7 +211,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool>(
     for i in 0..rows.len() {
         // A missing row's offsets point anywhere, so it is not converted.
         if !ALL_VALID && !rows.is_valid(i) {
-            hulls.push(None);
+            hulls.push(GeosRow::Missing);
             continue;
         }
         ranges.clear();
@@ -227,14 +227,14 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool>(
             }
         }
         hulls.push(match row_x.len() {
-            // An empty row has an empty hull, without a trip to GEOS's hull.
-            0 => Some(Geometry::create_empty_polygon()?),
+            // An empty row has an empty hull, without a trip to GEOS.
+            0 => GeosRow::Empty,
             // A single coordinate encloses nothing, and GEOS can't build a linestring of it.
-            1 => None,
+            1 => GeosRow::Missing,
             _ => match hull(&row_x, &row_y, &row_z) {
-                Ok(hull) => hull,
+                Ok(hull) => hull.into(),
                 Err(e) if !ignore_per_row_errors => return Err(e),
-                Err(_) => None,
+                Err(_) => GeosRow::Missing,
             },
         });
     }

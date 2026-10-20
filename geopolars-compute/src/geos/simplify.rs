@@ -4,9 +4,8 @@
 //! - if `preserve_topology=true`: GEOS's topology-preserving simplifier.
 
 use geopolars_core::{LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray};
-use geos::Geometry;
 
-use super::{GeosGeometries, ToGeosRows};
+use super::{GeosGeometries, GeosRow, ToGeosRows};
 use crate::GeoComputeResult;
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
@@ -115,7 +114,7 @@ pub fn simplify_multi_polygons(
 }
 
 /// Every geometry simplified to within `tolerance`, forwarded to GEOS.
-/// A missing geometry stays missing.
+/// A missing or empty geometry stays as it is.
 /// If `ignore_per_row_errors=true`, a geometry GEOS fails on becomes missing;
 /// otherwise its error is returned.
 /// The size hint is kept as an upper bound: simplifying removes vertices.
@@ -138,12 +137,12 @@ fn simplify_via_geos(
 /// otherwise Douglas-Peucker.
 /// Errors are the exception, so `ignore_per_row_errors` is checked per row rather than made const.
 fn simplify_via_geos_with<const PRESERVE_TOPOLOGY: bool>(
-    geometries: &mut [Option<Geometry>],
+    geometries: &mut [GeosRow],
     tolerance: f64,
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<()> {
     for geometry in geometries {
-        let Some(input) = geometry else {
+        let GeosRow::Geometry(input) = geometry else {
             continue;
         };
         let simplified = if PRESERVE_TOPOLOGY {
@@ -152,9 +151,9 @@ fn simplify_via_geos_with<const PRESERVE_TOPOLOGY: bool>(
             input.simplify(tolerance)
         };
         *geometry = match simplified {
-            Ok(simple) => Some(simple),
+            Ok(simple) => GeosRow::Geometry(simple),
             Err(e) if !ignore_per_row_errors => return Err(e.into()),
-            Err(_) => None,
+            Err(_) => GeosRow::Missing,
         };
     }
     Ok(())

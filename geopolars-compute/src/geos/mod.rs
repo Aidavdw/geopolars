@@ -35,7 +35,9 @@ pub trait ToGeos {
     fn to_geos(&self) -> GeoComputeResult<Self::Geos>;
 }
 
-/// Converts an array into one GEOS geometry per row, with `None` where the row is missing.
+/// Converts an array into one [`GeosRow`] per row.
+/// A missing row is `Missing`.
+/// A row without parts is `Empty`, so it never goes to GEOS.
 /// The size hint is the size of the array itself.
 /// If `ignore_per_row_errors=true`, a row GEOS fails to build is missing too;
 /// otherwise its error is returned.
@@ -88,7 +90,7 @@ impl ToGeosRows for PointArray {
         let mut geometries = Vec::with_capacity(self.coords.len());
         for i in 0..self.coords.len() {
             let point = point_to_geos(&self.coords, i, len, coord_type);
-            geometries.push(row_or_missing(point, ignore_per_row_errors)?);
+            geometries.push(row_or_missing(point, ignore_per_row_errors)?.into());
         }
         Ok(GeosGeometries {
             geometries,
@@ -149,14 +151,19 @@ fn rows_to_geos_with<const ALL_VALID: bool>(
     rows: &List,
     ignore_per_row_errors: bool,
     to_geos: impl Fn(Range<usize>) -> GeoComputeResult<Geometry>,
-) -> GeoComputeResult<Vec<Option<Geometry>>> {
+) -> GeoComputeResult<Vec<GeosRow>> {
     let mut geometries = Vec::with_capacity(rows.len());
     for i in 0..rows.len() {
         // A missing row's offsets point anywhere, so it is not converted.
-        geometries.push(if ALL_VALID || rows.is_valid(i) {
-            row_or_missing(to_geos(rows.range(i)).map(Some), ignore_per_row_errors)?
+        if !ALL_VALID && !rows.is_valid(i) {
+            geometries.push(GeosRow::Missing);
+            continue;
+        }
+        let parts = rows.range(i);
+        geometries.push(if parts.is_empty() {
+            GeosRow::Empty
         } else {
-            None
+            row_or_missing(to_geos(parts).map(Some), ignore_per_row_errors)?.into()
         });
     }
     Ok(geometries)
@@ -190,11 +197,25 @@ fn coord_seq(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<CoordSeq> 
 /// GEOS geometries of any kind, one per row,
 /// to copy into one of our arrays with an `into_*_array` conversion.
 pub struct GeosGeometries {
-    /// `None` gives a missing row.
-    pub geometries: Vec<Option<Geometry>>,
+    pub geometries: Vec<GeosRow>,
     /// An upper bound, sized for the deepest kind, a multipolygon:
     /// rings (or lines), then polygons.
     pub size_hint: SizeHint<2>,
+}
+
+/// One row of [`GeosGeometries`].
+pub enum GeosRow {
+    Missing,
+    /// Empty, without a GEOS geometry. Valid for every kind.
+    Empty,
+    Geometry(Geometry),
+}
+
+/// `None` is a missing row.
+impl From<Option<Geometry>> for GeosRow {
+    fn from(geometry: Option<Geometry>) -> Self {
+        geometry.map_or(GeosRow::Missing, GeosRow::Geometry)
+    }
 }
 
 /// For a conversion getting a geometry of a kind it can't hold:

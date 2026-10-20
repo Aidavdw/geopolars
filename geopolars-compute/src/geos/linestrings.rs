@@ -9,8 +9,8 @@ use geopolars_core::{
 use geos::{Geom, Geometry, GeometryTypes};
 
 use super::{
-    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, OffsetsBuilder,
-    ToGeos, ToGeosRows, ValidityBuilder,
+    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, GeosRow,
+    OffsetsBuilder, ToGeos, ToGeosRows, ValidityBuilder,
 };
 use crate::GeoComputeResult;
 
@@ -96,8 +96,9 @@ impl GeosGeometries {
         let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
         for geometry in self.geometries {
             let is_valid = match geometry {
-                None => false,
-                Some(line_string) => match line_string.geometry_type()? {
+                GeosRow::Missing => false,
+                GeosRow::Empty => true,
+                GeosRow::Geometry(line_string) => match line_string.geometry_type()? {
                     GeometryTypes::LineString => {
                         coords.push::<Z, false>(&line_string)?;
                         true
@@ -128,8 +129,9 @@ impl GeosGeometries {
         let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
         for geometry in self.geometries {
             let is_valid = match geometry {
-                None => false,
-                Some(geometry) => match geometry.geometry_type()? {
+                GeosRow::Missing => false,
+                GeosRow::Empty => true,
+                GeosRow::Geometry(geometry) => match geometry.geometry_type()? {
                     GeometryTypes::LineString if geometry.is_empty()? => true,
                     GeometryTypes::LineString => {
                         coords.push::<Z, false>(&geometry)?;
