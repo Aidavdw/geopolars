@@ -1,7 +1,7 @@
 //! [geo-traits](geo_traits) for the row types.
 //!
 //! These exist because the `wkb` and `wkt` writers only take geometries through geo-traits.
-//! geo-traits has no null interior coordinates, so everything below a row is a [ValidCoords].
+//! geo-traits *also* has **no null** interior coordinates, so everything below a row is a [ValidCoords].
 //!
 //! Don't shoot me for using lifetimes here!
 //! Owning their data would clone the column's buffers each time:

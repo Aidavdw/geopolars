@@ -155,7 +155,6 @@ pub fn multi_polygon_convex_hulls(
     )
 }
 
-/// The convex hull of every one of `rows`.
 /// `coord_ranges` adds the ranges of `coords` to hull for the parts of a row.
 fn hulls(
     rows: &List,
@@ -178,7 +177,6 @@ fn hulls(
     ))
 }
 
-/// What [`hulls_with`] builds, for [`polygon_array`].
 struct HullBuffers {
     dim: GeoDimension,
     axes: OwnedAxes,
