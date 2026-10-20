@@ -195,42 +195,6 @@ pub struct GeosGeometries {
     pub size_hint: SizeHint<2>,
 }
 
-impl GeosGeometries {
-    /// The exact size hint of `geometries`, counted through GEOS.
-    pub fn size_hint(geometries: &[Option<Geometry>]) -> geos::GResult<SizeHint<2>> {
-        let mut size_hint = SizeHint {
-            coords: 0,
-            parts: [0, 0],
-        };
-        for geometry in geometries.iter().flatten() {
-            size_hint.coords += geometry.get_num_coordinates()?;
-            match geometry.geometry_type()? {
-                // GEOS gives a multi-geometry of one part as a plain one, and an empty one has no parts.
-                GeometryTypes::LineString if !geometry.is_empty()? => size_hint.parts[0] += 1,
-                GeometryTypes::MultiLineString => {
-                    size_hint.parts[0] += geometry.get_num_geometries()?;
-                }
-                GeometryTypes::Polygon if !geometry.is_empty()? => {
-                    size_hint.parts[0] += 1 + geometry.get_num_interior_rings()?;
-                    size_hint.parts[1] += 1;
-                }
-                GeometryTypes::MultiPolygon => {
-                    for n in 0..geometry.get_num_geometries()? {
-                        let polygon = geometry.get_geometry_n(n)?;
-                        // GEOS gives an empty polygon an empty exterior, which we don't store.
-                        if !polygon.is_empty()? {
-                            size_hint.parts[0] += 1 + polygon.get_num_interior_rings()?;
-                        }
-                        size_hint.parts[1] += 1;
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(size_hint)
-    }
-}
-
 /// For a conversion getting a geometry of a kind it can't hold:
 /// `false` (its row is missing) if `ignore_per_row_errors=true`, otherwise an error.
 fn wrong_kind(

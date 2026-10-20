@@ -171,7 +171,8 @@ fn hulls(
 }
 
 /// [`hulls`] as GEOS polygons, with `None` for a missing row.
-/// The size hint is exact, counted as the hulls are built.
+/// The size hint is an upper bound:
+/// a row's hull is one ring, which closes on at most one coordinate more than the row has.
 /// `Z` says whether the coordinates (and so the hulls) have z.
 /// if `ALL_VALID=true`, we don't first check for validity, and just send it to GEOS.
 /// (If it does contain invalid ones, it's fine because we still check for invalid returned values,
@@ -196,12 +197,8 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     let mut row_y = Vec::new();
     let mut row_z = Vec::new();
 
-    let mut size_hint = SizeHint {
-        coords: 0,
-        parts: [0, 0],
-    };
     // `None` if it is not a polygon (degenerate case)
-    let mut hull = |row_x: &[f64], row_y: &[f64], row_z: &[f64]| {
+    let hull = |row_x: &[f64], row_y: &[f64], row_z: &[f64]| {
         let seq = CoordSeq::new_from_arrays(row_x, row_y, Z.then_some(row_z), None)?;
         let hull = Geometry::create_line_string(seq)?.convex_hull()?;
         debug_assert!(!hull.is_empty()?, "Check before offset should catch this");
@@ -209,9 +206,6 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
             return Ok(None);
         }
         let hull = if CCW_OUTER { hull.reverse()? } else { hull };
-        size_hint.coords += hull.get_num_coordinates()?;
-        // rings: a hull has no holes.
-        size_hint.parts[0] += 1;
         Ok(Some(hull))
     };
 
@@ -248,6 +242,9 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     }
     Ok(GeosGeometries {
         geometries: hulls,
-        size_hint,
+        size_hint: SizeHint {
+            coords: coords.len() + rows.len(),
+            parts: [rows.len(), 0],
+        },
     })
 }
