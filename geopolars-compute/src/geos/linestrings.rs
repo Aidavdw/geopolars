@@ -100,7 +100,7 @@ impl GeosGeometries {
                 None => false,
                 Some(line_string) => match line_string.geometry_type()? {
                     GeometryTypes::LineString => {
-                        coords.push(&line_string)?;
+                        coords.push::<false>(&line_string)?;
                         true
                     }
                     other => wrong_kind("linestring", other, ignore_per_row_errors)?,
@@ -134,13 +134,13 @@ impl GeosGeometries {
                 Some(geometry) => match geometry.geometry_type()? {
                     GeometryTypes::LineString if geometry.is_empty()? => true,
                     GeometryTypes::LineString => {
-                        coords.push(&geometry)?;
+                        coords.push::<false>(&geometry)?;
                         lines.push(coords.len());
                         true
                     }
                     GeometryTypes::MultiLineString => {
                         for n in 0..geometry.get_num_geometries()? {
-                            coords.push(&geometry.get_geometry_n(n)?)?;
+                            coords.push::<false>(&geometry.get_geometry_n(n)?)?;
                             lines.push(coords.len());
                         }
                         true

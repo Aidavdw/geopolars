@@ -75,7 +75,7 @@ pub fn simplify_polygons(
         preserve_topology,
         ignore_per_row_errors,
     )?
-    .into_polygon_array(array.coords.dim().has_z(), ignore_per_row_errors)
+    .into_polygon_array::<false>(array.coords.dim().has_z(), ignore_per_row_errors)
 }
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.

@@ -166,9 +166,14 @@ fn hulls(
     let has_z = coords.dim().has_z();
     let hulls = with_const_flags!(
         hulls_with(rows, coords, ignore_per_row_errors, coord_ranges);
-        has_z, rows.is_all_valid(), ccw_outer
+        has_z, rows.is_all_valid()
     )?;
-    hulls.into_polygon_array(has_z, ignore_per_row_errors)
+    // GEOS gives the exterior as running clockwise.
+    if ccw_outer {
+        hulls.into_polygon_array::<true>(has_z, ignore_per_row_errors)
+    } else {
+        hulls.into_polygon_array::<false>(has_z, ignore_per_row_errors)
+    }
 }
 
 /// [`hulls`] as GEOS polygons, with `None` for a missing row.
@@ -179,10 +184,7 @@ fn hulls(
 /// (If it does contain invalid ones, it's fine because we still check for invalid returned values,
 /// but we're just wasting time because it could have been caught before)
 /// Errors are the exception, so `ignore_per_row_errors` is checked per row rather than made const.
-///
-/// GEOS gives the exterior as running clockwise.
-/// If `CCW_OUTER=true`, GEOS reverses it.
-fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
+fn hulls_with<const Z: bool, const ALL_VALID: bool>(
     rows: &List,
     coords: &ValidCoords,
     ignore_per_row_errors: bool,
@@ -206,7 +208,6 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
         if hull.geometry_type()? != GeometryTypes::Polygon {
             return Ok(None);
         }
-        let hull = if CCW_OUTER { hull.reverse()? } else { hull };
         Ok(Some(hull))
     };
 

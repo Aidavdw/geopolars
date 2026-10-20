@@ -108,7 +108,8 @@ impl GeosGeometries {
     /// If `has_z=true`, the coordinates keep their z.
     /// A geometry that is not a polygon is an error.
     /// If `ignore_per_row_errors=true`, its row is missing instead.
-    pub fn into_polygon_array(
+    /// If `REVERSED=true`, every ring is copied in reverse order.
+    pub fn into_polygon_array<const REVERSED: bool>(
         self,
         has_z: bool,
         ignore_per_row_errors: bool,
@@ -122,7 +123,7 @@ impl GeosGeometries {
                 None => false,
                 Some(polygon) => match polygon.geometry_type()? {
                     GeometryTypes::Polygon => {
-                        push_rings(&mut coords, &mut rings, &polygon)?;
+                        push_rings::<REVERSED>(&mut coords, &mut rings, &polygon)?;
                         true
                     }
                     other => wrong_kind("polygon", other, ignore_per_row_errors)?,
@@ -158,13 +159,17 @@ impl GeosGeometries {
                 Some(geometry) => match geometry.geometry_type()? {
                     GeometryTypes::Polygon if geometry.is_empty()? => true,
                     GeometryTypes::Polygon => {
-                        push_rings(&mut coords, &mut rings, &geometry)?;
+                        push_rings::<false>(&mut coords, &mut rings, &geometry)?;
                         polygons.push(rings.len());
                         true
                     }
                     GeometryTypes::MultiPolygon => {
                         for n in 0..geometry.get_num_geometries()? {
-                            push_rings(&mut coords, &mut rings, &geometry.get_geometry_n(n)?)?;
+                            push_rings::<false>(
+                                &mut coords,
+                                &mut rings,
+                                &geometry.get_geometry_n(n)?,
+                            )?;
                             polygons.push(rings.len());
                         }
                         true
@@ -187,8 +192,10 @@ impl GeosGeometries {
 /// Appends the rings of `polygon`, each ended in `rings`.
 /// The exterior comes first, then the interiors.
 /// An empty polygon has no rings.
+/// If `REVERSED=true`, every ring is appended in reverse order,
+/// which flips the orientation of the polygon.
 #[inline(always)]
-fn push_rings(
+fn push_rings<const REVERSED: bool>(
     coords: &mut CoordsBuilder,
     rings: &mut OffsetsBuilder,
     polygon: &impl Geom,
@@ -198,10 +205,10 @@ fn push_rings(
     if polygon.is_empty()? {
         return Ok(());
     }
-    coords.push(&polygon.get_exterior_ring()?)?;
+    coords.push::<REVERSED>(&polygon.get_exterior_ring()?)?;
     rings.push(coords.len());
     for n in 0..polygon.get_num_interior_rings()? {
-        coords.push(&polygon.get_interior_ring_n(n)?)?;
+        coords.push::<REVERSED>(&polygon.get_interior_ring_n(n)?)?;
         rings.push(coords.len());
     }
     Ok(())

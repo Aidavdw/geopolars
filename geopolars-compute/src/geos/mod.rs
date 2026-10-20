@@ -271,7 +271,8 @@ impl CoordsBuilder {
     }
 
     /// Appends the coordinates of `geometry`, a linestring or a ring.
-    fn push(&mut self, geometry: &impl Geom) -> GeoComputeResult<()> {
+    /// If `REVERSED=true`, they are appended in reverse order.
+    fn push<const REVERSED: bool>(&mut self, geometry: &impl Geom) -> GeoComputeResult<()> {
         let dim = match self.z {
             Some(_) => GeoDimension::XYZ,
             None => GeoDimension::XY,
@@ -280,15 +281,29 @@ impl CoordsBuilder {
         let width = dim.field_names().len();
         // Once per linestring or ring, rather than per coordinate.
         match &mut self.z {
-            Some(z) => buffer.chunks_exact(width).for_each(|coord| {
-                self.x.push(coord[0]);
-                self.y.push(coord[1]);
-                z.push(coord[2]);
-            }),
-            None => buffer.chunks_exact(width).for_each(|coord| {
-                self.x.push(coord[0]);
-                self.y.push(coord[1]);
-            }),
+            Some(z) => {
+                let push = |coord: &[f64]| {
+                    self.x.push(coord[0]);
+                    self.y.push(coord[1]);
+                    z.push(coord[2]);
+                };
+                if REVERSED {
+                    buffer.chunks_exact(width).rev().for_each(push);
+                } else {
+                    buffer.chunks_exact(width).for_each(push);
+                }
+            }
+            None => {
+                let push = |coord: &[f64]| {
+                    self.x.push(coord[0]);
+                    self.y.push(coord[1]);
+                };
+                if REVERSED {
+                    buffer.chunks_exact(width).rev().for_each(push);
+                } else {
+                    buffer.chunks_exact(width).for_each(push);
+                }
+            }
         }
         Ok(())
     }
