@@ -12,17 +12,18 @@ use super::{
     axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, OffsetsBuilder,
     ToGeos, ToGeosRows, ValidityBuilder,
 };
+use crate::GeoComputeResult;
 
 impl ToGeos for ScalarLineString<'_> {
     type Geos = Geometry;
 
-    fn to_geos(&self) -> geos::GResult<Geometry> {
+    fn to_geos(&self) -> GeoComputeResult<Geometry> {
         line_string_to_geos(&axes(self.coords), self.vertices.clone())
     }
 }
 
 impl ToGeosRows for LineStringArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
         let axes = axes(&self.coords);
         let size_hint = SizeHint {
             coords: self.coords.len(),
@@ -37,13 +38,13 @@ impl ToGeosRows for LineStringArray {
 impl ToGeos for ScalarMultiLineString<'_> {
     type Geos = Geometry;
 
-    fn to_geos(&self) -> geos::GResult<Geometry> {
+    fn to_geos(&self) -> GeoComputeResult<Geometry> {
         multi_line_string_to_geos(&axes(self.coords), self.lines, self.parts.clone())
     }
 }
 
 impl ToGeosRows for MultiLineStringArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
         let axes = axes(&self.coords);
         let size_hint = SizeHint {
             coords: self.coords.len(),
@@ -58,8 +59,11 @@ impl ToGeosRows for MultiLineStringArray {
 /// Can copy from axes in one go.
 /// No vertices gives an empty line string.
 #[inline(always)]
-pub(super) fn line_string_to_geos(axes: &Axes, vertices: Range<usize>) -> geos::GResult<Geometry> {
-    Geometry::create_line_string(coord_seq(axes, vertices)?)
+pub(super) fn line_string_to_geos(
+    axes: &Axes,
+    vertices: Range<usize>,
+) -> GeoComputeResult<Geometry> {
+    Ok(Geometry::create_line_string(coord_seq(axes, vertices)?)?)
 }
 
 /// No parts gives an empty multilinestring.
@@ -68,13 +72,13 @@ pub(super) fn multi_line_string_to_geos(
     axes: &Axes,
     lines: &ValidList,
     parts: Range<usize>,
-) -> geos::GResult<Geometry> {
+) -> GeoComputeResult<Geometry> {
     // GEOS takes ownership of the parts, so they can't share a buffer across rows.
     let mut line_strings = Vec::with_capacity(parts.len());
     for j in parts {
         line_strings.push(line_string_to_geos(axes, lines.range(j))?);
     }
-    Geometry::create_multiline_string(line_strings)
+    Ok(Geometry::create_multiline_string(line_strings)?)
 }
 
 impl GeosGeometries {
@@ -87,7 +91,7 @@ impl GeosGeometries {
         self,
         has_z: bool,
         ignore_per_row_errors: bool,
-    ) -> geos::GResult<LineStringArray> {
+    ) -> GeoComputeResult<LineStringArray> {
         let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
         let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
         let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
@@ -119,7 +123,7 @@ impl GeosGeometries {
         self,
         has_z: bool,
         ignore_per_row_errors: bool,
-    ) -> geos::GResult<MultiLineStringArray> {
+    ) -> GeoComputeResult<MultiLineStringArray> {
         let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
         let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
         let mut lines = OffsetsBuilder::with_capacity(self.size_hint.parts[0]);

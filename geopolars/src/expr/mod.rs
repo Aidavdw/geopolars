@@ -27,3 +27,19 @@ pub mod self_intersects;
 pub mod simplify;
 pub mod wkb;
 pub mod wkt;
+
+use geopolars_compute::GeoComputeResult;
+use polars::prelude::{polars_err, PolarsResult};
+
+/// Turns the result of a `geopolars_compute` kernel into a [`PolarsResult`].
+/// Can't just do Into<> because orphan rule,
+/// and don't want to bring polars_err into scope of geopolars_compute.
+trait IntoPolarsResult<T> {
+    fn into_polars(self) -> PolarsResult<T>;
+}
+
+impl<T> IntoPolarsResult<T> for GeoComputeResult<T> {
+    fn into_polars(self) -> PolarsResult<T> {
+        self.map_err(|e| polars_err!(ComputeError: "{e}"))
+    }
+}

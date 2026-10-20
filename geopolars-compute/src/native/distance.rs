@@ -10,7 +10,7 @@ use geopolars_core::output::{f64_array, f64_array_masked};
 use geopolars_core::PointArray;
 use polars_arrow::array::PrimitiveArray;
 
-use crate::{BaseMetric, GeodesicMetric, Planar, ReprojectError, WithHeight};
+use crate::{BaseMetric, GeoComputeError, GeodesicMetric, Planar, WithHeight};
 
 /// How a segment is measured: on the plane, or along an ellipsoid.
 /// Generic, so every metric and dimension gets a loop of its own.
@@ -63,11 +63,11 @@ impl DistanceMetric for Planar {
 /// each segment is its geodesic and its difference in height, by Pythagoras.
 impl DistanceMetric for GeodesicMetric {
     type Vertex = WithHeight;
-    type Error = ReprojectError;
+    type Error = GeoComputeError;
     const MEASURES_NULL_SLOTS: bool = false;
 
     #[inline(always)]
-    fn vertex(&self, [x, y, z]: [f64; 3]) -> Result<WithHeight, ReprojectError> {
+    fn vertex(&self, [x, y, z]: [f64; 3]) -> Result<WithHeight, GeoComputeError> {
         Ok((self.lonlat((x, y))?, z))
     }
 

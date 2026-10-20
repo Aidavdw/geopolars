@@ -15,6 +15,7 @@ use serde::Deserialize;
 use geopolars_core::GeoDimension;
 use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
+use super::IntoPolarsResult;
 use crate::geoarrow::{describe, Geo, Kind};
 
 /// A point encloses nothing, so it is refused.
@@ -127,7 +128,7 @@ fn chunk_hulls(
         Kind::Point => return Err(encloses_nothing(dtype)),
     }
     .map(PolygonArray::into_list_array)
-    .map_err(|e| polars_err!(ComputeError: "{e}"))
+    .into_polars()
 }
 
 /// See `convex_hull`.

@@ -10,10 +10,10 @@
 // - Rhumb, distance along const lat or long bearing
 // - Projected, which is just Geodesic but first projected to WGS84, and uses Karney's algorithm.
 
-use std::fmt;
-
 use geographiclib_rs::{Geodesic, InverseGeodesic};
-use proj::{Proj, ProjError};
+use proj::Proj;
+
+use crate::{GeoComputeError, GeoComputeResult};
 
 /// Marker trait so we can trace all the metrics to one place :)
 pub trait BaseMetric {}
@@ -25,26 +25,6 @@ impl BaseMetric for Planar {}
 
 /// A point's `(x, y)` and its `z`, kept apart so the `(x, y)` can go to PROJ as is.
 pub type WithHeight = ((f64, f64), f64);
-
-/// A coordinate PROJ could not bring to longitude/latitude.
-#[derive(Debug)]
-pub struct ReprojectError {
-    pub position: (f64, f64),
-    pub source: ProjError,
-}
-
-impl fmt::Display for ReprojectError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (x, y) = self.position;
-        write!(f, "failed to reproject ({x}, {y}): {}", self.source)
-    }
-}
-
-impl std::error::Error for ReprojectError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(&self.source)
-    }
-}
 
 /// Measures coordinates in one CRS against each other along the ellipsoid that CRS lies on.
 pub struct GeodesicMetric {
@@ -70,10 +50,10 @@ impl GeodesicMetric {
     ///
     /// Reprojecting is the expensive part of measuring,
     /// so something measuring many segments should do this once per vertex.
-    pub fn lonlat(&self, (x, y): (f64, f64)) -> Result<(f64, f64), ReprojectError> {
+    pub fn lonlat(&self, (x, y): (f64, f64)) -> GeoComputeResult<(f64, f64)> {
         self.to_lonlat
             .convert((x, y))
-            .map_err(|source| ReprojectError {
+            .map_err(|source| GeoComputeError::Reproject {
                 position: (x, y),
                 source,
             })

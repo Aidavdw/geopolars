@@ -7,7 +7,7 @@ use geopolars_core::{MultiPolygonArray, PolygonArray, ScalarLineString, ScalarPo
 use polars_arrow::array::PrimitiveArray;
 
 use super::per_row;
-use crate::{BaseMetric, GeodesicMetric, Planar, ReprojectError};
+use crate::{BaseMetric, GeoComputeError, GeodesicMetric, Planar};
 
 /// How the area a ring encloses is measured
 pub trait AreaMetric: BaseMetric {
@@ -46,9 +46,9 @@ pub(super) fn twice_signed_area(ring: &ScalarLineString) -> f64 {
 }
 
 impl AreaMetric for GeodesicMetric {
-    type Error = ReprojectError;
+    type Error = GeoComputeError;
 
-    fn ring_area(&self, ring: &ScalarLineString) -> Result<f64, ReprojectError> {
+    fn ring_area(&self, ring: &ScalarLineString) -> Result<f64, GeoComputeError> {
         // On the ellipsoid, in the CRS's unit squared, like [`between`](GeodesicMetric::between).
         // Based on `geographiclib_rs`.
         let mut area = PolygonArea::new(&self.ellipsoid, Winding::CounterClockwise);

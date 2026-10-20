@@ -11,6 +11,7 @@ use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
+use super::IntoPolarsResult;
 use crate::geoarrow::{describe, Geo, Kind};
 use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
@@ -125,7 +126,7 @@ fn chunk_simplified(
         }
         Kind::Point | Kind::MultiPoint => return Err(already_simple(dtype)),
     }
-    .map_err(|e| polars_err!(ComputeError: "{e}"))
+    .into_polars()
 }
 
 /// See `simplify`.

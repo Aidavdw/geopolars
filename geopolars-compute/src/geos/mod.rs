@@ -25,12 +25,14 @@ use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
 use polars_arrow::offset::{Offsets, OffsetsBuffer};
 
+use crate::GeoComputeResult;
+
 /// Converts a single geometry into a GEOS geometry.
 /// For an array, see [`ToGeosRows`].
 pub trait ToGeos {
     type Geos;
 
-    fn to_geos(&self) -> geos::GResult<Self::Geos>;
+    fn to_geos(&self) -> GeoComputeResult<Self::Geos>;
 }
 
 /// Converts an array into one GEOS geometry per row, with `None` where the row is missing.
@@ -38,15 +40,15 @@ pub trait ToGeos {
 /// If `ignore_per_row_errors=true`, a row GEOS fails to build is missing too;
 /// otherwise its error is returned.
 pub trait ToGeosRows {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries>;
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries>;
 }
 
 /// The geometry of one row, or `None` if building it failed and `ignore_per_row_errors=true`.
 #[inline(always)]
 fn row_or_missing<T>(
-    built: geos::GResult<Option<T>>,
+    built: GeoComputeResult<Option<T>>,
     ignore_per_row_errors: bool,
-) -> geos::GResult<Option<T>> {
+) -> GeoComputeResult<Option<T>> {
     match built {
         Err(_) if ignore_per_row_errors => Ok(None),
         built => built,
@@ -66,7 +68,7 @@ fn coord_type(dim: GeoDimension) -> CoordType {
 impl ToGeos for ScalarPoint<'_> {
     type Geos = Option<Geometry>;
 
-    fn to_geos(&self) -> geos::GResult<Option<Geometry>> {
+    fn to_geos(&self) -> GeoComputeResult<Option<Geometry>> {
         let dim = self.coords.dim();
         point_to_geos(
             self.coords,
@@ -78,7 +80,7 @@ impl ToGeos for ScalarPoint<'_> {
 }
 
 impl ToGeosRows for PointArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
         // GEOS has no batch constructor, so only the per-column work is shared.
         let dim = self.coords.dim();
         let len = dim.field_names().len();
@@ -106,20 +108,20 @@ fn point_to_geos(
     i: usize,
     len: usize,
     coord_type: CoordType,
-) -> geos::GResult<Option<Geometry>> {
+) -> GeoComputeResult<Option<Geometry>> {
     let Some((x, y)) = coords.xy(i) else {
         return Ok(None);
     };
     // GeoArrow's empty point. GEOS only counts a point without coordinates as empty.
     if x.is_nan() && y.is_nan() {
-        return Geometry::create_empty_point().map(Some);
+        return Ok(Some(Geometry::create_empty_point()?));
     }
     let mut buffer = [0.0; 4];
     for (n, value) in buffer[..len].iter_mut().enumerate() {
         *value = coords.nth(i, n);
     }
     let seq = CoordSeq::new_from_buffer(&buffer[..len], 1, coord_type)?;
-    Geometry::create_point(seq).map(Some)
+    Ok(Some(Geometry::create_point(seq)?))
 }
 
 /// [`ToGeosRows`] for the rows of a list array, whose size is `size_hint`.
@@ -128,8 +130,8 @@ fn rows_to_geos(
     rows: &List,
     size_hint: SizeHint<2>,
     ignore_per_row_errors: bool,
-    to_geos: impl Fn(Range<usize>) -> geos::GResult<Geometry>,
-) -> geos::GResult<GeosGeometries> {
+    to_geos: impl Fn(Range<usize>) -> GeoComputeResult<Geometry>,
+) -> GeoComputeResult<GeosGeometries> {
     let geometries = with_const_flags!(
         rows_to_geos_with(rows, ignore_per_row_errors, to_geos);
         rows.is_all_valid()
@@ -146,8 +148,8 @@ fn rows_to_geos(
 fn rows_to_geos_with<const ALL_VALID: bool>(
     rows: &List,
     ignore_per_row_errors: bool,
-    to_geos: impl Fn(Range<usize>) -> geos::GResult<Geometry>,
-) -> geos::GResult<Vec<Option<Geometry>>> {
+    to_geos: impl Fn(Range<usize>) -> GeoComputeResult<Geometry>,
+) -> GeoComputeResult<Vec<Option<Geometry>>> {
     let mut geometries = Vec::with_capacity(rows.len());
     for i in 0..rows.len() {
         // A missing row's offsets point anywhere, so it is not converted.
@@ -175,14 +177,14 @@ fn axes(coords: &ValidCoords) -> Axes<'_> {
 
 /// The coordinates at `vertices`, copied from `axes` in one go.
 #[inline(always)]
-fn coord_seq(axes: &Axes, vertices: Range<usize>) -> geos::GResult<CoordSeq> {
+fn coord_seq(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<CoordSeq> {
     let (x, y, z, m) = axes;
-    CoordSeq::new_from_arrays(
+    Ok(CoordSeq::new_from_arrays(
         &x[vertices.clone()],
         &y[vertices.clone()],
         z.map(|z| &z[vertices.clone()]),
         m.map(|m| &m[vertices]),
-    )
+    )?)
 }
 
 /// GEOS geometries of any kind, one per row,
@@ -201,13 +203,11 @@ fn wrong_kind(
     expected: &str,
     found: GeometryTypes,
     ignore_per_row_errors: bool,
-) -> geos::GResult<bool> {
+) -> GeoComputeResult<bool> {
     if ignore_per_row_errors {
         return Ok(false);
     }
-    Err(geos::Error::ConversionError(format!(
-        "expected a {expected}, got a {found:?}"
-    )))
+    Err(geos::Error::ConversionError(format!("expected a {expected}, got a {found:?}")).into())
 }
 
 /// Which rows are there, pushed one after the other.
@@ -271,7 +271,7 @@ impl CoordsBuilder {
     }
 
     /// Appends the coordinates of `geometry`, a linestring or a ring.
-    fn push(&mut self, geometry: &impl Geom) -> geos::GResult<()> {
+    fn push(&mut self, geometry: &impl Geom) -> GeoComputeResult<()> {
         let dim = match self.z {
             Some(_) => GeoDimension::XYZ,
             None => GeoDimension::XY,

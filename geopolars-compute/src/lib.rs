@@ -25,10 +25,12 @@ macro_rules! with_const_flags {
     };
 }
 
+mod error;
 #[cfg(feature = "geos")]
 pub mod geos;
 mod metric;
 #[cfg(feature = "native")]
 pub mod native;
 
-pub use metric::{BaseMetric, GeodesicMetric, Planar, ReprojectError, WithHeight};
+pub use error::{GeoComputeError, GeoComputeResult};
+pub use metric::{BaseMetric, GeodesicMetric, Planar, WithHeight};

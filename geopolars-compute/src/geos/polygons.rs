@@ -12,17 +12,18 @@ use super::{
     axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, OffsetsBuilder,
     ToGeos, ToGeosRows, ValidityBuilder,
 };
+use crate::GeoComputeResult;
 
 impl ToGeos for ScalarPolygon<'_> {
     type Geos = Geometry;
 
-    fn to_geos(&self) -> geos::GResult<Geometry> {
+    fn to_geos(&self) -> GeoComputeResult<Geometry> {
         polygon_to_geos(&axes(self.coords), self.rings, self.parts.clone())
     }
 }
 
 impl ToGeosRows for PolygonArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
         let axes = axes(&self.coords);
         let size_hint = SizeHint {
             coords: self.coords.len(),
@@ -37,7 +38,7 @@ impl ToGeosRows for PolygonArray {
 impl ToGeos for ScalarMultiPolygon<'_> {
     type Geos = Geometry;
 
-    fn to_geos(&self) -> geos::GResult<Geometry> {
+    fn to_geos(&self) -> GeoComputeResult<Geometry> {
         multi_polygon_to_geos(
             &axes(self.coords),
             self.polygons,
@@ -48,7 +49,7 @@ impl ToGeos for ScalarMultiPolygon<'_> {
 }
 
 impl ToGeosRows for MultiPolygonArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> geos::GResult<GeosGeometries> {
+    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
         let axes = axes(&self.coords);
         let size_hint = SizeHint {
             coords: self.coords.len(),
@@ -67,13 +68,21 @@ pub(super) fn polygon_to_geos(
     axes: &Axes,
     rings: &ValidList,
     parts: Range<usize>,
-) -> geos::GResult<Geometry> {
-    let mut parts = parts.map(|j| Geometry::create_linear_ring(coord_seq(axes, rings.range(j))?));
+) -> GeoComputeResult<Geometry> {
+    let mut parts = parts.map(|j| {
+        Ok(Geometry::create_linear_ring(coord_seq(
+            axes,
+            rings.range(j),
+        )?)?)
+    });
     // GEOS can't build a polygon without an exterior, so an empty one has its own constructor.
     let Some(exterior) = parts.next() else {
-        return Geometry::create_empty_polygon();
+        return Ok(Geometry::create_empty_polygon()?);
     };
-    Geometry::create_polygon(exterior?, parts.collect::<geos::GResult<_>>()?)
+    Ok(Geometry::create_polygon(
+        exterior?,
+        parts.collect::<GeoComputeResult<_>>()?,
+    )?)
 }
 
 /// The multipolygon of `polygons` `parts`.
@@ -84,13 +93,13 @@ pub(super) fn multi_polygon_to_geos(
     polygons: &ValidList,
     rings: &ValidList,
     parts: Range<usize>,
-) -> geos::GResult<Geometry> {
+) -> GeoComputeResult<Geometry> {
     // GEOS takes ownership of the parts, so they can't share a buffer across rows.
     let mut geometries = Vec::with_capacity(parts.len());
     for j in parts {
         geometries.push(polygon_to_geos(axes, rings, polygons.range(j))?);
     }
-    Geometry::create_multipolygon(geometries)
+    Ok(Geometry::create_multipolygon(geometries)?)
 }
 
 impl GeosGeometries {
@@ -103,7 +112,7 @@ impl GeosGeometries {
         self,
         has_z: bool,
         ignore_per_row_errors: bool,
-    ) -> geos::GResult<PolygonArray> {
+    ) -> GeoComputeResult<PolygonArray> {
         let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
         let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
         let mut rings = OffsetsBuilder::with_capacity(self.size_hint.parts[0]);
@@ -137,7 +146,7 @@ impl GeosGeometries {
         self,
         has_z: bool,
         ignore_per_row_errors: bool,
-    ) -> geos::GResult<MultiPolygonArray> {
+    ) -> GeoComputeResult<MultiPolygonArray> {
         let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
         let mut coords = CoordsBuilder::with_capacity(has_z, self.size_hint.coords);
         let mut rings = OffsetsBuilder::with_capacity(self.size_hint.parts[0]);
@@ -183,7 +192,7 @@ fn push_rings(
     coords: &mut CoordsBuilder,
     rings: &mut OffsetsBuilder,
     polygon: &impl Geom,
-) -> geos::GResult<()> {
+) -> GeoComputeResult<()> {
     // GEOS gives an empty polygon an empty exterior.
     // We would store that as a ring without vertices.
     if polygon.is_empty()? {

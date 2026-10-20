@@ -49,6 +49,7 @@ use geopolars_core::{
 use geos::{CoordSeq, Geom, Geometry, GeometryTypes};
 
 use super::{axes, GeosGeometries};
+use crate::GeoComputeResult;
 
 // Because we don't consider CRS,
 // A geometry crossing the antimeridian is hulled the long way round.
@@ -69,7 +70,7 @@ pub fn line_string_convex_hulls(
     array: &LineStringArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<PolygonArray> {
+) -> GeoComputeResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -85,7 +86,7 @@ pub fn multi_point_convex_hulls(
     array: &MultiPointArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<PolygonArray> {
+) -> GeoComputeResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -100,7 +101,7 @@ pub fn multi_line_string_convex_hulls(
     array: &MultiLineStringArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<PolygonArray> {
+) -> GeoComputeResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -116,7 +117,7 @@ pub fn polygon_convex_hulls(
     array: &PolygonArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<PolygonArray> {
+) -> GeoComputeResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -137,7 +138,7 @@ pub fn multi_polygon_convex_hulls(
     array: &MultiPolygonArray,
     ignore_per_row_errors: bool,
     ccw_outer: bool,
-) -> geos::GResult<PolygonArray> {
+) -> GeoComputeResult<PolygonArray> {
     hulls(
         &array.rows,
         &array.coords,
@@ -161,7 +162,7 @@ fn hulls(
     ignore_per_row_errors: bool,
     ccw_outer: bool,
     coord_ranges: impl Fn(Range<usize>, &mut Vec<Range<usize>>),
-) -> geos::GResult<PolygonArray> {
+) -> GeoComputeResult<PolygonArray> {
     let has_z = coords.dim().has_z();
     let hulls = with_const_flags!(
         hulls_with(rows, coords, ignore_per_row_errors, coord_ranges);
@@ -186,7 +187,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const CCW_OUTER: bool>(
     coords: &ValidCoords,
     ignore_per_row_errors: bool,
     coord_ranges: impl Fn(Range<usize>, &mut Vec<Range<usize>>),
-) -> geos::GResult<GeosGeometries> {
+) -> GeoComputeResult<GeosGeometries> {
     let (in_x, in_y, in_z, _) = axes(coords);
     let in_z = in_z.unwrap_or_default();
 

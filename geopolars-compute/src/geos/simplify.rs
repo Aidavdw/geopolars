@@ -7,6 +7,7 @@ use geopolars_core::{LineStringArray, MultiLineStringArray, MultiPolygonArray, P
 use geos::Geometry;
 
 use super::{GeosGeometries, ToGeosRows};
+use crate::GeoComputeResult;
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// The endpoints are always kept.
@@ -19,7 +20,7 @@ pub fn simplify_line_strings(
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
-) -> geos::GResult<LineStringArray> {
+) -> GeoComputeResult<LineStringArray> {
     simplify_via_geos(
         array.to_geos_rows(ignore_per_row_errors)?,
         tolerance,
@@ -40,7 +41,7 @@ pub fn simplify_multi_line_strings(
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
-) -> geos::GResult<MultiLineStringArray> {
+) -> GeoComputeResult<MultiLineStringArray> {
     simplify_via_geos(
         array.to_geos_rows(ignore_per_row_errors)?,
         tolerance,
@@ -67,7 +68,7 @@ pub fn simplify_polygons(
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
-) -> geos::GResult<PolygonArray> {
+) -> GeoComputeResult<PolygonArray> {
     simplify_via_geos(
         array.to_geos_rows(ignore_per_row_errors)?,
         tolerance,
@@ -91,7 +92,7 @@ pub fn simplify_multi_polygons(
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
-) -> geos::GResult<MultiPolygonArray> {
+) -> GeoComputeResult<MultiPolygonArray> {
     simplify_via_geos(
         array.to_geos_rows(ignore_per_row_errors)?,
         tolerance,
@@ -112,7 +113,7 @@ fn simplify_via_geos(
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
-) -> geos::GResult<GeosGeometries> {
+) -> GeoComputeResult<GeosGeometries> {
     with_const_flags!(
         simplify_via_geos_with(&mut geometries.geometries, tolerance, ignore_per_row_errors);
         preserve_topology
@@ -128,7 +129,7 @@ fn simplify_via_geos_with<const PRESERVE_TOPOLOGY: bool>(
     geometries: &mut [Option<Geometry>],
     tolerance: f64,
     ignore_per_row_errors: bool,
-) -> geos::GResult<()> {
+) -> GeoComputeResult<()> {
     for geometry in geometries {
         let Some(input) = geometry else {
             continue;
@@ -140,7 +141,7 @@ fn simplify_via_geos_with<const PRESERVE_TOPOLOGY: bool>(
         };
         *geometry = match simplified {
             Ok(simple) => Some(simple),
-            Err(e) if !ignore_per_row_errors => return Err(e),
+            Err(e) if !ignore_per_row_errors => return Err(e.into()),
             Err(_) => None,
         };
     }
