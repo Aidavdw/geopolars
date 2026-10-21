@@ -19,12 +19,20 @@ impl<'a> ScalarLineString<'a> {
     /// The position of every vertex in order: x, y, and with `Z` its z (`0.0` without).
     #[inline(always)]
     pub fn positions<const Z: bool>(&self) -> impl Iterator<Item = [f64; 3]> + 'a {
+        self.coordinates::<Z, false>().map(|[x, y, z, _]| [x, y, z])
+    }
+
+    /// [positions](Self::positions), with the m of every vertex last (`0.0` without `M`).
+    #[inline(always)]
+    pub fn coordinates<const Z: bool, const M: bool>(&self) -> impl Iterator<Item = [f64; 4]> + 'a {
         let vertices = self.vertices.clone();
         let x = &self.coords.x()[vertices.clone()];
         let y = &self.coords.y()[vertices.clone()];
-        // `Some` exactly when `Z=true`, which the compiler knows, so no vertex checks it.
-        let z = Z.then(|| &self.coords.z().expect("a z, with `Z`")[vertices]);
-        (0..x.len()).map(move |i| [x[i], y[i], z.map_or(0.0, |z| z[i])])
+        // `Some` exactly when `Z=true` (`M=true`), which the compiler knows,
+        // so no vertex checks it.
+        let z = Z.then(|| &self.coords.z().expect("a z, with `Z`")[vertices.clone()]);
+        let m = M.then(|| &self.coords.m().expect("an m, with `M`")[vertices]);
+        (0..x.len()).map(move |i| [x[i], y[i], z.map_or(0.0, |z| z[i]), m.map_or(0.0, |m| m[i])])
     }
 }
 

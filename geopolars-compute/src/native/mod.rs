@@ -2,6 +2,7 @@
 
 mod affine;
 mod area;
+mod centroid;
 pub mod distance;
 mod is_ccw;
 mod length;
@@ -11,6 +12,9 @@ pub use affine::{
     affine_points, affine_polygons, AffineMatrix, RowShift,
 };
 pub use area::{multi_polygon_areas, polygon_areas, AreaMetric};
+pub use centroid::{
+    line_string_centroids, multi_line_string_centroids, multi_polygon_centroids, polygon_centroids,
+};
 pub use distance::{against_one, pairwise, DistanceMetric};
 pub use is_ccw::{
     line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,

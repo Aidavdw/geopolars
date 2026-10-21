@@ -123,10 +123,10 @@ impl ValidCoords {
         self.z.as_deref()
     }
 
-    /// The m of coordinate `i`. Only for a dimension with an `m`.
+    /// `None` for a dimension without an `m`.
     #[inline(always)]
-    pub fn m(&self, i: usize) -> f64 {
-        self.m.as_ref().unwrap()[i]
+    pub fn m(&self) -> Option<&[f64]> {
+        self.m.as_deref()
     }
 
     /// Every value of axis `n`, in storage order: x, y, then z and/or m.
