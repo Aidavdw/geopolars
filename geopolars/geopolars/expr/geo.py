@@ -115,10 +115,21 @@ class ExprGeoNameSpace:
 
         return set_crs(self._expr, crs, force=force)
 
-    def to_crs(self, crs: str) -> pl.Expr:
+    def to_crs(
+        self,
+        crs: str,
+        *,
+        allow_projection_with_unscaled_z: bool = False,
+        assume_z_in_target_crs: bool = False,
+    ) -> pl.Expr:
         from geopolars.geo.crs import to_crs
 
-        return to_crs(self._expr, crs)
+        return to_crs(
+            self._expr,
+            crs,
+            allow_projection_with_unscaled_z=allow_projection_with_unscaled_z,
+            assume_z_in_target_crs=assume_z_in_target_crs,
+        )
 
     def is_geographic(self, *, ignore_errors: bool = False) -> pl.Expr:
         from geopolars.geo.crs import is_geographic

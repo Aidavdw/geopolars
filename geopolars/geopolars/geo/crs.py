@@ -68,18 +68,42 @@ def is_geographic(geometry: IntoExprColumn, *, ignore_errors: bool = False) -> p
     return on_geometry(geometry, build)
 
 
-def to_crs(geometry: IntoExprColumn, crs: str) -> pl.Expr:
+def to_crs(
+    geometry: IntoExprColumn,
+    crs: str,
+    *,
+    allow_projection_with_unscaled_z: bool = False,
+    assume_z_in_target_crs: bool = False,
+) -> pl.Expr:
     """Reproject every coordinate from the column's CRS to `crs`.
 
     `crs` is anything PROJ accepts:
     e.g. PROJJSON, WKT or an `AUTH:CODE` format such as `"EPSG:4326"`.
     The source CRS is read from the column's metadata.
-    Only `x` and `y` are reprojected, so `z` and `m` are carried through untouched.
+    `m` is carried through untouched.
+
+    A CRS specifies `z` when it is compound, or when its coordinate system has three axes
+    (e.g. `"EPSG:4979"`, but not `"EPSG:4326"`).
+    If both CRSs specify it, `z` is reprojected along with `x` and `y`.
+    Otherwise the plan is refused, unless a flag says to keep `z` as it is:
+
+    | from | to | needs | `z` |
+    | - | - | - | - |
+    | specifies `z` | specifies `z` | - | reprojected |
+    | specifies `z` | no `z` | `allow_projection_with_unscaled_z=True` | kept as is |
+    | no `z` | no `z` | `allow_projection_with_unscaled_z=True` | kept as is |
+    | no `z` | specifies `z` | `assume_z_in_target_crs=True` | kept as is |
+
+    A geometry without `z` needs neither flag.
     """
     return register_plugin_function(
         plugin_path=LIB,
         args=[geometry],
         function_name="to_crs",
         is_elementwise=True,
-        kwargs={"to": crs},
+        kwargs={
+            "to": crs,
+            "allow_projection_with_unscaled_z": allow_projection_with_unscaled_z,
+            "assume_z_in_target_crs": assume_z_in_target_crs,
+        },
     )

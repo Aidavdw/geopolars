@@ -11,6 +11,12 @@ pub enum GeoComputeError {
         position: (f64, f64),
         source: ProjError,
     },
+    /// A transformation PROJ could not create.
+    Transformation {
+        from: String,
+        to: String,
+        message: String,
+    },
     /// A linestring that has to be a ring, but is not one.
     NotARing { vertices: usize },
     #[cfg(feature = "geos")]
@@ -38,6 +44,9 @@ impl fmt::Display for GeoComputeError {
                 position: (x, y),
                 source,
             } => write!(f, "failed to reproject ({x}, {y}): {source}"),
+            Self::Transformation { from, to, message } => {
+                write!(f, "cannot reproject from {from} to {to}: {message}")
+            }
             Self::NotARing { vertices } => write!(
                 f,
                 "expects rings (at least {MIN_RING_VERTICES} vertices, the last at the first), \
@@ -53,7 +62,7 @@ impl std::error::Error for GeoComputeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Reproject { source, .. } => Some(source),
-            Self::NotARing { .. } => None,
+            Self::Transformation { .. } | Self::NotARing { .. } => None,
             #[cfg(feature = "geos")]
             Self::Geos(source) => Some(source),
         }

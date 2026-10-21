@@ -893,6 +893,7 @@ dependencies = [
  "geos",
  "polars-arrow",
  "proj",
+ "proj-sys",
 ]
 
 [[package]]

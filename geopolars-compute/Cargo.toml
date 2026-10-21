@@ -21,6 +21,9 @@ polars-arrow = { workspace = true }
 # PROJ, to bring coordinates to longitude/latitude for `GeodesicMetric`.
 # geopolars turns on `bundled_proj`; must match the version rsgeo pins.
 proj = { version = "0.31", default-features = false, features = ["bundled_proj"] }
+# The C API under `proj`, to send z through PROJ, which `proj` cannot.
+# Must match the version `proj` pins, so both link the same bundled PROJ.
+proj-sys = "0.27"
 # For measuring along a CRS's ellipsoid.
 # Keep on the version and features rsgeo pulls in.
 geographiclib-rs = { version = "0.2.7", default-features = false }

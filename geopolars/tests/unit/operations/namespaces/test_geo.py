@@ -457,9 +457,11 @@ def test_to_crs_namespace_matches_the_functional_api(
         .select(line=geo.line_string_from_columns("x", "y", z="z", crs="EPSG:4326"))
     )
 
+    # Neither CRS specifies z, so it is kept as it is.
+    flag = {"allow_projection_with_unscaled_z": True}
     assert_frame_equal(
-        lines.select(gpl.col("line").geo.to_crs("EPSG:3857")),
-        lines.select(geo.to_crs("line", "EPSG:3857")),
+        lines.select(gpl.col("line").geo.to_crs("EPSG:3857", **flag)),
+        lines.select(geo.to_crs("line", "EPSG:3857", **flag)),
     )
 
 

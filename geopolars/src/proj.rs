@@ -14,10 +14,10 @@ use proj_sys::{
     proj_as_projjson, proj_context_create, proj_context_destroy, proj_context_errno,
     proj_context_errno_string, proj_coordoperation_get_method_info, proj_create,
     proj_create_crs_to_crs_from_pj, proj_crs_get_coordinate_system, proj_crs_get_coordoperation,
-    proj_crs_get_geodetic_crs, proj_crs_get_sub_crs, proj_cs_get_axis_info, proj_cs_get_type,
-    proj_destroy, proj_ellipsoid_get_parameters, proj_get_area_of_use, proj_get_ellipsoid,
-    proj_get_type, proj_normalize_for_visualization, proj_trans_bounds, PJ, PJ_CONTEXT,
-    PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL, PJ_DIRECTION_PJ_FWD,
+    proj_crs_get_geodetic_crs, proj_crs_get_sub_crs, proj_cs_get_axis_count, proj_cs_get_axis_info,
+    proj_cs_get_type, proj_destroy, proj_ellipsoid_get_parameters, proj_get_area_of_use,
+    proj_get_ellipsoid, proj_get_type, proj_normalize_for_visualization, proj_trans_bounds, PJ,
+    PJ_CONTEXT, PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL, PJ_DIRECTION_PJ_FWD,
     PJ_TYPE_PJ_TYPE_COMPOUND_CRS, PJ_TYPE_PJ_TYPE_GEOGRAPHIC_2D_CRS,
     PJ_TYPE_PJ_TYPE_GEOGRAPHIC_3D_CRS, PJ_TYPE_PJ_TYPE_PROJECTED_CRS,
 };
@@ -233,6 +233,26 @@ fn area_of_use(crs: &str) -> PolarsResult<[f64; 4]> {
             return Err(ctx.error(crs));
         }
         Ok(out)
+    }
+}
+
+/// Whether `crs` says what `z` means:
+/// it is compound (horizontal + vertical), or its coordinate system has three axes.
+///
+/// `crs` is anything PROJ accepts.
+pub fn specifies_z(crs: &str) -> PolarsResult<bool> {
+    let ctx = Context::new()?;
+    let c_crs = CString::new(crs)
+        .map_err(|_| polars_err!(ComputeError: "a CRS cannot contain a NUL byte: {crs:?}"))?;
+
+    // SAFETY: as in `GeodeticCrs::of`.
+    unsafe {
+        let parsed = ctx.object(proj_create(ctx.0, c_crs.as_ptr()), crs)?;
+        if proj_get_type(parsed.0) == PJ_TYPE_PJ_TYPE_COMPOUND_CRS {
+            return Ok(true);
+        }
+        let cs = ctx.object(proj_crs_get_coordinate_system(ctx.0, parsed.0), crs)?;
+        Ok(proj_cs_get_axis_count(ctx.0, cs.0) == 3)
     }
 }
 

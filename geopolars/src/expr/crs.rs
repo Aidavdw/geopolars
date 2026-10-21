@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use geopolars_compute::proj::{reproject_coords, reproject_valid_coords};
+use geopolars_compute::proj::{reproject_coords, reproject_valid_coords, Transformation};
 use geopolars_compute::GeoComputeError;
 use geopolars_core::{
     downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
@@ -11,16 +11,18 @@ use geopolars_core::{
 use polars::prelude::*;
 use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
-use rsgeo::proj::Proj;
 use serde::Deserialize;
 
 use super::coords::trimmed;
 use crate::geoarrow::{describe, Geo, Kind};
+use crate::proj::specifies_z;
 
 #[derive(Deserialize)]
 struct ToCrsKwargs {
     /// The CRS to reproject to, in any form PROJ accepts.
     to: String,
+    allow_projection_with_unscaled_z: bool,
+    assume_z_in_target_crs: bool,
 }
 
 /// The geometry we were handed, with its metadata naming the target CRS.
@@ -37,48 +39,99 @@ fn kernel_output_type_to_crs(input_fields: &[Field], kwargs: ToCrsKwargs) -> Pol
     let field = &input_fields[0];
     // Built here as well as in the kernel, so a CRS PROJ cannot use fails while the plan is built.
     transformation(field.dtype(), &kwargs.to)?;
+    reprojects_z(field.dtype(), &kwargs)?;
     let geo = reprojected_geometry_type(field.dtype(), &kwargs.to)?;
     Ok(Field::new(field.name().clone(), geo.dtype()))
 }
 
 /// The PROJ transformation from the CRS of `dtype` to `to`.
-fn transformation(dtype: &DataType, to: &str) -> PolarsResult<Proj> {
+fn transformation(dtype: &DataType, to: &str) -> PolarsResult<Transformation> {
     let from = describe(dtype)?.metadata.crs()?;
-    Proj::new_known_crs(from, to, None)
-        .map_err(|e| polars_err!(ComputeError: "cannot reproject from {from} to {to}: {e}"))
+    Transformation::new(from, to).map_err(|e| polars_err!(ComputeError: "{e}"))
 }
 
-/// One chunk of `kind` geometries, reprojected by `proj`.
-fn chunk_reprojected(chunk: &dyn Array, kind: Kind, proj: &Proj) -> PolarsResult<Box<dyn Array>> {
+/// Whether the `z` of `dtype` goes through PROJ, as only makes sense if both CRSs specify it
+/// (see [`specifies_z`]).
+/// Errors if `dtype` has a `z` that one of them does not specify,
+/// unless the flag that allows that is set.
+fn reprojects_z(dtype: &DataType, kwargs: &ToCrsKwargs) -> PolarsResult<bool> {
+    let geo = describe(dtype)?;
+    if !geo.dim.has_z() {
+        return Ok(false);
+    }
+    let (from, to) = (geo.metadata.crs()?, kwargs.to.as_str());
+    match (specifies_z(from)?, specifies_z(to)?) {
+        (true, true) => Ok(true),
+        (true, false) => {
+            polars_ensure!(
+                kwargs.allow_projection_with_unscaled_z,
+                ComputeError: "{to} does not specify z, so the z of {from} cannot be reprojected to it; \
+                pass `allow_projection_with_unscaled_z=True` to keep z as it is"
+            );
+            Ok(false)
+        }
+        (false, false) => {
+            polars_ensure!(
+                kwargs.allow_projection_with_unscaled_z,
+                ComputeError: "neither {from} nor {to} specifies z, so z cannot be reprojected; \
+                pass `allow_projection_with_unscaled_z=True` to keep z as it is"
+            );
+            Ok(false)
+        }
+        (false, true) => {
+            polars_ensure!(
+                kwargs.assume_z_in_target_crs,
+                ComputeError: "{from} does not specify z, so it cannot be reprojected to the z of {to}; \
+                pass `assume_z_in_target_crs=True` if z is already in {to}"
+            );
+            Ok(false)
+        }
+    }
+}
+
+/// One chunk of `kind` geometries, reprojected by `transformation`.
+/// If `with_z=true`, their `z` is reprojected too.
+fn chunk_reprojected(
+    chunk: &dyn Array,
+    kind: Kind,
+    transformation: &Transformation,
+    with_z: bool,
+) -> PolarsResult<Box<dyn Array>> {
     let err = |e: GeoComputeError| polars_err!(ComputeError: "{e}");
     Ok(match kind {
         Kind::Point => {
-            let coords = reproject_coords(proj, &Coords::new(chunk)?).map_err(err)?;
+            let coords =
+                reproject_coords(transformation, &Coords::new(chunk)?, with_z).map_err(err)?;
             PointArray::new(coords).into_struct_array().boxed()
         }
         Kind::LineString => {
             let mut array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.coords =
+                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiPoint => {
             let mut array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.coords =
+                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::Polygon => {
             let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.coords =
+                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiLineString => {
             let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.coords =
+                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiPolygon => {
             let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.coords =
+                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
             array.into_list_array().boxed()
         }
     })
@@ -88,13 +141,14 @@ fn chunk_reprojected(chunk: &dyn Array, kind: Kind, proj: &Proj) -> PolarsResult
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_to_crs)]
 fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
-    let proj = transformation(inputs[0].dtype(), &kwargs.to)?;
+    let transformation = transformation(inputs[0].dtype(), &kwargs.to)?;
+    let with_z = reprojects_z(inputs[0].dtype(), &kwargs)?;
 
     let storage = trimmed(inputs[0].ext()?.storage());
     let chunks = storage
         .chunks()
         .iter()
-        .map(|chunk| chunk_reprojected(chunk.as_ref(), geo.kind, &proj))
+        .map(|chunk| chunk_reprojected(chunk.as_ref(), geo.kind, &transformation, with_z))
         .collect::<PolarsResult<_>>()?;
     // SAFETY: the geometries keep their kind and dimension, so this is still the storage.
     let out = unsafe {
