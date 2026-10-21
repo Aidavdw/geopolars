@@ -1,7 +1,5 @@
 //! Views over the coordinate struct of a geometry column.
 
-use std::ops::Range;
-
 use polars_arrow::array::{Array, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
 use polars_buffer::Buffer;
@@ -147,25 +145,6 @@ impl ValidCoords {
         self.axis(n)[i]
     }
 
-    /// Whether coordinates `i` and `j` lie at almost the same place:
-    /// close in x, y and z. m is a measure rather than a position, so it is not compared.
-    pub fn same_place(&self, i: usize, j: usize) -> bool {
-        if self.z.is_none() {
-            self.same_place_in::<false>(i, j)
-        } else {
-            self.same_place_in::<true>(i, j)
-        }
-    }
-
-    /// [`same_place`](Self::same_place), comparing z only with `Z`.
-    fn same_place_in<const Z: bool>(&self, i: usize, j: usize) -> bool {
-        same_position(self.position::<Z>(i), self.position::<Z>(j))
-    }
-
-    pub fn is_ring(&self, range: Range<usize>) -> bool {
-        range.len() >= MIN_RING_VERTICES && self.same_place(range.start, range.end - 1)
-    }
-
     /// The dimension these coordinates carry.
     pub fn dim(&self) -> GeoDimension {
         match (self.z.is_some(), self.m.is_some()) {
@@ -296,18 +275,6 @@ impl Coords {
     #[inline]
     pub fn nth(&self, i: usize, n: usize) -> f64 {
         self.axes.nth(i, n)
-    }
-
-    /// See [`ValidCoords::same_place`].
-    #[inline]
-    pub fn same_place(&self, i: usize, j: usize) -> bool {
-        self.axes.same_place(i, j)
-    }
-
-    /// See [`ValidCoords::is_ring`].
-    #[inline]
-    pub fn is_ring(&self, range: Range<usize>) -> bool {
-        self.axes.is_ring(range)
     }
 
     /// See [`ValidCoords::dim`].

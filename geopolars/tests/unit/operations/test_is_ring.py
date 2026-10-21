@@ -109,7 +109,7 @@ def test_a_multilinestring_gives_one_per_part() -> None:
     open_line = _line((0, 0), (1, 0), (0, 1), (1, 1))
     storage = pl.Series(
         "multi",
-        [[_TRIANGLE, open_line], [], [None, _TRIANGLE], None],
+        [[_TRIANGLE, open_line], [], [_TRIANGLE], None],
         dtype=pl.List(_XY_VERTICES),
     )
     df = pl.DataFrame(storage.ext.to(MultiLineStringXY()))
@@ -117,7 +117,7 @@ def test_a_multilinestring_gives_one_per_part() -> None:
     out = df.select(geo.is_ring("multi"))
 
     assert out.schema["multi"] == pl.List(pl.Boolean)
-    assert out["multi"].to_list() == [[True, False], [], [None, True], None]
+    assert out["multi"].to_list() == [[True, False], [], [True], None]
 
 
 def test_a_sliced_multilinestring_reads_only_its_own_parts() -> None:

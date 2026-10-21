@@ -1,17 +1,14 @@
-//! Whether a linestring is a ring (see [`ValidCoords::is_ring`](geopolars_core::ValidCoords::is_ring)).
+//! Whether a linestring is a ring (see [`geopolars_compute::native::line_strings_are_rings`]).
 //!
 //! A multilinestring gets a list, one per part.
 
-use std::ops::Range;
-
+use geopolars_compute::native::{line_strings_are_rings, multi_line_strings_are_rings};
+use geopolars_compute::with_const_flags;
+use geopolars_core::{LineStringArray, MultiLineStringArray};
 use polars::prelude::*;
-use polars_arrow::array::{Array, BooleanArray, ListArray};
-use polars_arrow::datatypes::ArrowDataType;
-use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 
 use crate::geoarrow::{describe, Kind};
-use geopolars_core::{downcast, Coords};
 
 /// For [`is_ring`]:
 /// a `bool` per linestring, or a list of them (one per part) for a multilinestring.
@@ -30,17 +27,6 @@ fn kernel_output_type_is_ring(input_fields: &[Field]) -> PolarsResult<Field> {
     Ok(Field::new(field.name().clone(), dtype))
 }
 
-/// Whether each of the linestrings `rows` is a ring, missing where the linestring is.
-fn rings(lines: &ListArray<i64>, rows: Range<usize>) -> PolarsResult<BooleanArray> {
-    let coords = Coords::new(lines.values().as_ref())?;
-    Ok(rows
-        .map(|i| {
-            let (start, end) = lines.offsets().start_end(i);
-            lines.is_valid(i).then(|| coords.is_ring(start..end))
-        })
-        .collect())
-}
-
 /// See `is_ring`.
 #[polars_expr(output_type_func=kernel_output_type_is_ring)]
 fn is_ring(inputs: &[Series]) -> PolarsResult<Series> {
@@ -49,22 +35,17 @@ fn is_ring(inputs: &[Series]) -> PolarsResult<Series> {
     let name = inputs[0].name().clone();
     let chunks = storage.list()?.downcast_iter();
     if *field.dtype() == DataType::Boolean {
-        let chunks = chunks.map(|chunk| rings(chunk, 0..chunk.len()));
+        let chunks = chunks.map(|rows| {
+            let array = LineStringArray::new(rows)?;
+            let z = array.coords.dim().has_z();
+            PolarsResult::Ok(with_const_flags!(line_strings_are_rings(&array); z))
+        });
         return Ok(BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series());
     }
-    let chunks = chunks.map(|chunk| -> PolarsResult<_> {
-        let lines = downcast::<ListArray<i64>>(chunk.values().as_ref(), "a list of linestrings")?;
-        // Only the parts this chunk points at: it may be a slice of a larger one.
-        let (first, last) = (
-            *chunk.offsets().first() as usize,
-            *chunk.offsets().last() as usize,
-        );
-        Ok(ListArray::<i64>::new(
-            ListArray::<i64>::default_datatype(ArrowDataType::Boolean),
-            Offsets::try_from_lengths(chunk.offsets().lengths())?.into(),
-            rings(lines, first..last)?.boxed(),
-            chunk.validity().cloned(),
-        ))
+    let chunks = chunks.map(|rows| {
+        let array = MultiLineStringArray::new(rows)?;
+        let z = array.coords.dim().has_z();
+        PolarsResult::Ok(with_const_flags!(multi_line_strings_are_rings(&array); z))
     });
     Ok(ListChunked::try_from_chunk_iter(name, chunks)?.into_series())
 }

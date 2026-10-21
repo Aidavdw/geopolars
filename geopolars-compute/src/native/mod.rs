@@ -5,6 +5,7 @@ mod area;
 mod centroid;
 pub mod distance;
 mod is_ccw;
+mod is_ring;
 mod length;
 
 pub use affine::{
@@ -19,6 +20,7 @@ pub use distance::{against_one, pairwise, DistanceMetric};
 pub use is_ccw::{
     line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,
 };
+pub use is_ring::{is_ring, line_strings_are_rings, multi_line_strings_are_rings, same_place};
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 
 use geopolars_core::output::{bool_array, f64_array};

@@ -12,7 +12,9 @@ use serde::Deserialize;
 use super::rings::copy_coords;
 use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
-use geopolars_core::{downcast, Coords};
+use geopolars_compute::native::{is_ring, same_place};
+use geopolars_compute::with_const_flags;
+use geopolars_core::{downcast, ValidCoords};
 
 /// The keyword arguments of the constructors that build polygons:
 /// [`MetadataKwargs`], plus whether to close open rings.
@@ -214,11 +216,12 @@ fn with_parts(lists: &ListArray<i64>, ok: impl Fn(usize) -> bool) -> Option<Bitm
 /// `rings` with every open one closed by repeating its first vertex at its end,
 /// or `None` if they are all closed already. An empty ring is left empty.
 fn close_rings(rings: &ListArray<i64>) -> PolarsResult<Option<ListArray<i64>>> {
-    let coords = Coords::new(rings.values().as_ref())?;
+    let coords = ValidCoords::new(rings.values().as_ref())?;
+    let z = coords.dim().has_z();
     let open: Vec<bool> = (0..rings.len())
         .map(|ring| {
             let (start, end) = rings.offsets().start_end(ring);
-            end > start && !coords.same_place(start, end - 1)
+            end > start && !with_const_flags!(same_place(&coords, start, end - 1); z)
         })
         .collect();
     if !open.contains(&true) {
@@ -246,16 +249,17 @@ fn close_rings(rings: &ListArray<i64>) -> PolarsResult<Option<ListArray<i64>>> {
     )))
 }
 
-/// `polygons`, missing where one of their rings is not a ring (see [`ValidCoords::is_ring`](geopolars_core::ValidCoords::is_ring)).
+/// `polygons`, missing where one of their rings is not a ring (see [`is_ring`]).
 /// With `close`, the open rings are closed first.
 fn ringed_polygons(polygons: &ListArray<i64>, close: bool) -> PolarsResult<ListArray<i64>> {
     let rings = downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of rings")?;
     let closed = if close { close_rings(rings)? } else { None };
     let rings = closed.as_ref().unwrap_or(rings);
-    let coords = Coords::new(rings.values().as_ref())?;
+    let coords = ValidCoords::new(rings.values().as_ref())?;
+    let z = coords.dim().has_z();
     let valid = with_parts(polygons, |ring| {
         let (start, end) = rings.offsets().start_end(ring);
-        coords.is_ring(start..end)
+        with_const_flags!(is_ring(&coords, start..end); z)
     });
     Ok(ListArray::<i64>::new(
         polygons.dtype().clone(),
@@ -265,7 +269,7 @@ fn ringed_polygons(polygons: &ListArray<i64>, close: bool) -> PolarsResult<ListA
     ))
 }
 
-/// Null out every polygon with a ring that is not a ring (see [`ValidCoords::is_ring`](geopolars_core::ValidCoords::is_ring)),
+/// Null out every polygon with a ring that is not a ring (see [`is_ring`]),
 /// and every multipolygon with such a polygon (leaving the polygon itself in place).
 /// With `close`, an open ring is closed first by repeating its first vertex at its end.
 /// Other kinds come back as they are.

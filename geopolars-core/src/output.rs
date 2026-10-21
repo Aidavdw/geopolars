@@ -82,7 +82,7 @@ pub(crate) fn coords_struct(
 
 /// `values` split into lists at `offsets`.
 /// `validity` is `None` when every list is there.
-pub(crate) fn list_array(
+pub fn list_array(
     values: Box<dyn Array>,
     offsets: OffsetsBuffer<i64>,
     validity: Option<Bitmap>,
