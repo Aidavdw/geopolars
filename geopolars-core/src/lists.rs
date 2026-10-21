@@ -11,6 +11,7 @@ use polars_arrow::offset::OffsetsBuffer;
 /// Otherwise, use [List].
 ///
 /// See the README on views.
+#[derive(Clone)]
 pub struct ValidList {
     offsets: OffsetsBuffer<i64>,
 }
@@ -43,12 +44,20 @@ impl ValidList {
         let (start, end) = self.offsets.start_end(i);
         start..end
     }
+
+    /// Here the items of lists `lists` sit in the child array.
+    #[inline(always)]
+    pub fn span(&self, lists: Range<usize>) -> Range<usize> {
+        let offsets = self.offsets.buffer();
+        offsets[lists.start] as usize..offsets[lists.end] as usize
+    }
 }
 
 /// Lists where individual lists can be missing: the outer level of a geometry column.
 /// Otherwise, use [ValidList].
 ///
 /// See the README on views.
+#[derive(Clone)]
 pub struct List {
     /// Which lists are there.
     validity: Option<Bitmap>,
@@ -69,6 +78,10 @@ impl List {
             validity,
             lists: ValidList::from_offsets(offsets),
         }
+    }
+
+    pub fn with_validity(self, validity: Option<Bitmap>) -> Self {
+        Self { validity, ..self }
     }
 
     pub(crate) fn into_parts(self) -> (OffsetsBuffer<i64>, Option<Bitmap>) {

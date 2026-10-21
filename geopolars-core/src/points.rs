@@ -2,6 +2,9 @@
 
 use std::ops::Range;
 
+use polars_arrow::array::{ListArray, StructArray};
+
+use crate::output::{coords_struct, list_array};
 use crate::{Coords, List, ValidCoords};
 
 /// One point: a single coordinate, which may be missing.
@@ -40,6 +43,13 @@ impl PointArray {
     pub fn new(coords: Coords) -> Self {
         Self { coords }
     }
+
+    /// The polars storage of the column, taking over its buffers.
+    pub fn into_struct_array(self) -> StructArray {
+        let dim = self.coords.dim();
+        let (axes, validity) = self.coords.into_parts();
+        coords_struct(dim, axes, validity)
+    }
 }
 
 /// One multipoint: a run of coordinates.
@@ -56,6 +66,14 @@ pub struct MultiPointArray {
 }
 
 impl MultiPointArray {
+    /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).
+    pub fn into_list_array(self) -> ListArray<i64> {
+        let dim = self.coords.dim();
+        let coords = coords_struct(dim, self.coords.into_axes(), None);
+        let (rows, validity) = self.rows.into_parts();
+        list_array(coords.boxed(), rows, validity)
+    }
+
     /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
     pub fn get(&self, i: usize) -> ScalarMultiPoint<'_> {

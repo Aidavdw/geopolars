@@ -1,10 +1,15 @@
-//! Kernels of our own, measuring straight off the GeoArrow buffers.
+//! Kernels of our own, working straight off the GeoArrow buffers.
 
+mod affine;
 mod area;
 pub mod distance;
 mod is_ccw;
 mod length;
 
+pub use affine::{
+    affine_line_strings, affine_multi_line_strings, affine_multi_points, affine_multi_polygons,
+    affine_points, affine_polygons, AffineMatrix, RowShift,
+};
 pub use area::{multi_polygon_areas, polygon_areas, AreaMetric};
 pub use distance::{against_one, pairwise, DistanceMetric};
 pub use is_ccw::{

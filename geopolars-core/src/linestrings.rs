@@ -19,8 +19,12 @@ impl<'a> ScalarLineString<'a> {
     /// The position of every vertex in order: x, y, and with `Z` its z (`0.0` without).
     #[inline(always)]
     pub fn positions<const Z: bool>(&self) -> impl Iterator<Item = [f64; 3]> + 'a {
-        let coords = self.coords;
-        self.vertices.clone().map(move |i| coords.position::<Z>(i))
+        let vertices = self.vertices.clone();
+        let x = &self.coords.x()[vertices.clone()];
+        let y = &self.coords.y()[vertices.clone()];
+        // `Some` exactly when `Z=true`, which the compiler knows, so no vertex checks it.
+        let z = Z.then(|| &self.coords.z().expect("a z, with `Z`")[vertices]);
+        (0..x.len()).map(move |i| [x[i], y[i], z.map_or(0.0, |z| z[i])])
     }
 }
 
@@ -59,7 +63,7 @@ impl LineStringArray {
     /// The polars storage of the column, taking over its buffers.
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();
-        let coords = coords_struct(dim, self.coords.into_axes());
+        let coords = coords_struct(dim, self.coords.into_axes(), None);
         let (rows, validity) = self.rows.into_parts();
         list_array(coords.boxed(), rows, validity)
     }
@@ -94,7 +98,7 @@ impl MultiLineStringArray {
     /// See [`LineStringArray::into_list_array`].
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();
-        let coords = coords_struct(dim, self.coords.into_axes());
+        let coords = coords_struct(dim, self.coords.into_axes(), None);
         let lines = list_array(coords.boxed(), self.lines.into_offsets(), None);
         let (rows, validity) = self.rows.into_parts();
         list_array(lines.boxed(), rows, validity)

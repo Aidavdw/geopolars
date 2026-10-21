@@ -58,18 +58,25 @@ pub fn bool_array(values: Vec<bool>, validity: Option<&Bitmap>) -> BooleanArray 
 }
 
 /// The coordinate struct of `dim`, taking over the `axes` buffers.
-pub(crate) fn coords_struct(dim: GeoDimension, (x, y, z, m): BufferAxes) -> StructArray {
+/// `validity` is `None` when every coordinate is there.
+/// Polars expects a missing coordinate to be missing in every field too,
+/// (not needed for geoarrow spec), so they all get it.
+pub(crate) fn coords_struct(
+    dim: GeoDimension,
+    (x, y, z, m): BufferAxes,
+    validity: Option<Bitmap>,
+) -> StructArray {
     let len = x.len();
     let axes = [Some(x), Some(y), z, m]
         .into_iter()
         .flatten()
-        .map(|values| PrimitiveArray::new(ArrowDataType::Float64, values, None).boxed())
+        .map(|values| PrimitiveArray::new(ArrowDataType::Float64, values, validity.clone()).boxed())
         .collect();
     StructArray::new(
         dim.coordinates().to_arrow(CompatLevel::newest()),
         len,
         axes,
-        None,
+        validity,
     )
 }
 

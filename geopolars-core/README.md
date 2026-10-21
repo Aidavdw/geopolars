@@ -31,7 +31,7 @@ Kernels take these held together per geometry type,
 such as `LineStringArray` or `PolygonArray`.
 These are built from a chunk of the Polars storage with `new`.
 A kernel returning geometries returns these types too.
-`into_list_array` turns them back into Polars storage.
+`into_list_array` turns them back into Polars storage (`into_struct_array` for `PointArray`).
 A kernel returning a value per row builds it with the functions in `output` (`f64_array`, ...).
 
 The single-geometry types (`ScalarPoint`, `ScalarLineString`, ...) implement geo-traits,

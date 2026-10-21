@@ -47,7 +47,7 @@ impl PolygonArray {
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();
-        let coords = coords_struct(dim, self.coords.into_axes());
+        let coords = coords_struct(dim, self.coords.into_axes(), None);
         let rings = list_array(coords.boxed(), self.rings.into_offsets(), None);
         let (rows, validity) = self.rows.into_parts();
         list_array(rings.boxed(), rows, validity)
@@ -107,7 +107,7 @@ impl MultiPolygonArray {
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();
-        let coords = coords_struct(dim, self.coords.into_axes());
+        let coords = coords_struct(dim, self.coords.into_axes(), None);
         let rings = list_array(coords.boxed(), self.rings.into_offsets(), None);
         let polygons = list_array(rings.boxed(), self.polygons.into_offsets(), None);
         let (rows, validity) = self.rows.into_parts();

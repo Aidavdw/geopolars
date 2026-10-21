@@ -70,6 +70,22 @@ impl ValidCoords {
         }
     }
 
+    /// These coordinates, with x, y and z replaced where they are `Some`.
+    /// The other axes share their buffers.
+    /// A `Some` z needs a dimension with a `z`.
+    pub fn with_positions(&self, [x, y, z]: [Option<Vec<f64>>; 3]) -> Self {
+        assert!(
+            z.is_none() || self.z.is_some(),
+            "a z for coordinates without one"
+        );
+        Self {
+            x: x.map_or_else(|| self.x.clone(), Buffer::from),
+            y: y.map_or_else(|| self.y.clone(), Buffer::from),
+            z: z.map(Buffer::from).or_else(|| self.z.clone()),
+            m: self.m.clone(),
+        }
+    }
+
     pub(crate) fn into_axes(self) -> BufferAxes {
         (self.x, self.y, self.z, self.m)
     }
@@ -89,6 +105,22 @@ impl ValidCoords {
             self.y[i],
             if Z { self.z.as_ref().unwrap()[i] } else { 0.0 },
         ]
+    }
+
+    #[inline(always)]
+    pub fn x(&self) -> &[f64] {
+        &self.x
+    }
+
+    #[inline(always)]
+    pub fn y(&self) -> &[f64] {
+        &self.y
+    }
+
+    /// `None` for a dimension without a `z`.
+    #[inline(always)]
+    pub fn z(&self) -> Option<&[f64]> {
+        self.z.as_deref()
     }
 
     /// The m of coordinate `i`. Only for a dimension with an `m`.
@@ -199,8 +231,16 @@ impl Coords {
         })
     }
 
+    pub fn from_valid(axes: ValidCoords, validity: Option<Bitmap>) -> Self {
+        Self { validity, axes }
+    }
+
+    pub(crate) fn into_parts(self) -> (BufferAxes, Option<Bitmap>) {
+        (self.axes.into_axes(), self.validity)
+    }
+
     #[inline(always)]
-    fn is_valid(&self, i: usize) -> bool {
+    pub fn is_valid(&self, i: usize) -> bool {
         self.validity
             .as_ref()
             .is_none_or(|validity| validity.get_bit(i))

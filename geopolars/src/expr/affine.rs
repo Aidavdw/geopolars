@@ -1,172 +1,115 @@
 //! Geometric transformations that preserve lines and parallelism,
 //! but not necessarily Euclidean distances and angles.
-//!
-//! Translating, rotating, scaling and skewing are all one of these,
-//! so they share one kernel, and differ only in the matrix they hand it.
+//! The kernels live in `geopolars_compute::native`.
 
+use geopolars_compute::native::{
+    self, affine_line_strings, affine_multi_line_strings, affine_multi_points,
+    affine_multi_polygons, affine_points, affine_polygons, RowShift,
+};
+use geopolars_core::{
+    downcast, Coords, LineStringArray, List, MultiLineStringArray, MultiPointArray,
+    MultiPolygonArray, PointArray, PolygonArray, ValidCoords,
+};
 use polars::prelude::*;
-use polars_arrow::bitmap::Bitmap;
-use polars_arrow::compute::utils::combine_validities_and;
+use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{coordinate_bounds, kernel_output_type_same_geometry, map_coords};
-use crate::geoarrow::{describe, GeoDimension, Kind};
+use super::coords::kernel_output_type_same_geometry;
+use crate::geoarrow::{describe, Kind};
 
 // TODO: (Blocked until z-centroid is implemented): allow rotation around x/y for polygon
 // TODO: (Blocked until z-centroid is implemented): allow scaling around z for polygon(?)
 
-/// An affine transformation of the coordinates that are positions (`x`, `y` and `z`),
-/// as the top three rows of its augmented matrix:
-///
-/// ```text
-/// | x' |   | a  b  c  xoff |   | x |
-/// | y' | = | d  e  f  yoff | · | y |
-/// | z' |   | g  h  i  zoff |   | z |
-///                              | 1 |
-/// ```
-///
-/// Stored row by row in one flat array, `[a, b, c, xoff, d, e, f, yoff, g, h, i, zoff]`.
-///
-/// A geometry without a `z` reads it as 0 and has no `z'` to write,
-/// so `c`, `f` and the whole bottom row do nothing to it.
-/// `m` is a measure, not a position, so it is never transformed.
+/// The kwargs of the affine kernels: see [`native::AffineMatrix`].
 #[derive(Deserialize)]
 struct AffineMatrix {
-    // Only the coordinates the row actually uses are read:
-    // a kernel this simple spends its time moving data, not multiplying it,
-    // and most rows (of a translation, a scaling, a rotation in the plane) use only one or two.
-    // A coordinate a row multiplies by 0 therefore has no say in it, not even when it is NaN.
     coefficients: [f64; 12],
 }
 
-impl AffineMatrix {
-    /// The row that makes output coordinate `axis` (0 is `x`, 1 is `y`, 2 is `z`),
-    /// with its offset last.
-    fn row(&self, axis: usize) -> [f64; 4] {
-        let (rows, _) = self.coefficients.as_chunks::<4>();
-        rows[axis]
-    }
-
-    /// Whether the row that makes `axis` takes that coordinate as it is,
-    /// before its offset is added.
-    fn keeps(&self, axis: usize) -> bool {
-        let mut unchanged = [0.0; 3];
-        unchanged[axis] = 1.0;
-        self.row(axis)[..3] == unchanged
-    }
-
-    /// Output coordinate `axis` (0 is `x`, 1 is `y`, 2 is `z`) for every position,
-    /// plus `shift` (one value per position) if there is one,
-    /// or `None` if that leaves the coordinate as it is.
-    fn apply(
-        &self,
-        axis: usize,
-        x: &[f64],
-        y: &[f64],
-        z: Option<&[f64]>,
-        shift: Option<&[f64]>,
-    ) -> Option<Vec<f64>> {
-        let row = self.row(axis);
-        let offset = row[3];
-        if self.keeps(axis) && offset == 0.0 && shift.is_none() {
-            return None;
+impl From<&AffineMatrix> for native::AffineMatrix {
+    fn from(matrix: &AffineMatrix) -> Self {
+        Self {
+            coefficients: matrix.coefficients,
         }
-
-        let terms: Vec<(f64, &[f64])> = [Some(x), Some(y), z]
-            .into_iter()
-            .zip(row)
-            .filter(|&(_, coefficient)| coefficient != 0.0)
-            .filter_map(|(values, coefficient)| Some((coefficient, values?)))
-            // Last, so a shift equal to a constant offset adds up exactly the same.
-            .chain(shift.map(|shift| (1.0, shift)))
-            .collect();
-        Some(match terms.as_slice() {
-            [] => vec![offset; x.len()],
-            [(a, u)] => u.iter().map(|u| a * u + offset).collect(),
-            [(a, u), (b, v)] => u
-                .iter()
-                .zip(*v)
-                .map(|(u, v)| a * u + b * v + offset)
-                .collect(),
-            [(a, u), (b, v), (c, w)] => u
-                .iter()
-                .zip(*v)
-                .zip(*w)
-                .map(|((u, v), w)| a * u + b * v + c * w + offset)
-                .collect(),
-            [(a, u), (b, v), (c, w), (d, t)] => u
-                .iter()
-                .zip(*v)
-                .zip(*w)
-                .zip(*t)
-                .map(|(((u, v), w), t)| a * u + b * v + c * w + d * t + offset)
-                .collect(),
-            _ => unreachable!("a row has three coefficients and a shift before its offset"),
-        })
     }
 }
 
-/// Transform one flat array of coordinates,
-/// shifting output coordinate `axis` by `shifts[axis]` (one value per position) as well.
-fn transform(
-    coords: &Series,
-    dim: GeoDimension,
-    matrix: &AffineMatrix,
-    shifts: &[Option<Vec<f64>>; 3],
-) -> PolarsResult<Series> {
-    for shift in shifts.iter().flatten() {
-        polars_ensure!(
-            shift.len() == coords.len(),
-            ComputeError: "{} shifts for {} coordinates", shift.len(), coords.len()
-        );
-    }
-    let fields = coords.struct_()?;
-    let position = |name: &str| -> PolarsResult<Float64Chunked> {
-        Ok(fields.field_by_name(name)?.f64()?.rechunk().into_owned())
-    };
-    let x = position("x")?;
-    let y = position("y")?;
-    let z = dim.has_z().then(|| position("z")).transpose()?;
+/// One chunk of `kind` geometries, transformed by `matrix` and `shift`.
+fn chunk_transformed(
+    chunk: &dyn Array,
+    kind: Kind,
+    matrix: &native::AffineMatrix,
+    shift: RowShift,
+) -> PolarsResult<Box<dyn Array>> {
+    Ok(match kind {
+        Kind::Point => {
+            let array = PointArray::new(Coords::new(chunk)?);
+            affine_points(matrix, &array, shift)
+                .into_struct_array()
+                .boxed()
+        }
+        Kind::LineString => {
+            let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
+            affine_line_strings(matrix, &array, shift)
+                .into_list_array()
+                .boxed()
+        }
+        Kind::MultiPoint => {
+            let rows: &ListArray<i64> = downcast(chunk, "a list of coordinates")?;
+            let array = MultiPointArray {
+                rows: List::new(rows),
+                coords: ValidCoords::new(rows.values().as_ref())?,
+            };
+            affine_multi_points(matrix, &array, shift)
+                .into_list_array()
+                .boxed()
+        }
+        Kind::Polygon => {
+            let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            affine_polygons(matrix, &array, shift)
+                .into_list_array()
+                .boxed()
+        }
+        Kind::MultiLineString => {
+            let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            affine_multi_line_strings(matrix, &array, shift)
+                .into_list_array()
+                .boxed()
+        }
+        Kind::MultiPolygon => {
+            let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            affine_multi_polygons(matrix, &array, shift)
+                .into_list_array()
+                .boxed()
+        }
+    })
+}
 
-    let (x, y) = (x.downcast_as_array(), y.downcast_as_array());
-    let z = z.as_ref().map(|z| z.downcast_as_array());
-
-    let z_values = z.map(|z| z.values().as_slice());
-    let transformed = |axis: usize, name: &str| -> PolarsResult<Series> {
-        let shift = shifts[axis].as_deref();
-        Ok(
-            match matrix.apply(axis, x.values(), y.values(), z_values, shift) {
-                None => fields.field_by_name(name)?,
-                Some(values) => Float64Chunked::from_vec(name.into(), values).into_series(),
-            },
-        )
-    };
-    // In the order the spec gives the fields in, so the result has the input's dtype.
-    let mut out = vec![transformed(0, "x")?, transformed(1, "y")?];
-    if dim.has_z() {
-        out.push(transformed(2, "z")?);
-    }
-    if dim.has_m() {
-        out.push(fields.field_by_name("m")?);
-    }
-
-    let mut out = StructChunked::from_series(coords.name().clone(), coords.len(), out.iter())?;
-    // For points the coordinate struct is the geometry, and its validity says the point is missing.
-    // Building from fields alone drops that.
-    out.zip_outer_validity(fields);
-    Ok(out.into_series())
+/// `storage`, holding only the coordinates its rows use.
+/// A streaming morsel still holds every coordinate of the column it was sliced from,
+/// which the kernels would otherwise all transform. Trimming is zero-copy.
+fn trimmed(storage: &Series) -> Series {
+    storage
+        .trim_lists_to_normalized_offsets()
+        .unwrap_or_else(|| storage.clone())
 }
 
 /// The kernel behind affine ops like `translate` (see `geo/affine.py`).
 #[polars_expr(output_type_func=kernel_output_type_same_geometry)]
 fn affine(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
-    let geo = describe(inputs[0].dtype())?;
-    let out = map_coords(inputs[0].ext()?.storage(), geo.kind.nesting(), &|coords| {
-        transform(coords, geo.dim, &kwargs, &[None, None, None])
-    })?;
-
-    Ok(out.into_extension(geo.typ.clone()))
+    let kind = describe(inputs[0].dtype())?.kind;
+    let matrix = native::AffineMatrix::from(&kwargs);
+    let storage = trimmed(inputs[0].ext()?.storage());
+    let chunks = storage
+        .chunks()
+        .iter()
+        .map(|chunk| chunk_transformed(chunk.as_ref(), kind, &matrix, RowShift::None))
+        .collect::<PolarsResult<_>>()?;
+    // SAFETY: the geometries keep their kind and dimension, so this is the input's storage.
+    Ok(unsafe {
+        Series::from_chunks_and_dtype_unchecked(inputs[0].name().clone(), chunks, inputs[0].dtype())
+    })
 }
 
 /// For an operation by the points of a second column,
@@ -194,211 +137,49 @@ fn kernel_output_type_same_geometry_by_points(input_fields: &[Field]) -> PolarsR
     Ok(geometry.clone())
 }
 
-/// The kernel behind affine ops about a point per row (see `geo/affine.py`):
-/// the matrix applied about each geometry's own `origin`, `M.(p − o) + o`.
-///
-/// That is `L.p + offset + (o − L.o)`, with `L` the matrix without its offsets:
-/// the constant kernel, with a shift that is the same for every position of a geometry.
+/// The kernel behind affine ops about a point per row (see `geo/affine.py`).
+/// See [`RowShift::About`].
 #[polars_expr(output_type_func=kernel_output_type_same_geometry_by_points)]
 fn affine_about(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
-    shifted_per_row(inputs, &kwargs, &|axis, origin| {
-        // A row that keeps its coordinate moves it by its offset alone, about any origin.
-        if kwargs.keeps(axis) {
-            return None;
-        }
-        let [ox, oy, oz] = origin;
-        let offset = kwargs.row(axis)[3];
-        let moved = kwargs.apply(axis, ox?, oy?, oz, None)?;
-        // `o − L·o`, for each geometry.
-        Some(match origin[axis] {
-            Some(at) => at
-                .iter()
-                .zip(moved)
-                .map(|(at, moved)| at - (moved - offset))
-                .collect(),
-            // An origin without a `z` is at `z` = 0, like one given as two numbers.
-            None => moved.iter().map(|moved| -(moved - offset)).collect(),
-        })
-    })
+    affine_by_points(inputs, &kwargs, |origins| RowShift::About(origins))
 }
 
 /// The kernel behind affine ops that move every geometry by a vector of its own
-/// (see `geo/affine.py`): `M.p + v`, with `v` a point per row.
+/// (see `geo/affine.py`). See [`RowShift::Then`].
 #[polars_expr(output_type_func=kernel_output_type_same_geometry_by_points)]
 fn affine_then_shift(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
-    // A vector without a `z` leaves it where the matrix puts it.
-    shifted_per_row(inputs, &kwargs, &|axis, by| by[axis].map(<[f64]>::to_vec))
+    affine_by_points(inputs, &kwargs, |vectors| RowShift::Then(vectors))
 }
 
-/// The `x`, `y` and `z` of a column of points, each `None` if the points do not have it.
-type Coordinates<'a> = [Option<&'a [f64]>; 3];
-
 /// Transform the geometries of `inputs[0]` by `matrix`,
-/// and shift each one along `axis` by `per_geometry(axis, [x, y, z])`
-/// of its own point in `inputs[1]` (a `None` for a coordinate that point does not have),
-/// or not at all where that is `None`.
-fn shifted_per_row(
+/// and by `shift` of the points of `inputs[1]`: one per geometry, or one for all of them.
+fn affine_by_points(
     inputs: &[Series],
     matrix: &AffineMatrix,
-    per_geometry: &dyn Fn(usize, Coordinates<'_>) -> Option<Vec<f64>>,
+    shift: for<'a> fn(&'a PointArray) -> RowShift<'a>,
 ) -> PolarsResult<Series> {
-    let geo = describe(inputs[0].dtype())?;
-    let storage = inputs[0].ext()?.storage();
+    let kind = describe(inputs[0].dtype())?.kind;
+    let storage = trimmed(inputs[0].ext()?.storage()).rechunk();
     let points = inputs[1].ext()?.storage();
     let points = match (storage.len(), points.len()) {
         (n, m) if n == m => points.rechunk(),
-        (n, 1) => points.new_from_index(0, n),
+        (n, 1) => points.new_from_index(0, n).rechunk(),
         (n, m) => polars_bail!(ShapeMismatch: "cannot transform {n} geometries by {m} points"),
     };
+    let points = PointArray::new(Coords::new(points.chunks()[0].as_ref())?);
 
-    let fields = points.struct_()?;
-    let position = |name: &str| -> PolarsResult<Option<Float64Chunked>> {
-        Ok(match fields.field_by_name(name) {
-            Ok(field) => Some(field.f64()?.rechunk().into_owned()),
-            Err(_) => None,
-        })
-    };
-    let at = [position("x")?, position("y")?, position("z")?];
-    // A geometry is missing wherever its point is.
-    let missing = fields.rechunk_validity();
-    let at = [0, 1, 2].map(|axis| {
-        at[axis]
-            .as_ref()
-            .map(|at| at.downcast_as_array().values().as_slice())
-    });
-
-    let bounds = (geo.kind.nesting() > 0)
-        .then(|| coordinate_bounds(storage, geo.kind.nesting()))
-        .transpose()?;
-    let axes = if geo.dim.has_z() { 3 } else { 2 };
-    let shift = |axis: usize| -> Option<Vec<f64>> {
-        let per_geometry = per_geometry(axis, at)?;
-        Some(match &bounds {
-            None => per_geometry,
-            // Each geometry's own value, at every one of its coordinates.
-            Some(bounds) => {
-                let mut shift = Vec::with_capacity(*bounds.last().unwrap_or(&0) as usize);
-                for (part, value) in bounds.windows(2).zip(per_geometry) {
-                    shift.resize(part[1] as usize, value);
-                }
-                shift
-            }
-        })
-    };
-    let shifts = [0, 1, 2].map(|axis| if axis < axes { shift(axis) } else { None });
-
-    let out = map_coords(storage, geo.kind.nesting(), &|coords| {
-        transform(coords, geo.dim, matrix, &shifts)
-    })?;
-    Ok(with_missing(out, missing).into_extension(geo.typ.clone()))
-}
-
-/// `geometries`, missing as well wherever `validity` says so.
-fn with_missing(geometries: Series, validity: Option<Bitmap>) -> Series {
-    let Some(validity) = validity else {
-        return geometries;
-    };
-    let geometries = geometries.rechunk();
-    let chunk = &geometries.chunks()[0];
-    let validity = combine_validities_and(chunk.validity(), Some(&validity));
-    // SAFETY: only the validity changes, not the dtype.
-    unsafe {
+    let chunk = chunk_transformed(
+        storage.chunks()[0].as_ref(),
+        kind,
+        &matrix.into(),
+        shift(&points),
+    )?;
+    // SAFETY: the geometries keep their kind and dimension, so this is the input's storage.
+    Ok(unsafe {
         Series::from_chunks_and_dtype_unchecked(
-            geometries.name().clone(),
-            vec![chunk.with_validity(validity)],
-            geometries.dtype(),
+            inputs[0].name().clone(),
+            vec![chunk],
+            inputs[0].dtype(),
         )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    //! What the Python suite cannot reach yet:
-    //! a matrix that mixes coordinates, rather than only offsetting them.
-
-    use super::*;
-
-    #[test]
-    fn each_row_mixes_the_coordinates_in_order() {
-        let matrix = AffineMatrix {
-            coefficients: [
-                1.0, 2.0, 3.0, 4.0, // x' = x + 2y + 3z + 4
-                5.0, 6.0, 7.0, 8.0, // y' = 5x + 6y + 7z + 8
-                9.0, 10.0, 11.0, 12.0, // z' = 9x + 10y + 11z + 12
-            ],
-        };
-        let (x, y, z) = ([1.0, 0.0], [0.0, 1.0], [2.0, 3.0]);
-
-        assert_eq!(
-            matrix.apply(0, &x, &y, Some(&z), None),
-            Some(vec![11.0, 15.0])
-        );
-        assert_eq!(
-            matrix.apply(1, &x, &y, Some(&z), None),
-            Some(vec![27.0, 35.0])
-        );
-        assert_eq!(
-            matrix.apply(2, &x, &y, Some(&z), None),
-            Some(vec![43.0, 55.0])
-        );
-    }
-
-    #[test]
-    fn without_z_the_z_column_does_nothing() {
-        let matrix = AffineMatrix {
-            coefficients: [
-                0.0, -1.0, 100.0, 1.0, // x' = -y + 1, plus 100z if there were a z
-                1.0, 0.0, 100.0, 2.0, // y' = x + 2, plus 100z if there were a z
-                0.0, 0.0, 1.0, 0.0,
-            ],
-        };
-        let (x, y) = ([1.0, 3.0], [2.0, 4.0]);
-
-        assert_eq!(matrix.apply(0, &x, &y, None, None), Some(vec![-1.0, -3.0]));
-        assert_eq!(matrix.apply(1, &x, &y, None, None), Some(vec![3.0, 5.0]));
-    }
-
-    #[test]
-    fn a_shift_moves_each_position_by_its_own_amount() {
-        let matrix = AffineMatrix {
-            coefficients: [
-                0.0, -1.0, 0.0, 0.0, // x' = -y + shift
-                1.0, 0.0, 0.0, 0.0, // y' = x
-                0.0, 0.0, 1.0, 0.0, // z' = z + shift
-            ],
-        };
-        let (x, y, z) = ([1.0, 3.0], [2.0, 4.0], [5.0, 6.0]);
-        let shift = [10.0, 20.0];
-
-        assert_eq!(
-            matrix.apply(0, &x, &y, Some(&z), Some(&shift)),
-            Some(vec![8.0, 16.0])
-        );
-        assert_eq!(
-            matrix.apply(2, &x, &y, Some(&z), Some(&shift)),
-            Some(vec![15.0, 26.0])
-        );
-    }
-
-    #[test]
-    fn a_coordinate_the_matrix_leaves_alone_is_not_rebuilt() {
-        let matrix = AffineMatrix {
-            coefficients: [
-                1.0, 0.0, 0.0, 5.0, // x' = x + 5
-                0.0, 1.0, 0.0, 0.0, // y' = y
-                0.0, 0.0, 0.0, 7.0, // z' = 7
-            ],
-        };
-        let (x, y, z) = ([1.0, 2.0], [3.0, 4.0], [5.0, 6.0]);
-
-        assert_eq!(
-            matrix.apply(0, &x, &y, Some(&z), None),
-            Some(vec![6.0, 7.0])
-        );
-        assert_eq!(matrix.apply(1, &x, &y, Some(&z), None), None);
-        assert_eq!(
-            matrix.apply(2, &x, &y, Some(&z), None),
-            Some(vec![7.0, 7.0])
-        );
-    }
+    })
 }

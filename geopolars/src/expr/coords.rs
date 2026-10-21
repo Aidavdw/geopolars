@@ -29,37 +29,6 @@ pub fn map_coords(
     map_nested(trimmed.as_ref().unwrap_or(storage), nesting, f)
 }
 
-/// Where each row of `storage` is among the coordinates `map_coords` hands its kernel:
-/// row `r` is coordinates `bounds[r]..bounds[r + 1]`.
-///
-/// For a kernel that needs something per geometry (such as the point to rotate it about)
-/// at every one of its coordinates.
-pub fn coordinate_bounds(storage: &Series, nesting: u8) -> PolarsResult<Vec<i64>> {
-    // The same coordinates as `map_coords` hands over: trimmed, and in one chunk,
-    // as `apply_to_inner` rechunks every layer.
-    let storage = storage.rechunk();
-    let mut layer = storage
-        .trim_lists_to_normalized_offsets()
-        .unwrap_or(storage)
-        .rechunk();
-    let mut bounds: Vec<i64> = (0..=layer.len() as i64).collect();
-    for _ in 0..nesting {
-        let list = layer.list()?.rechunk();
-        let offsets = list.downcast_as_array().offsets();
-        for at in &mut bounds {
-            *at = offsets[*at as usize];
-        }
-        layer = list.get_inner();
-    }
-
-    let (first, last) = (bounds[0], bounds[bounds.len() - 1]);
-    polars_ensure!(
-        first == 0 && last as usize == layer.len(),
-        ComputeError: "the rows span coordinates {first}..{last}, out of {}", layer.len()
-    );
-    Ok(bounds)
-}
-
 fn map_nested(
     storage: &Series,
     nesting: u8,
@@ -119,17 +88,6 @@ pub(crate) mod tests {
             None,
         );
         Series::from_arrow("".into(), arr.boxed()).unwrap()
-    }
-
-    #[test]
-    fn every_row_of_a_slice_knows_its_coordinates() {
-        let lines = lists(coords(9), &[2, 3, 4]);
-        assert_eq!(coordinate_bounds(&lines.slice(1, 2), 1).unwrap(), [0, 3, 7]);
-
-        // Three polygons of two rings each, of 2 + 3, 4 + 5 and 6 + 7 coordinates.
-        let polygons = lists(lists(coords(27), &[2, 3, 4, 5, 6, 7]), &[2, 2, 2]);
-        assert_eq!(coordinate_bounds(&polygons.slice(1, 1), 2).unwrap(), [0, 9]);
-        assert_eq!(coordinate_bounds(&polygons, 2).unwrap(), [0, 5, 14, 27]);
     }
 
     #[test]
