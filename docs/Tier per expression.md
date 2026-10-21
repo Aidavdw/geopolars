@@ -21,7 +21,7 @@ the comment says when one without a CRS takes a different tier.
 | `boundary` | - | | C | | C | every ring | - | | C | LPP | C | LPP |
 | `convex_hull` | - | | B | GEOS [^3], straight=null | B | GEOS [^3] [^1] | B | GEOS [^3] [^1] | B | GEOS [^3] [^1] | B | GEOS[^3] [^1] |
 | `simplify` | C | returns the point | B | GEOS; z kept, m dropped | B | split by `buffer(0)` is a per-row error | C | returns the multipoint | B | | B | |
-| `is_ring` | - | | A | ≥ 4 vertices, ends ≈  x/y/z | - | | - | | A | LPP | - | |
+| `is_ring` | - | | A | ≥ 4 vertices, ends ≈  x/y/z | - | | - | | A | parts chained into one ring | - | |
 | `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes fwd `rings_overlap` | - | | B | LPP | B | LPP |
 | `rings_overlap` | - | | B | hacked as polygon's RGR | - | | - | | - | | - | |
 | `is_ccw` | - | | A | CCW | A | | - | | A | every part combined | A | every part combined |

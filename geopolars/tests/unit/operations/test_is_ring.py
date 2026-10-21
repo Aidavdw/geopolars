@@ -105,34 +105,48 @@ def test_every_dimension(dimension: Dimension) -> None:
     assert df.select(geo.is_ring("line"))["line"].to_list() == [True, False]
 
 
-def test_a_multilinestring_gives_one_per_part() -> None:
-    open_line = _line((0, 0), (1, 0), (0, 1), (1, 1))
-    storage = pl.Series(
-        "multi",
-        [[_TRIANGLE, open_line], [], [_TRIANGLE], None],
-        dtype=pl.List(_XY_VERTICES),
-    )
+def _multi_is_ring(*multis: list[Line] | None) -> list[bool | None]:
+    storage = pl.Series("multi", list(multis), dtype=pl.List(_XY_VERTICES))
     df = pl.DataFrame(storage.ext.to(MultiLineStringXY()))
-
     out = df.select(geo.is_ring("multi"))
+    assert out.schema["multi"] == pl.Boolean
+    return out["multi"].to_list()
 
-    assert out.schema["multi"] == pl.List(pl.Boolean)
-    assert out["multi"].to_list() == [[True, False], [], [True], None]
+
+def test_a_multilinestring_whose_parts_chain_into_a_ring() -> None:
+    split = [_line((0, 0), (1, 0), (0, 1)), _line((0, 1), (0, 0))]
+
+    assert _multi_is_ring(split, [_TRIANGLE]) == [True, True]
+
+
+def test_a_multilinestring_whose_parts_dont_chain() -> None:
+    gap = [_line((0, 0), (1, 0), (0, 1)), _line((0, 2), (0, 0))]
+    side_by_side = [_TRIANGLE, _line((5, 0), (6, 0), (5, 1), (5, 0))]
+    empty_part = [_line((0, 0), (1, 0), (0, 1)), [], _line((0, 1), (0, 0))]
+
+    assert _multi_is_ring(gap, side_by_side, empty_part) == [False, False, False]
+
+
+def test_a_multilinestring_chain_needs_4_joined_vertices() -> None:
+    there_and_back = [_line((0, 0), (1, 0)), _line((1, 0), (0, 0))]
+
+    assert _multi_is_ring(there_and_back) == [False]
+
+
+def test_an_empty_and_a_missing_multilinestring() -> None:
+    assert _multi_is_ring([], None) == [False, None]
 
 
 def test_a_sliced_multilinestring_reads_only_its_own_parts() -> None:
     open_line = _line((0, 0), (1, 0), (0, 1), (1, 1))
     storage = pl.Series(
         "multi",
-        [[open_line], [_TRIANGLE, open_line], [_TRIANGLE]],
+        [[open_line], [_TRIANGLE], [open_line]],
         dtype=pl.List(_XY_VERTICES),
     )
     df = pl.DataFrame(storage.ext.to(MultiLineStringXY())).slice(1, 2)
 
-    assert df.select(geo.is_ring("multi"))["multi"].to_list() == [
-        [True, False],
-        [True],
-    ]
+    assert df.select(geo.is_ring("multi"))["multi"].to_list() == [True, False]
 
 
 def test_a_sliced_linestring_column() -> None:

@@ -37,17 +37,20 @@ def _is_ring(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 def is_ring(geometry: IntoExprColumn) -> pl.Expr:
     """Whether a linestring is a ring: it has at least 4 vertices,
     and its last vertex lies coincides with its first (within margin default margin).
-    A multilinestring gives a list instead, one per part.
+    A multilinestring is a ring when its parts chain into one, in their order:
+    each part ends where the next starts, and the last ends where the first starts.
+    The joined line counts each joint once.
+    An empty part breaks the chain.
 
-    | in                      | out          |
-    |-------------------------|--------------|
-    | `LineStringXY`          | `bool`       |
-    | `MultiLineStringXYZM`   | `list[bool]` |
+    | in | out |
+    | - | - |
+    | `LineStringXY` | `bool` |
+    | `MultiLineStringXYZM` | `bool` |
 
     m is a measure along the line rather than a position, so it is not compared.
     4 vertices is a triangle plus the one closing it, so a closed line with fewer is no ring.
 
-    An empty linestring is no ring. A missing linestring gives a missing result.
+    An empty linestring or multilinestring is no ring. A missing linestring gives a missing result.
 
     This is what the polygon constructors check every ring against.
 

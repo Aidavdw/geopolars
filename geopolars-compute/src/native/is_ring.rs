@@ -1,15 +1,15 @@
 //! Whether a linestring is a ring: at least [MIN_RING_VERTICES] vertices,
 //! with its last at the same place as its first.
+//! A multilinestring is a ring when its parts chain into one (see [multi_line_strings_are_rings]).
 //! m is a measure rather than a position, so it is not compared.
 
 use std::ops::Range;
 
-use geopolars_core::output::{bool_array, list_array};
 use geopolars_core::{
-    is_close, LineStringArray, MultiLineStringArray, ValidCoords, MIN_RING_VERTICES,
+    is_close, LineStringArray, MultiLineStringArray, ScalarMultiLineString, ValidCoords,
+    MIN_RING_VERTICES,
 };
-use polars_arrow::array::{BooleanArray, ListArray};
-use polars_arrow::offset::Offsets;
+use polars_arrow::array::BooleanArray;
 
 use super::per_row_bool;
 
@@ -39,33 +39,33 @@ pub fn line_strings_are_rings<const Z: bool>(array: &LineStringArray) -> Boolean
     })
 }
 
-/// Whether each part of a multilinestring is a ring, as a list per row of a chunk.
+/// Whether the parts of `multi` chain into one ring.
+/// each part ends where the next starts, and the last ends where the first starts.
+/// Other than that same requirements as single linestring.
 /// See [same_place] for `Z`.
-pub fn multi_line_strings_are_rings<const Z: bool>(array: &MultiLineStringArray) -> ListArray<i64> {
-    // TODO: For multiline strings, we only need to check if they all combined form a ring:
-    // Every end point needs to be approx overlapping to the start point of the last one,
-    // looping over at the end (like a normal ring)
-    let rows = &array.rows;
-    let mut values = Vec::with_capacity(array.lines.len());
-    let mut offsets = Vec::with_capacity(rows.len() + 1);
-    offsets.push(0);
-    for i in 0..rows.len() {
-        // A missing row's offsets point anywhere, so it gets no parts.
-        if rows.is_valid(i) {
-            values.extend(
-                array
-                    .get(i)
-                    .line_strings()
-                    .map(|line| is_ring::<Z>(line.coords, line.vertices)),
-            );
-        }
-        offsets.push(values.len() as i64);
+#[inline(always)]
+fn parts_form_ring<const Z: bool>(multi: &ScalarMultiLineString) -> bool {
+    let coords = multi.coords;
+    let mut parts = multi.line_strings();
+    let Some(first) = parts.next() else {
+        return false;
+    };
+    if first.vertices.is_empty() {
+        return false;
     }
-    // SAFETY: they start at 0, and every end is the number of values so far, which only grows.
-    let offsets = unsafe { Offsets::new_unchecked(offsets) }.into();
-    list_array(
-        bool_array(values, None).boxed(),
-        offsets,
-        rows.validity().cloned(),
-    )
+    let mut joined_vertices = first.vertices.len();
+    let mut end = first.vertices.end - 1;
+    for part in parts {
+        if part.vertices.is_empty() || !same_place::<Z>(coords, end, part.vertices.start) {
+            return false;
+        }
+        joined_vertices += part.vertices.len() - 1;
+        end = part.vertices.end - 1;
+    }
+    joined_vertices >= MIN_RING_VERTICES && same_place::<Z>(coords, first.vertices.start, end)
+}
+
+/// See [parts_form_ring] for what makes a ring, and `Z`.
+pub fn multi_line_strings_are_rings<const Z: bool>(array: &MultiLineStringArray) -> BooleanArray {
+    per_row_bool(&array.rows, |i| parts_form_ring::<Z>(&array.get(i)))
 }
