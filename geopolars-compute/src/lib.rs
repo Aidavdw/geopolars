@@ -1,6 +1,5 @@
 //! Kernels on GeoArrow, taking the views of `geopolars-core`:
-//! [native] ones of our own, and [geos], [rsgeo] and [proj] ones forwarding to GEOS, rsgeo and PROJ.
-//! All but [proj] are behind their feature.
+//! [native] ones of our own, and [geos], [rsgeo] and [proj] ones forwarding to those libraries.
 //!
 //! See the README.
 

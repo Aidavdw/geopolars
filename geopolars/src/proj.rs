@@ -236,10 +236,9 @@ fn area_of_use(crs: &str) -> PolarsResult<[f64; 4]> {
     }
 }
 
-/// Whether `crs` says what `z` means:
-/// it is compound (horizontal + vertical), or its coordinate system has three axes.
-///
-/// `crs` is anything PROJ accepts.
+/// Whether `crs` says what `z` means.
+/// That is the case when it is compound (horizontal + vertical),
+/// or when its coordinate system has three axes.
 pub fn specifies_z(crs: &str) -> PolarsResult<bool> {
     let ctx = Context::new()?;
     let c_crs = CString::new(crs)

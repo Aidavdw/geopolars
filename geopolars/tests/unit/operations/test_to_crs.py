@@ -1,4 +1,4 @@
-"""Reprojecting the `z` of a geometry, which only goes through PROJ when both CRSs specify it."""
+"""`to_crs` on geometries with a `z`."""
 
 from __future__ import annotations
 

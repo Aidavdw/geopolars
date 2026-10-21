@@ -50,10 +50,8 @@ fn transformation(dtype: &DataType, to: &str) -> PolarsResult<Transformation> {
     Transformation::new(from, to).map_err(|e| polars_err!(ComputeError: "{e}"))
 }
 
-/// Whether the `z` of `dtype` goes through PROJ, as only makes sense if both CRSs specify it
-/// (see [`specifies_z`]).
-/// Errors if `dtype` has a `z` that one of them does not specify,
-/// unless the flag that allows that is set.
+/// Whether the `z` of `dtype` goes through PROJ, as in the table of `to_crs` in `geo/crs.py`.
+/// Errors where that table needs a flag that is not set.
 fn reprojects_z(dtype: &DataType, kwargs: &ToCrsKwargs) -> PolarsResult<bool> {
     let geo = describe(dtype)?;
     if !geo.dim.has_z() {
@@ -90,7 +88,7 @@ fn reprojects_z(dtype: &DataType, kwargs: &ToCrsKwargs) -> PolarsResult<bool> {
 }
 
 /// One chunk of `kind` geometries, reprojected by `transformation`.
-/// If `with_z=true`, their `z` is reprojected too.
+/// See [`reproject_coords`] for `with_z`.
 fn chunk_reprojected(
     chunk: &dyn Array,
     kind: Kind,

@@ -84,8 +84,8 @@ def to_crs(
 
     A CRS specifies `z` when it is compound, or when its coordinate system has three axes
     (e.g. `"EPSG:4979"`, but not `"EPSG:4326"`).
-    If both CRSs specify it, `z` is reprojected along with `x` and `y`.
-    Otherwise the plan is refused, unless a flag says to keep `z` as it is:
+    What happens to `z` depends on which CRSs specify it.
+    If a flag is needed but not specified, it fails at plan time.
 
     | from | to | needs | `z` |
     | - | - | - | - |

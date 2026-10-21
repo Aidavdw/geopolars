@@ -1,8 +1,13 @@
 //! Interfacing with PROJ, to move coordinates from one CRS to another.
 //!
-//! PROJ takes one coordinate at a time.
-//! `x` and `y` always go through it, and `z` only on request.
-//! `m` is never reprojected, and keeps its buffer, as does a `z` that is not reprojected.
+//! PROJ takes one coordinate at a time, as four floats: `x`, `y`, `z` and the time `t`.
+//! It does so even for a 2D transformation.
+//! `x` and `y` always go through it.
+//! `z` only goes through it if `with_z=true`, and is `0.0` otherwise.
+//! `m` never does.
+//! What does not go through PROJ keeps its buffer.
+//! `t` is the coordinate epoch, as a decimal year.
+//! It is always `f64::INFINITY`, which PROJ reads as "no time given".
 
 use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
@@ -19,8 +24,8 @@ use proj_sys::{
 
 use crate::{GeoComputeError, GeoComputeResult};
 
-/// A PROJ transformation from one CRS to another,
-/// taking and giving `x` as the easting or longitude, and `y` as the northing or latitude.
+/// A PROJ transformation from one CRS to another.
+/// `x` is the easting or longitude, and `y` the northing or latitude, whatever the CRSs' axis order.
 /// Cannot be shared between threads.
 pub struct Transformation {
     ctx: *mut PJ_CONTEXT,
@@ -57,7 +62,6 @@ impl Transformation {
             if pj.is_null() {
                 return Err(error(context_error(ctx)));
             }
-            // In and out as easting/longitude, northing/latitude, whatever the CRSs' axis order.
             let normalised = proj_normalize_for_visualization(ctx, pj);
             proj_destroy(pj);
             if normalised.is_null() {
@@ -81,9 +85,9 @@ impl Drop for Transformation {
     }
 }
 
-/// For a column of points
+/// For a column of points.
 /// A missing point is never handed to PROJ, and keeps its coordinates.
-/// If `with_z=true`, `z` goes through PROJ too, which needs points with a `z`.
+/// If `with_z=true`, `z` is reprojected too, which needs points with a `z`.
 pub fn reproject_coords(
     transformation: &Transformation,
     coords: &Coords,
@@ -102,8 +106,7 @@ pub fn reproject_coords(
     Ok(Coords::from_valid(axes, coords.validity().cloned()))
 }
 
-/// For the coordinates of a nested kind, which are never missing.
-/// If `with_z=true`, `z` goes through PROJ too, which needs coordinates with a `z`.
+/// [`reproject_coords`], for the coordinates of a nested kind, which are never missing.
 pub fn reproject_valid_coords(
     transformation: &Transformation,
     coords: &ValidCoords,
@@ -166,8 +169,7 @@ fn reprojected_valid<const Z: bool>(
     Ok([Some(xs), Some(ys), Z.then_some(zs)])
 }
 
-/// `[x, y, z]` through PROJ.
-/// A position without a `z` has it at `0.0`, as `proj::Proj::convert` does.
+/// `[x, y, z]` through PROJ (see the module docs).
 #[inline(always)]
 fn reproject_position(
     transformation: &Transformation,
