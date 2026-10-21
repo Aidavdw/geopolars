@@ -2,13 +2,20 @@
 
 use std::sync::Arc;
 
+use geopolars_compute::proj::{reproject_coords, reproject_valid_coords};
+use geopolars_compute::GeoComputeError;
+use geopolars_core::{
+    downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
+    PointArray, PolygonArray,
+};
 use polars::prelude::*;
+use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
 use rsgeo::proj::Proj;
 use serde::Deserialize;
 
-use super::coords::map_coords;
-use crate::geoarrow::{describe, Geo, GeoDimension};
+use super::coords::trimmed;
+use crate::geoarrow::{describe, Geo, Kind};
 
 #[derive(Deserialize)]
 struct ToCrsKwargs {
@@ -41,61 +48,40 @@ fn transformation(dtype: &DataType, to: &str) -> PolarsResult<Proj> {
         .map_err(|e| polars_err!(ComputeError: "cannot reproject from {from} to {to}: {e}"))
 }
 
-/// Reproject one flat array of coordinates.
-///
-/// Only `x` and `y` go through PROJ. `z` and `m` are carried through untouched.
-fn reproject(coords: &Series, dim: GeoDimension, proj: &Proj) -> PolarsResult<Series> {
-    // TODO: Make this function take a flag 'must_check_validity'.
-    // This flag would only have to be set to true if you
-    // hand a column of Points, because invalidity can only be on the outer level.
-    // Rings/polygons will have them be valid.
-    let fields = coords.struct_()?;
-    let position = |name: &str| -> PolarsResult<Float64Chunked> {
-        Ok(fields.field_by_name(name)?.f64()?.rechunk().into_owned())
-    };
-    let (x, y) = (position("x")?, position("y")?);
-    let (x, y) = (
-        x.downcast_as_array().values().as_slice(),
-        y.downcast_as_array().values().as_slice(),
-    );
-
-    let mut xs = Vec::with_capacity(coords.len());
-    let mut ys = Vec::with_capacity(coords.len());
-    // A missing point can hold anything in its fields. Never hand that to PROJ.
-    let present = fields.rechunk_validity();
-    for (i, (&x, &y)) in x.iter().zip(y).enumerate() {
-        let (x, y) = if present.as_ref().is_none_or(|present| present.get_bit(i)) {
-            proj.convert((x, y))
-                .map_err(|e| polars_err!(ComputeError: "failed to reproject ({x}, {y}): {e}"))?
-        } else {
-            (x, y)
-        };
-        xs.push(x);
-        ys.push(y);
-    }
-
-    let xs = Float64Chunked::from_vec("x".into(), xs).into_series();
-    let ys = Float64Chunked::from_vec("y".into(), ys).into_series();
-    let reprojected = dim
-        .field_names()
-        .iter()
-        .map(|name| {
-            let out = match *name {
-                "x" => xs.clone(),
-                "y" => ys.clone(),
-                _ => fields.field_by_name(name)?,
-            };
-            Ok(out)
-        })
-        .collect::<PolarsResult<Vec<Series>>>()?;
-
-    let mut out =
-        StructChunked::from_series(coords.name().clone(), coords.len(), reprojected.iter())?;
-    // For points the coordinate struct is the geometry, and its validity says the point is missing.
-    // Building from fields alone drops that.
-    out.zip_outer_validity(fields);
-
-    Ok(out.into_series())
+/// One chunk of `kind` geometries, reprojected by `proj`.
+fn chunk_reprojected(chunk: &dyn Array, kind: Kind, proj: &Proj) -> PolarsResult<Box<dyn Array>> {
+    let err = |e: GeoComputeError| polars_err!(ComputeError: "{e}");
+    Ok(match kind {
+        Kind::Point => {
+            let coords = reproject_coords(proj, &Coords::new(chunk)?).map_err(err)?;
+            PointArray::new(coords).into_struct_array().boxed()
+        }
+        Kind::LineString => {
+            let mut array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
+            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.into_list_array().boxed()
+        }
+        Kind::MultiPoint => {
+            let mut array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
+            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.into_list_array().boxed()
+        }
+        Kind::Polygon => {
+            let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.into_list_array().boxed()
+        }
+        Kind::MultiLineString => {
+            let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.into_list_array().boxed()
+        }
+        Kind::MultiPolygon => {
+            let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            array.coords = reproject_valid_coords(proj, &array.coords).map_err(err)?;
+            array.into_list_array().boxed()
+        }
+    })
 }
 
 /// See `to_crs`.
@@ -104,9 +90,16 @@ fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
     let proj = transformation(inputs[0].dtype(), &kwargs.to)?;
 
-    let out = map_coords(inputs[0].ext()?.storage(), geo.kind.nesting(), &|coords| {
-        reproject(coords, geo.dim, &proj)
-    })?;
+    let storage = trimmed(inputs[0].ext()?.storage());
+    let chunks = storage
+        .chunks()
+        .iter()
+        .map(|chunk| chunk_reprojected(chunk.as_ref(), geo.kind, &proj))
+        .collect::<PolarsResult<_>>()?;
+    // SAFETY: the geometries keep their kind and dimension, so this is still the storage.
+    let out = unsafe {
+        Series::from_chunks_and_dtype_unchecked(storage.name().clone(), chunks, storage.dtype())
+    };
 
     let typ = reprojected_geometry_type(inputs[0].dtype(), &kwargs.to)?.instance();
     Ok(out.into_extension(typ))

@@ -6,7 +6,7 @@ use proj::ProjError;
 /// An error from one of the kernels of this crate.
 #[derive(Debug)]
 pub enum GeoComputeError {
-    /// A coordinate PROJ could not bring to longitude/latitude.
+    /// A coordinate PROJ could not reproject.
     Reproject {
         position: (f64, f64),
         source: ProjError,

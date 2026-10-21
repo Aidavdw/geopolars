@@ -6,8 +6,7 @@
 //!
 //! Nothing in here names a concrete geometry. An expression asks
 //! [`geoarrow::describe`](crate::geoarrow::describe) what it was handed and then
-//! either does not care (see [`coords::map_coords`]) or matches on the
-//! [`Kind`](crate::geoarrow::Kind) exhaustively.
+//! matches on the [`Kind`](crate::geoarrow::Kind) exhaustively.
 
 pub mod affine;
 pub mod area;

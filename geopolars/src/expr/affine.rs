@@ -15,7 +15,7 @@ use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::kernel_output_type_same_geometry;
+use super::coords::{kernel_output_type_same_geometry, trimmed};
 use crate::geoarrow::{describe, Kind};
 
 // TODO: (Blocked until z-centroid is implemented): allow rotation around x/y for polygon
@@ -80,15 +80,6 @@ fn chunk_transformed(
                 .boxed()
         }
     })
-}
-
-/// `storage`, holding only the coordinates its rows use.
-/// A streaming morsel still holds every coordinate of the column it was sliced from,
-/// which the kernels would otherwise all transform. Trimming is zero-copy.
-fn trimmed(storage: &Series) -> Series {
-    storage
-        .trim_lists_to_normalized_offsets()
-        .unwrap_or_else(|| storage.clone())
 }
 
 /// The kernel behind affine ops like `translate` (see `geo/affine.py`).

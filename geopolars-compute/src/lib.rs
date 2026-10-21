@@ -1,6 +1,6 @@
 //! Kernels on GeoArrow, taking the views of `geopolars-core`:
-//! [native] ones of our own, and [geos] and [rsgeo] ones forwarding to GEOS and rsgeo,
-//! each behind its feature.
+//! [native] ones of our own, and [geos], [rsgeo] and [proj] ones forwarding to GEOS, rsgeo and PROJ.
+//! All but [proj] are behind their feature.
 //!
 //! See the README.
 
@@ -32,6 +32,7 @@ pub mod geos;
 mod metric;
 #[cfg(feature = "native")]
 pub mod native;
+pub mod proj;
 #[cfg(feature = "rsgeo")]
 pub mod rsgeo;
 
