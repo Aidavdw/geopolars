@@ -1,5 +1,7 @@
 //! Views over the coordinate struct of a geometry column.
 
+use std::ops::Range;
+
 use polars_arrow::array::{Array, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
 use polars_buffer::Buffer;
@@ -82,6 +84,45 @@ impl ValidCoords {
             z: z.map(Buffer::from).or_else(|| self.z.clone()),
             m: self.m.clone(),
         }
+    }
+
+    /// The coordinates at `ranges`, in order, copied into new buffers in one pass.
+    /// `ranges` is run twice: once to size the buffers, once to copy.
+    /// An axis these coordinates don't have is not copied either.
+    pub fn copy_ranges(&self, ranges: impl Iterator<Item = Range<usize>> + Clone) -> Self {
+        match (self.z.is_some(), self.m.is_some()) {
+            (false, false) => self.copy_ranges_with::<false, false>(ranges),
+            (true, false) => self.copy_ranges_with::<true, false>(ranges),
+            (false, true) => self.copy_ranges_with::<false, true>(ranges),
+            (true, true) => self.copy_ranges_with::<true, true>(ranges),
+        }
+    }
+
+    /// [copy_ranges](Self::copy_ranges), copying z only if `Z=true`, and m only if `M=true`.
+    #[inline(always)]
+    fn copy_ranges_with<const Z: bool, const M: bool>(
+        &self,
+        ranges: impl Iterator<Item = Range<usize>> + Clone,
+    ) -> Self {
+        let len = ranges.clone().map(|range| range.len()).sum();
+        let (src_z, src_m) = (
+            self.z.as_deref().filter(|_| Z).unwrap_or_default(),
+            self.m.as_deref().filter(|_| M).unwrap_or_default(),
+        );
+        let (mut x, mut y) = (Vec::with_capacity(len), Vec::with_capacity(len));
+        let mut z = Vec::with_capacity(if Z { len } else { 0 });
+        let mut m = Vec::with_capacity(if M { len } else { 0 });
+        for range in ranges {
+            x.extend_from_slice(&self.x[range.clone()]);
+            y.extend_from_slice(&self.y[range.clone()]);
+            if Z {
+                z.extend_from_slice(&src_z[range.clone()]);
+            }
+            if M {
+                m.extend_from_slice(&src_m[range]);
+            }
+        }
+        Self::from_axes((x, y, Z.then_some(z), M.then_some(m)))
     }
 
     pub(crate) fn into_axes(self) -> BufferAxes {

@@ -101,6 +101,12 @@ impl List {
         self.lists.range(i)
     }
 
+    /// See [`ValidList::span`].
+    #[inline(always)]
+    pub fn span(&self, lists: Range<usize>) -> Range<usize> {
+        self.lists.span(lists)
+    }
+
     #[inline(always)]
     pub fn is_valid(&self, i: usize) -> bool {
         self.validity

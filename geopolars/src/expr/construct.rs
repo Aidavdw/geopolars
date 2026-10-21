@@ -3,18 +3,16 @@
 use std::sync::Arc;
 
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray, StructArray};
+use polars_arrow::array::{Array, ListArray};
 use polars_arrow::bitmap::Bitmap;
-use polars_arrow::offset::Offsets;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::rings::copy_coords;
 use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
-use geopolars_compute::native::{is_ring, same_place};
+use geopolars_compute::native::{close_open_rings, is_ring};
 use geopolars_compute::with_const_flags;
-use geopolars_core::{downcast, ValidCoords};
+use geopolars_core::{downcast, LineStringArray, ValidCoords, ValidList};
 
 /// The keyword arguments of the constructors that build polygons:
 /// [`MetadataKwargs`], plus whether to close open rings.
@@ -213,40 +211,13 @@ fn with_parts(lists: &ListArray<i64>, ok: impl Fn(usize) -> bool) -> Option<Bitm
     (valid.unset_bits() > 0).then_some(valid)
 }
 
-/// `rings` with every open one closed by repeating its first vertex at its end,
-/// or `None` if they are all closed already. An empty ring is left empty.
+/// See [`close_open_rings`].
 fn close_rings(rings: &ListArray<i64>) -> PolarsResult<Option<ListArray<i64>>> {
     let coords = ValidCoords::new(rings.values().as_ref())?;
     let z = coords.dim().has_z();
-    let open: Vec<bool> = (0..rings.len())
-        .map(|ring| {
-            let (start, end) = rings.offsets().start_end(ring);
-            end > start && !with_const_flags!(same_place(&coords, start, end - 1); z)
-        })
-        .collect();
-    if !open.contains(&true) {
-        return Ok(None);
-    }
-
-    let (mut ranges, mut lengths) = (
-        Vec::with_capacity(2 * rings.len()),
-        Vec::with_capacity(rings.len()),
-    );
-    for (ring, &open) in open.iter().enumerate() {
-        let (start, end) = rings.offsets().start_end(ring);
-        ranges.push(start..end);
-        if open {
-            ranges.push(start..start + 1);
-        }
-        lengths.push(end - start + usize::from(open));
-    }
-    let values = downcast::<StructArray>(rings.values().as_ref(), "a coordinate struct")?;
-    Ok(Some(ListArray::<i64>::new(
-        rings.dtype().clone(),
-        Offsets::try_from_lengths(lengths.into_iter())?.into(),
-        copy_coords(values, &ranges)?,
-        None,
-    )))
+    let rings = ValidList::new(rings);
+    let closed = with_const_flags!(close_open_rings(&rings, &coords); z);
+    Ok(closed.map(LineStringArray::into_list_array))
 }
 
 /// `polygons`, missing where one of their rings is not a ring (see [`is_ring`]).
