@@ -9,6 +9,7 @@ The crate holds:
 - the metrics that kernels measure with (`Planar`, `GeodesicMetric`).
 - kernels for simple operations implemented directly on the arrow type in `native`, behind the `native` feature.
 - kernels forwarding to GEOS in `geos`, behind the `geos` feature.
+- kernels forwarding to rsgeo (the Rust `geo` crate) in `rsgeo`, behind the `rsgeo` feature.
 
 ## Writing kernels
 

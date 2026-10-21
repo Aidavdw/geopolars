@@ -25,7 +25,7 @@ use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
 use polars_arrow::offset::{Offsets, OffsetsBuffer};
 
-use crate::GeoComputeResult;
+use crate::{row_or_missing, GeoComputeResult};
 
 /// Converts a single geometry into a GEOS geometry.
 /// For an array, see [`ToGeosRows`].
@@ -43,18 +43,6 @@ pub trait ToGeos {
 /// otherwise its error is returned.
 pub trait ToGeosRows {
     fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries>;
-}
-
-/// The geometry of one row, or `None` if building it failed and `ignore_per_row_errors=true`.
-#[inline(always)]
-fn row_or_missing<T>(
-    built: GeoComputeResult<Option<T>>,
-    ignore_per_row_errors: bool,
-) -> GeoComputeResult<Option<T>> {
-    match built {
-        Err(_) if ignore_per_row_errors => Ok(None),
-        built => built,
-    }
 }
 
 fn coord_type(dim: GeoDimension) -> CoordType {

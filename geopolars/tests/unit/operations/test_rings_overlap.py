@@ -104,6 +104,34 @@ def test_anything_but_a_ring_raises(line: Ring) -> None:
         _overlap([_square(0, 0)], [line])
 
 
+def test_ignore_per_row_errors_gives_a_missing_result() -> None:
+    open_line = [{"x": 0.0, "y": 0.0}, {"x": 1.0, "y": 0.0}, {"x": 1.0, "y": 1.0}]
+    df = pl.DataFrame(
+        [
+            _rings("a", [open_line, _square(0, 0)]),
+            _rings("b", [_square(0, 0), _square(0, 0)]),
+        ]
+    )
+    out = df.select(geo.rings_overlap("a", "b", ignore_per_row_errors=True))
+    assert out["a"].to_list() == [None, True]
+
+
+@pytest.mark.parametrize("single_first", [True, False])
+def test_ignore_per_row_errors_on_a_single_ring(single_first: bool) -> None:
+    open_line = [{"x": 0.0, "y": 0.0}, {"x": 1.0, "y": 0.0}, {"x": 1.0, "y": 1.0}]
+    many = _rings("many", [_square(0, 0), open_line])
+    good, bad = _rings("one", [_square(0, 0)]), _rings("one", [open_line])
+
+    def overlap(one: pl.Series) -> list[bool | None]:
+        df = pl.DataFrame(many)
+        a, b = (one, "many") if single_first else ("many", one)
+        out = df.select(geo.rings_overlap(a, b, ignore_per_row_errors=True))
+        return out.to_series().to_list()
+
+    assert overlap(good) == [True, None]
+    assert overlap(bad) == [None, None]
+
+
 def test_the_ends_have_to_be_close_not_equal() -> None:
     """As `pl.Expr.is_close`: within a relative 1e-9."""
     almost = _square(1e6, 0)

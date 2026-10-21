@@ -887,6 +887,7 @@ dependencies = [
 name = "geopolars-compute"
 version = "0.1.0"
 dependencies = [
+ "geo",
  "geographiclib-rs",
  "geopolars-core",
  "geos",

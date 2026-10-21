@@ -21,7 +21,11 @@ if TYPE_CHECKING:
 
 
 def rings_overlap(
-    a: IntoExprColumn, b: IntoExprColumn, *, include_touching: bool = False
+    a: IntoExprColumn,
+    b: IntoExprColumn,
+    *,
+    include_touching: bool = False,
+    ignore_per_row_errors: bool = False,
 ) -> pl.Expr:
     """Whether two rings overlap, row by row, as a `bool`:
     whether the areas they enclose share area.
@@ -44,6 +48,7 @@ def rings_overlap(
     at least four vertices, the last at the first
     ("at" is within the default margin of `pl.Expr.is_close`).
     Anything else, including an empty linestring, raises.
+    With `ignore_per_row_errors=True`, it gives a missing result instead.
     A ring that crosses itself (see `self_intersects`) gives no meaningful answer.
     A missing ring gives a missing result,
     and so does one with a missing vertex, or one that is not finite in x or y.
@@ -78,7 +83,10 @@ def rings_overlap(
             plugin_path=LIB,
             args=[a, b],
             function_name="rings_overlap",
-            kwargs={"include_touching": include_touching},
+            kwargs={
+                "include_touching": include_touching,
+                "ignore_per_row_errors": ignore_per_row_errors,
+            },
             is_elementwise=True,
         )
 

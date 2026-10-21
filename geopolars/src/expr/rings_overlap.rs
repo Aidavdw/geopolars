@@ -1,23 +1,23 @@
-//! Whether two rings overlap, which is when the areas they enclose share area.
+//! Whether two rings overlap
+//! (see [`geopolars_compute::rsgeo::rings_overlap_pairwise`]).
 
+use geopolars_compute::rsgeo::{rings_overlap_against_one, rings_overlap_pairwise};
+use geopolars_compute::with_const_flags;
+use geopolars_core::LineStringArray;
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray};
+use polars_arrow::array::BooleanArray;
+use polars_arrow::datatypes::ArrowDataType;
 use pyo3_polars::derive::polars_expr;
-use rsgeo::coordinate_position::CoordPos;
-use rsgeo::dimensions::Dimensions;
-use rsgeo::relate::IntersectionMatrix;
-use rsgeo::{LineString, Polygon, Relate};
 use serde::Deserialize;
 
-use super::self_intersects::{same_xy, xy_vertices_validated};
 use crate::geoarrow::{describe, ensure_same_crs, Kind};
-use geopolars_core::{ScalarLineString, ValidCoords, MIN_RING_VERTICES};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RingsOverlapKwargs {
     /// Whether rings that only touch overlap too.
     include_touching: bool,
+    ignore_per_row_errors: bool,
 }
 
 /// For [`rings_overlap`]: a `bool`, named after the first ring.
@@ -39,95 +39,66 @@ fn kernel_output_type_rings_overlap(input_fields: &[Field]) -> PolarsResult<Fiel
     Ok(Field::new(a.name().clone(), DataType::Boolean))
 }
 
-/// The ring at `start..end` as the polygon it encloses, in x and y.
-/// `None` if one of its vertices is not finite in x or y.
-/// Errors if it is not a ring.
-pub(crate) fn ring(
-    coords: &ValidCoords,
-    start: usize,
-    end: usize,
-) -> PolarsResult<Option<Polygon<f64>>> {
-    let Some(vertices) = xy_vertices_validated(&ScalarLineString {
-        coords,
-        vertices: start..end,
-    }) else {
-        return Ok(None);
-    };
-    polars_ensure!(
-        vertices.len() >= MIN_RING_VERTICES && same_xy(vertices[0], vertices[vertices.len() - 1]),
-        ComputeError: "rings_overlap expects rings (at least {MIN_RING_VERTICES} vertices, \
-        the last at the first), got a linestring of {} vertices that is not one",
-        vertices.len()
-    );
-    Ok(Some(Polygon::new(LineString::new(vertices), vec![])))
+fn compute_err(e: impl std::fmt::Display) -> PolarsError {
+    polars_err!(ComputeError: "rings_overlap {e}")
 }
 
-/// One side: its rings and their coordinates, as a single chunk.
-struct Rings<'a> {
-    rings: &'a ListArray<i64>,
-    coords: ValidCoords,
+/// The rings of `rings`, as a single chunk.
+fn single_chunk(rings: &Series) -> PolarsResult<ListChunked> {
+    Ok(rings.ext()?.storage().list()?.rechunk().into_owned())
 }
 
-impl<'a> Rings<'a> {
-    fn new(rings: &'a ListArray<i64>) -> PolarsResult<Self> {
-        let coords = ValidCoords::new(rings.values().as_ref())?;
-        Ok(Self { rings, coords })
+/// [rings_overlap_pairwise], into a polars error.
+fn pairwise<const TOUCHING: bool>(
+    a: &LineStringArray,
+    b: &LineStringArray,
+    ignore_per_row_errors: bool,
+) -> PolarsResult<BooleanArray> {
+    rings_overlap_pairwise::<TOUCHING>(a, b, ignore_per_row_errors).map_err(compute_err)
+}
+
+/// [rings_overlap_against_one] for every chunk of `many`.
+fn every_against_one<const TOUCHING: bool>(
+    one: &Series,
+    many: &Series,
+    ignore_per_row_errors: bool,
+) -> PolarsResult<Vec<BooleanArray>> {
+    let one = single_chunk(one)?;
+    let one = LineStringArray::new(one.downcast_as_array())?;
+    let many = many.ext()?.storage().list()?;
+    if !one.rows.is_valid(0) {
+        return Ok(many
+            .downcast_iter()
+            .map(|many| BooleanArray::new_null(ArrowDataType::Boolean, many.len()))
+            .collect());
     }
-
-    /// Ring `i` (or the only one, for a side of one row), `None` where it is missing.
-    fn get(&self, i: usize) -> PolarsResult<Option<Polygon<f64>>> {
-        let i = if self.rings.len() == 1 { 0 } else { i };
-        if !self.rings.is_valid(i) {
-            return Ok(None);
-        }
-        let (start, end) = self.rings.offsets().start_end(i);
-        ring(&self.coords, start, end)
-    }
-}
-
-/// Gets the [IntersectionMatrix] between two rings.
-pub(crate) fn relate_rings(
-    a: &Series,
-    b: &Series,
-) -> PolarsResult<Vec<Option<IntersectionMatrix>>> {
-    let a = a.ext()?.storage().list()?.rechunk();
-    let b = b.ext()?.storage().list()?.rechunk();
-    let (a, b) = (
-        Rings::new(a.downcast_as_array())?,
-        Rings::new(b.downcast_as_array())?,
-    );
-    let len = match (a.rings.len(), b.rings.len()) {
-        (n, m) if n == m => n,
-        (1, m) => m,
-        (n, 1) => n,
-        (n, m) => polars_bail!(ShapeMismatch: "cannot compare {n} rings against {m}"),
-    };
-
-    (0..len)
-        .map(|i| {
-            let (Some(a), Some(b)) = (a.get(i)?, b.get(i)?) else {
-                return Ok(None);
-            };
-            Ok(Some(a.relate(&b)))
+    let one = one.get(0);
+    many.downcast_iter()
+        .map(|many| {
+            let many = LineStringArray::new(many)?;
+            rings_overlap_against_one::<TOUCHING>(&one, &many, ignore_per_row_errors)
+                .map_err(compute_err)
         })
         .collect()
-}
-
-/// Whether two rings related as `matrix` overlap.
-pub(crate) fn overlap(matrix: &IntersectionMatrix, include_touching: bool) -> bool {
-    if include_touching {
-        matrix.is_intersects()
-    } else {
-        matrix.get(CoordPos::Inside, CoordPos::Inside) != Dimensions::Empty
-    }
 }
 
 /// See `rings_overlap`.
 #[polars_expr(output_type_func=kernel_output_type_rings_overlap)]
 fn rings_overlap(inputs: &[Series], kwargs: RingsOverlapKwargs) -> PolarsResult<Series> {
-    let out: BooleanChunked = relate_rings(&inputs[0], &inputs[1])?
-        .into_iter()
-        .map(|matrix| matrix.map(|matrix| overlap(&matrix, kwargs.include_touching)))
-        .collect();
-    Ok(out.with_name(inputs[0].name().clone()).into_series())
+    let (a, b) = (&inputs[0], &inputs[1]);
+    let (touching, ignore_errors) = (kwargs.include_touching, kwargs.ignore_per_row_errors);
+    let chunks = match (a.len(), b.len()) {
+        (n, m) if n == m => {
+            let (a, b) = (single_chunk(a)?, single_chunk(b)?);
+            let (a, b) = (
+                LineStringArray::new(a.downcast_as_array())?,
+                LineStringArray::new(b.downcast_as_array())?,
+            );
+            vec![with_const_flags!(pairwise(&a, &b, ignore_errors); touching)?]
+        }
+        (1, _) => with_const_flags!(every_against_one(a, b, ignore_errors); touching)?,
+        (_, 1) => with_const_flags!(every_against_one(b, a, ignore_errors); touching)?,
+        (n, m) => polars_bail!(ShapeMismatch: "cannot compare {n} rings against {m}"),
+    };
+    Ok(BooleanChunked::from_chunk_iter(a.name().clone(), chunks).into_series())
 }

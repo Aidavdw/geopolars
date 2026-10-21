@@ -175,7 +175,7 @@ def test_a_multilinestring_gives_one_per_part() -> None:
     """Parts crossing each other do not count."""
     storage = pl.Series(
         "multi",
-        [[_SQUARE, _BOWTIE], [], [None, _SQUARE], None, [_SQUARE, _SQUARE]],
+        [[_SQUARE, _BOWTIE], [], [_SQUARE], None, [_SQUARE, _SQUARE]],
         dtype=pl.List(_XY_VERTICES),
     )
     df = pl.DataFrame(storage.ext.to(MultiLineStringXY()))
@@ -186,7 +186,7 @@ def test_a_multilinestring_gives_one_per_part() -> None:
     assert out["multi"].to_list() == [
         [False, True],
         [],
-        [None, False],
+        [False],
         None,
         [False, False],
     ]
@@ -285,10 +285,9 @@ def test_the_exterior_is_not_compared_against_its_holes() -> None:
     assert _polygons_self_intersect(outside) == [False]
 
 
-def test_a_missing_polygon_or_ring_is_missing() -> None:
+def test_a_missing_polygon_is_missing() -> None:
     nan = _line((0, 0), (1, 0), (float("nan"), 1), (0, 0))
-    assert _polygons_self_intersect(None, [_OUTER, None], [nan], [], [_SQUARE]) == [
-        None,
+    assert _polygons_self_intersect(None, [nan], [], [_SQUARE]) == [
         None,
         None,
         False,
@@ -301,12 +300,25 @@ def test_a_ring_that_is_not_one_raises() -> None:
         _polygons_self_intersect([_line((0, 0), (1, 0), (1, 1))])
 
 
+def test_ignore_per_row_errors_gives_a_missing_result() -> None:
+    open_line = _line((0, 0), (1, 0), (1, 1))
+    storage = pl.Series("polygon", [[open_line], [_SQUARE]], dtype=_XY_RINGS)
+    df = pl.DataFrame(storage.ext.to(PolygonXY()))
+    out = df.select(geo.self_intersects("polygon", ignore_per_row_errors=True))
+    assert out["polygon"].to_list() == [None, False]
+
+    storage = pl.Series("multi", [[[open_line], [_SQUARE]]], dtype=pl.List(_XY_RINGS))
+    df = pl.DataFrame(storage.ext.to(MultiPolygonXY()))
+    out = df.select(geo.self_intersects("multi", ignore_per_row_errors=True))
+    assert out["multi"].to_list() == [[None, False]]
+
+
 def test_a_multipolygon_gives_one_per_part() -> None:
     """Parts overlapping each other do not count."""
     overlapping = [_OUTER, _square(1, 1, 3, 3), _square(2, 2, 4, 4)]
     storage = pl.Series(
         "multi",
-        [[[_OUTER], overlapping], [], [None, [_SQUARE]], None, [[_OUTER], [_OUTER]]],
+        [[[_OUTER], overlapping], [], [[_SQUARE]], None, [[_OUTER], [_OUTER]]],
         dtype=pl.List(_XY_RINGS),
     )
     df = pl.DataFrame(storage.ext.to(MultiPolygonXY()))
@@ -317,7 +329,7 @@ def test_a_multipolygon_gives_one_per_part() -> None:
     assert out["multi"].to_list() == [
         [False, True],
         [],
-        [None, False],
+        [False],
         None,
         [False, False],
     ]

@@ -13,6 +13,7 @@
 use std::mem;
 use std::ops::Range;
 
+use geopolars_compute::rsgeo::vertices_self_intersect;
 use geopolars_compute::with_const_flags;
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray, PrimitiveArray, StructArray};
@@ -26,7 +27,6 @@ use rsgeo::{Coord, LineString, Polygon, PreparedGeometry, Relate};
 use serde::Deserialize;
 
 use super::coords::kernel_output_type_same_geometry;
-use super::self_intersects::vertices_self_intersect;
 use crate::geoarrow::{describe, Kind};
 use geopolars_core::{downcast, same_position, AxisArrays, MIN_RING_VERTICES};
 

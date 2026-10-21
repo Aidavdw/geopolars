@@ -1,5 +1,6 @@
 //! Kernels on GeoArrow, taking the views of `geopolars-core`:
-//! [native] ones of our own, and [geos] ones forwarding to GEOS, each behind its feature.
+//! [native] ones of our own, and [geos] and [rsgeo] ones forwarding to GEOS and rsgeo,
+//! each behind its feature.
 //!
 //! See the README.
 
@@ -31,6 +32,9 @@ pub mod geos;
 mod metric;
 #[cfg(feature = "native")]
 pub mod native;
+#[cfg(feature = "rsgeo")]
+pub mod rsgeo;
 
+use error::row_or_missing;
 pub use error::{GeoComputeError, GeoComputeResult};
 pub use metric::{BaseMetric, GeodesicMetric, Planar, WithHeight};

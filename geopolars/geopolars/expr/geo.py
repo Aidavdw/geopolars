@@ -182,17 +182,26 @@ class ExprGeoNameSpace:
 
         return is_ring(self._expr)
 
-    def self_intersects(self) -> pl.Expr:
+    def self_intersects(self, *, ignore_per_row_errors: bool = False) -> pl.Expr:
         from geopolars.geo.self_intersects import self_intersects
 
-        return self_intersects(self._expr)
+        return self_intersects(self._expr, ignore_per_row_errors=ignore_per_row_errors)
 
     def rings_overlap(
-        self, other: IntoExprColumn, *, include_touching: bool = False
+        self,
+        other: IntoExprColumn,
+        *,
+        include_touching: bool = False,
+        ignore_per_row_errors: bool = False,
     ) -> pl.Expr:
         from geopolars.geo.rings_overlap import rings_overlap
 
-        return rings_overlap(self._expr, other, include_touching=include_touching)
+        return rings_overlap(
+            self._expr,
+            other,
+            include_touching=include_touching,
+            ignore_per_row_errors=ignore_per_row_errors,
+        )
 
     def is_ccw(self, *, holes_cw: bool = True) -> pl.Expr:
         from geopolars.geo.is_ccw import is_ccw

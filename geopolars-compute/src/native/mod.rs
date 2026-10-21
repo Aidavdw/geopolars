@@ -50,7 +50,7 @@ pub(super) fn per_row_bool(rows: &List, test: impl Fn(usize) -> bool) -> Boolean
 
 /// `measure` of every row of a chunk, with a default value for a missing row.
 #[inline(always)]
-fn per_row_values<T: Default, E>(
+pub(crate) fn per_row_values<T: Default, E>(
     rows: &List,
     measure: impl Fn(usize) -> Result<T, E>,
 ) -> Result<Vec<T>, E> {

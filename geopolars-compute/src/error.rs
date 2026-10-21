@@ -1,5 +1,6 @@
 use std::fmt;
 
+use geopolars_core::MIN_RING_VERTICES;
 use proj::ProjError;
 
 /// An error from one of the kernels of this crate.
@@ -10,11 +11,25 @@ pub enum GeoComputeError {
         position: (f64, f64),
         source: ProjError,
     },
+    /// A linestring that has to be a ring, but is not one.
+    NotARing { vertices: usize },
     #[cfg(feature = "geos")]
     Geos(geos::Error),
 }
 
 pub type GeoComputeResult<T> = Result<T, GeoComputeError>;
+
+/// The result of one row, or `None` if it failed and `ignore_per_row_errors=true`.
+#[inline(always)]
+pub(crate) fn row_or_missing<T>(
+    result: GeoComputeResult<Option<T>>,
+    ignore_per_row_errors: bool,
+) -> GeoComputeResult<Option<T>> {
+    match result {
+        Err(_) if ignore_per_row_errors => Ok(None),
+        result => result,
+    }
+}
 
 impl fmt::Display for GeoComputeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -23,6 +38,11 @@ impl fmt::Display for GeoComputeError {
                 position: (x, y),
                 source,
             } => write!(f, "failed to reproject ({x}, {y}): {source}"),
+            Self::NotARing { vertices } => write!(
+                f,
+                "expects rings (at least {MIN_RING_VERTICES} vertices, the last at the first), \
+                got a linestring of {vertices} vertices that is not one"
+            ),
             #[cfg(feature = "geos")]
             Self::Geos(source) => write!(f, "{source}"),
         }
@@ -33,6 +53,7 @@ impl std::error::Error for GeoComputeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Reproject { source, .. } => Some(source),
+            Self::NotARing { .. } => None,
             #[cfg(feature = "geos")]
             Self::Geos(source) => Some(source),
         }

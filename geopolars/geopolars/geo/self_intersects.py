@@ -24,22 +24,9 @@ if TYPE_CHECKING:
 _ACCEPTED = (LineStringType, MultiLineStringType, PolygonType, MultiPolygonType)
 
 
-def _self_intersects(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    if not isinstance(geometry, _ACCEPTED):
-        msg = (
-            "self_intersects expects a linestring, polygon, multilinestring"
-            f" or multipolygon column, got: {geometry!r}"
-        )
-        raise TypeError(msg)
-    return register_plugin_function(
-        plugin_path=LIB,
-        args=[column],
-        function_name="self_intersects",
-        is_elementwise=True,
-    )
-
-
-def self_intersects(geometry: IntoExprColumn) -> pl.Expr:
+def self_intersects(
+    geometry: IntoExprColumn, *, ignore_per_row_errors: bool = False
+) -> pl.Expr:
     """Whether a linestring or polygon crosses or touches itself.
     A multi-geometry gives a list instead, one per part.
     Parts crossing each other do not count.
@@ -55,6 +42,8 @@ def self_intersects(geometry: IntoExprColumn) -> pl.Expr:
     or when two of its holes overlap (see `rings_overlap`; holes that only touch do not).
     How the holes sit against the exterior is not looked at; see `is_valid` for that.
     Every ring has to be a ring, as for `rings_overlap`, or this raises.
+    With `ignore_per_row_errors=True`, it gives a missing result instead
+    (a missing part, for a multipolygon).
     A polygon without rings does not intersect itself.
 
     This looks at a projected plane.
@@ -75,4 +64,20 @@ def self_intersects(geometry: IntoExprColumn) -> pl.Expr:
     df.filter(~geo.self_intersects("route"))
     ```
     """
-    return on_geometry(geometry, _self_intersects)
+
+    def build(column: pl.Expr, dtype: GeoArrowType) -> pl.Expr:
+        if not isinstance(dtype, _ACCEPTED):
+            msg = (
+                "self_intersects expects a linestring, polygon, multilinestring"
+                f" or multipolygon column, got: {dtype!r}"
+            )
+            raise TypeError(msg)
+        return register_plugin_function(
+            plugin_path=LIB,
+            args=[column],
+            function_name="self_intersects",
+            kwargs={"ignore_per_row_errors": ignore_per_row_errors},
+            is_elementwise=True,
+        )
+
+    return on_geometry(geometry, build)
