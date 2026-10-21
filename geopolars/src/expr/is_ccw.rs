@@ -7,12 +7,10 @@ use geopolars_compute::native::{
 use geopolars_compute::with_const_flags;
 use geopolars_core::{LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray};
 use polars::prelude::*;
-use polars_arrow::array::ListArray;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use crate::geoarrow::{describe, Kind};
-use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
 /// See python
 #[derive(Debug, Deserialize)]
@@ -47,55 +45,29 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
     let out = match kind {
         Kind::LineString => {
             let chunks = chunks.map(|rows| {
-                let array = LineStringArray {
-                    rows: List::new(rows),
-                    coords: ValidCoords::new(rows.values().as_ref())?,
-                };
-                let out = line_strings_are_ccw(&array);
-                PolarsResult::Ok(out)
+                let array = LineStringArray::new(rows)?;
+                PolarsResult::Ok(line_strings_are_ccw(&array))
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
         Kind::Polygon => {
             let chunks = chunks.map(|rows| {
-                let rings: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of rings")?;
-                let array = PolygonArray {
-                    rows: List::new(rows),
-                    rings: ValidList::new(rings),
-                    coords: ValidCoords::new(rings.values().as_ref())?,
-                };
-                let out = with_const_flags!(polygons_are_ccw(&array); holes_cw);
-                PolarsResult::Ok(out)
+                let array = PolygonArray::new(rows)?;
+                PolarsResult::Ok(with_const_flags!(polygons_are_ccw(&array); holes_cw))
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
         Kind::MultiLineString => {
             let chunks = chunks.map(|rows| {
-                let lines = downcast(rows.values().as_ref(), "a list of linestrings")?;
-                let array = MultiLineStringArray {
-                    rows: List::new(rows),
-                    lines: ValidList::new(lines),
-                    coords: ValidCoords::new(lines.values().as_ref())?,
-                };
-                let out = multi_line_strings_are_ccw(&array);
-                PolarsResult::Ok(out)
+                let array = MultiLineStringArray::new(rows)?;
+                PolarsResult::Ok(multi_line_strings_are_ccw(&array))
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
         Kind::MultiPolygon => {
             let chunks = chunks.map(|rows| {
-                let polygons: &ListArray<i64> =
-                    downcast(rows.values().as_ref(), "a list of polygons")?;
-                let rings: &ListArray<i64> =
-                    downcast(polygons.values().as_ref(), "a list of rings")?;
-                let array = MultiPolygonArray {
-                    rows: List::new(rows),
-                    polygons: ValidList::new(polygons),
-                    rings: ValidList::new(rings),
-                    coords: ValidCoords::new(rings.values().as_ref())?,
-                };
-                let out = with_const_flags!(multi_polygons_are_ccw(&array); holes_cw);
-                PolarsResult::Ok(out)
+                let array = MultiPolygonArray::new(rows)?;
+                PolarsResult::Ok(with_const_flags!(multi_polygons_are_ccw(&array); holes_cw))
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }

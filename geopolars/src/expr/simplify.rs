@@ -13,7 +13,6 @@ use serde::Deserialize;
 
 use super::IntoPolarsResult;
 use crate::geoarrow::{describe, Geo, Kind};
-use geopolars_core::{downcast, List, ValidCoords, ValidList};
 
 /// Python returns a point or multipoint as it is, so it never gets here.
 fn already_simple(dtype: &DataType) -> PolarsError {
@@ -68,62 +67,35 @@ fn chunk_simplified(
         preserve_topology,
         ignore_per_row_errors,
     } = *kwargs;
-    let values = rows.values().as_ref();
     match kind {
         Kind::LineString => simplify_line_strings(
-            &LineStringArray {
-                rows: List::new(rows),
-                coords: ValidCoords::new(values)?,
-            },
+            &LineStringArray::new(rows)?,
             tolerance,
             preserve_topology,
             ignore_per_row_errors,
         )
         .map(LineStringArray::into_list_array),
-        Kind::MultiLineString => {
-            let lines: &ListArray<i64> = downcast(values, "a list of linestrings")?;
-            simplify_multi_line_strings(
-                &MultiLineStringArray {
-                    rows: List::new(rows),
-                    lines: ValidList::new(lines),
-                    coords: ValidCoords::new(lines.values().as_ref())?,
-                },
-                tolerance,
-                preserve_topology,
-                ignore_per_row_errors,
-            )
-            .map(MultiLineStringArray::into_list_array)
-        }
-        Kind::Polygon => {
-            let rings: &ListArray<i64> = downcast(values, "a list of rings")?;
-            simplify_polygons(
-                &PolygonArray {
-                    rows: List::new(rows),
-                    rings: ValidList::new(rings),
-                    coords: ValidCoords::new(rings.values().as_ref())?,
-                },
-                tolerance,
-                preserve_topology,
-                ignore_per_row_errors,
-            )
-            .map(PolygonArray::into_list_array)
-        }
-        Kind::MultiPolygon => {
-            let polygons: &ListArray<i64> = downcast(values, "a list of polygons")?;
-            let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
-            simplify_multi_polygons(
-                &MultiPolygonArray {
-                    rows: List::new(rows),
-                    polygons: ValidList::new(polygons),
-                    rings: ValidList::new(rings),
-                    coords: ValidCoords::new(rings.values().as_ref())?,
-                },
-                tolerance,
-                preserve_topology,
-                ignore_per_row_errors,
-            )
-            .map(MultiPolygonArray::into_list_array)
-        }
+        Kind::MultiLineString => simplify_multi_line_strings(
+            &MultiLineStringArray::new(rows)?,
+            tolerance,
+            preserve_topology,
+            ignore_per_row_errors,
+        )
+        .map(MultiLineStringArray::into_list_array),
+        Kind::Polygon => simplify_polygons(
+            &PolygonArray::new(rows)?,
+            tolerance,
+            preserve_topology,
+            ignore_per_row_errors,
+        )
+        .map(PolygonArray::into_list_array),
+        Kind::MultiPolygon => simplify_multi_polygons(
+            &MultiPolygonArray::new(rows)?,
+            tolerance,
+            preserve_topology,
+            ignore_per_row_errors,
+        )
+        .map(MultiPolygonArray::into_list_array),
         Kind::Point | Kind::MultiPoint => return Err(already_simple(dtype)),
     }
     .into_polars()

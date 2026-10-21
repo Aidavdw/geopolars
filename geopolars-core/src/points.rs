@@ -3,6 +3,7 @@
 use std::ops::Range;
 
 use polars_arrow::array::{ListArray, StructArray};
+use polars_core::prelude::PolarsResult;
 
 use crate::output::{coords_struct, list_array};
 use crate::{Coords, List, ValidCoords};
@@ -66,6 +67,13 @@ pub struct MultiPointArray {
 }
 
 impl MultiPointArray {
+    pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
+        Ok(Self {
+            rows: List::new(rows),
+            coords: ValidCoords::new(rows.values().as_ref())?,
+        })
+    }
+
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();

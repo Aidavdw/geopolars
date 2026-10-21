@@ -20,12 +20,12 @@ use std::any::Any;
 use std::sync::Arc;
 
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray};
+use polars_arrow::array::Array;
 use polars_core::datatypes::extension::{register_extension_type, ExtensionTypeInstance};
 
 use geopolars_core::{
-    downcast, Coords, Geometry, LineStringArray, List, MultiLineStringArray, MultiPointArray,
-    MultiPolygonArray, PointArray, PolygonArray, ValidCoords, ValidList,
+    downcast, Coords, Geometry, LineStringArray, MultiLineStringArray, MultiPointArray,
+    MultiPolygonArray, PointArray, PolygonArray,
 };
 
 use bbox::BoxFactory;
@@ -134,55 +134,23 @@ pub fn for_each_geometry(
             rows(chunk, &mut f, |i| Geometry::Point(array.get(i)))
         }
         Kind::LineString => {
-            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of coordinates")?;
-            let array = LineStringArray {
-                rows: List::new(rows_list),
-                coords: ValidCoords::new(rows_list.values().as_ref())?,
-            };
+            let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
             rows(chunk, &mut f, |i| Geometry::LineString(array.get(i)))
         }
         Kind::MultiPoint => {
-            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of coordinates")?;
-            let array = MultiPointArray {
-                rows: List::new(rows_list),
-                coords: ValidCoords::new(rows_list.values().as_ref())?,
-            };
+            let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
             rows(chunk, &mut f, |i| Geometry::MultiPoint(array.get(i)))
         }
         Kind::Polygon => {
-            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of rings")?;
-            let rings =
-                downcast::<ListArray<i64>>(rows_list.values().as_ref(), "a list of coordinates")?;
-            let array = PolygonArray {
-                rows: List::new(rows_list),
-                rings: ValidList::new(rings),
-                coords: ValidCoords::new(rings.values().as_ref())?,
-            };
+            let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
             rows(chunk, &mut f, |i| Geometry::Polygon(array.get(i)))
         }
         Kind::MultiLineString => {
-            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of linestrings")?;
-            let lines =
-                downcast::<ListArray<i64>>(rows_list.values().as_ref(), "a list of coordinates")?;
-            let array = MultiLineStringArray {
-                rows: List::new(rows_list),
-                lines: ValidList::new(lines),
-                coords: ValidCoords::new(lines.values().as_ref())?,
-            };
+            let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
             rows(chunk, &mut f, |i| Geometry::MultiLineString(array.get(i)))
         }
         Kind::MultiPolygon => {
-            let rows_list = downcast::<ListArray<i64>>(chunk, "a list of polygons")?;
-            let polygons =
-                downcast::<ListArray<i64>>(rows_list.values().as_ref(), "a list of rings")?;
-            let rings =
-                downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of coordinates")?;
-            let array = MultiPolygonArray {
-                rows: List::new(rows_list),
-                polygons: ValidList::new(polygons),
-                rings: ValidList::new(rings),
-                coords: ValidCoords::new(rings.values().as_ref())?,
-            };
+            let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
             rows(chunk, &mut f, |i| Geometry::MultiPolygon(array.get(i)))
         }
     }

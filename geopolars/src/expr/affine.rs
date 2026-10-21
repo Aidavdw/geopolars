@@ -7,11 +7,11 @@ use geopolars_compute::native::{
     affine_multi_polygons, affine_points, affine_polygons, RowShift,
 };
 use geopolars_core::{
-    downcast, Coords, LineStringArray, List, MultiLineStringArray, MultiPointArray,
-    MultiPolygonArray, PointArray, PolygonArray, ValidCoords,
+    downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
+    PointArray, PolygonArray,
 };
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray};
+use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
@@ -56,11 +56,7 @@ fn chunk_transformed(
                 .boxed()
         }
         Kind::MultiPoint => {
-            let rows: &ListArray<i64> = downcast(chunk, "a list of coordinates")?;
-            let array = MultiPointArray {
-                rows: List::new(rows),
-                coords: ValidCoords::new(rows.values().as_ref())?,
-            };
+            let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
             affine_multi_points(matrix, &array, shift)
                 .into_list_array()
                 .boxed()
