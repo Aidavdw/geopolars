@@ -79,7 +79,7 @@ pub fn vertices_self_intersect(vertices: &[Coord<f64>]) -> bool {
 
 /// [self_intersect] for `line`, which has to be finite in x and y.
 #[inline(always)]
-fn finite_line_self_intersects(line: &ScalarLineString) -> bool {
+pub(super) fn finite_line_self_intersects(line: &ScalarLineString) -> bool {
     let x = &line.coords.x()[line.vertices.clone()];
     let y = &line.coords.y()[line.vertices.clone()];
     self_intersect(x.len(), |i| Coord { x: x[i], y: y[i] })

@@ -3,9 +3,11 @@
 //! rsgeo has geometry types of its own, so what it relates is copied into them.
 //! Its algorithms only look at x and y, so z and m are never read.
 
+mod is_valid;
 mod rings_overlap;
 mod self_intersects;
 
+pub use is_valid::{multi_polygons_fit, polygons_fit, FitChecks};
 pub use rings_overlap::{rings_overlap_against_one, rings_overlap_pairwise};
 pub use self_intersects::{
     line_strings_self_intersect, multi_line_strings_self_intersect, multi_polygons_self_intersect,

@@ -446,15 +446,6 @@ _NO_TOPOLOGY_CHECKS = {
 }
 
 
-@pytest.mark.parametrize(
-    "line",
-    [[_point(0, 0), {"x": 1.0}], [_point(0, 0), None]],
-    ids=["missing-axis", "missing-vertex"],
-)
-def test_without_the_missing_check_a_coordinate_may_be_missing(line: Line) -> None:
-    assert _is_valid(LineStringXY(), line, check_missing_coordinates=False) == [True]
-
-
 def test_without_the_missing_check_a_coordinate_still_has_to_be_finite() -> None:
     line = _line((0, 0), (NAN, 1))
 
@@ -521,15 +512,8 @@ def test_without_the_coordinate_checks_the_shape_still_counts(
     assert _is_valid(dtype, row, **_NO_COORDINATE_CHECKS) == [False]
 
 
-@pytest.mark.parametrize(
-    "vertex",
-    [{"x": NAN, "y": 4.0}, {"x": 4.0}, None],
-    ids=["nan", "missing-axis", "missing"],
-)
-def test_a_ring_without_finite_xy_cannot_be_checked_for_how_it_fits(
-    vertex: Coord | None,
-) -> None:
-    ring = [_point(0, 0), _point(4, 0), vertex, _point(0, 4), _point(0, 0)]
+def test_a_ring_without_finite_xy_cannot_be_checked_for_how_it_fits() -> None:
+    ring = [_point(0, 0), _point(4, 0), {"x": NAN, "y": 4.0}, _point(0, 4), _point(0, 0)]
     no_topology = _NO_COORDINATE_CHECKS | _NO_TOPOLOGY_CHECKS
 
     assert _is_valid(PolygonXY(), [ring], **_NO_COORDINATE_CHECKS) == [False]

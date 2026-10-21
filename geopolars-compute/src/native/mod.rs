@@ -6,6 +6,7 @@ mod centroid;
 pub mod distance;
 mod is_ccw;
 mod is_ring;
+mod is_valid;
 mod length;
 mod rings;
 
@@ -22,6 +23,13 @@ pub use is_ccw::{
     line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,
 };
 pub use is_ring::{is_ring, line_strings_are_rings, multi_line_strings_are_rings, same_place};
+pub use is_valid::{
+    line_strings_have_valid_coordinates, line_strings_have_valid_shape,
+    multi_line_strings_have_valid_coordinates, multi_line_strings_have_valid_shape,
+    multi_points_have_valid_coordinates, multi_polygons_have_valid_coordinates,
+    multi_polygons_have_valid_shape, points_have_valid_coordinates,
+    polygons_have_valid_coordinates, polygons_have_valid_shape, Bounds,
+};
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,
@@ -43,7 +51,7 @@ pub(super) fn per_row<E>(
 
 /// [per_row], for a `bool` per row.
 #[inline(always)]
-pub(super) fn per_row_bool(rows: &List, test: impl Fn(usize) -> bool) -> BooleanArray {
+pub(crate) fn per_row_bool(rows: &List, test: impl Fn(usize) -> bool) -> BooleanArray {
     let Ok(values) = per_row_values(rows, |i| Ok::<_, std::convert::Infallible>(test(i)));
     bool_array(values, rows.validity())
 }

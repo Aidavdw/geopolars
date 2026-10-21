@@ -3,6 +3,7 @@
 //!
 //! See the README.
 
+mod complete;
 mod coords;
 mod dimension;
 mod geotraits;
@@ -15,6 +16,7 @@ mod polygons;
 use polars_arrow::array::Array;
 use polars_core::prelude::{polars_err, PolarsResult};
 
+pub use complete::complete_rows;
 pub use coords::{
     is_close, same_position, AxisArrays, Coords, ValidCoords, ABS_TOL, MIN_RING_VERTICES, REL_TOL,
 };

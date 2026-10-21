@@ -134,7 +134,10 @@ def is_valid(
     your data is valid in some way.
     The other shape rules in the table (vertex counts, closed rings) always apply.
 
-    - `check_missing_coordinates=False` lets a coordinate, or one of its axes, be missing.
+    - `check_missing_coordinates=False` skips looking for missing values below the row,
+      and trusts the column to hold to GeoArrow's rule on them.
+      A missing coordinate is then read as whatever values lie under it.
+      Do not use this unless you know for sure the inner data is valid!
     - `check_finite_coordinates=False` lets coordinates use NaN (partial missing) or infinite.
     - `check_crs_bounds=False` means it is not checked if the coordinates are
       within the range of validity of the CRS. If this flag is set,
@@ -149,8 +152,8 @@ def is_valid(
       parts sit together (not overlapping, touching only at points).
       This compares every pair of parts, so its cost grows quickly with their number.
 
-    How a polygon's rings cross or fit is only known for valid points,
-    so a ring without them stays invalid while any of the last three checks is on.
+    How a polygon's rings cross or fit is only known for finite coordinates,
+    so every axis is checked to be finite while any of the last three checks is on.
 
     ```python
     df.filter(geo.is_valid("parcel"))

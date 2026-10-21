@@ -9,6 +9,8 @@
 //! `t` is the coordinate epoch, as a decimal year.
 //! It is always `f64::INFINITY`, which PROJ reads as "no time given".
 
+// TODO: Add support for CRSes that have a time/epoch
+
 use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
 use std::ptr;
