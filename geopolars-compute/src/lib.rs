@@ -1,5 +1,6 @@
 //! Kernels on GeoArrow, taking the views of `geopolars-core`:
 //! [native] ones of our own, and [geos], [rsgeo] and [proj] ones forwarding to those libraries.
+//! [validity_checking] combines native and rsgeo checks.
 //!
 //! See the README.
 
@@ -34,6 +35,8 @@ pub mod native;
 pub mod proj;
 #[cfg(feature = "rsgeo")]
 pub mod rsgeo;
+#[cfg(feature = "rsgeo")]
+pub mod validity_checking;
 
 use error::row_or_missing;
 pub use error::{GeoComputeError, GeoComputeResult};

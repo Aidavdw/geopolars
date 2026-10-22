@@ -14,6 +14,8 @@ use geopolars_compute::native::{close_open_rings, is_ring};
 use geopolars_compute::with_const_flags;
 use geopolars_core::{downcast, LineStringArray, ValidCoords, ValidList};
 
+// TODO: Move this to geopolars_compute
+
 /// The keyword arguments of the constructors that build polygons:
 /// [`MetadataKwargs`], plus whether to close open rings.
 /// These have to be mirrored on the python side.

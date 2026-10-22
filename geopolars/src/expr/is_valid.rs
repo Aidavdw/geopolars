@@ -1,31 +1,22 @@
-//! Whether a geometry is valid, by running the checks of
-//! `geopolars_compute::native` and `geopolars_compute::rsgeo` one after another.
+//! Whether a geometry is valid, through `geopolars_compute::validity_checking`.
 //! See `is_valid` in Python for the rules.
 
-use geopolars_compute::native::{
-    line_strings_have_valid_coordinates, line_strings_have_valid_shape,
-    multi_line_strings_have_valid_coordinates, multi_line_strings_have_valid_shape,
-    multi_points_have_valid_coordinates, multi_polygons_have_valid_coordinates,
-    multi_polygons_have_valid_shape, points_have_valid_coordinates,
-    polygons_have_valid_coordinates, polygons_have_valid_shape, Bounds,
+use geopolars_compute::native::Bounds;
+use geopolars_compute::validity_checking::{
+    line_strings_are_valid, multi_line_strings_are_valid, multi_points_are_valid,
+    multi_polygons_are_valid, points_are_valid, polygons_are_valid, ValidityChecks,
 };
-use geopolars_compute::rsgeo::{multi_polygons_fit, polygons_fit, FitChecks};
 use geopolars_core::{
-    complete_rows, downcast, Coords, LineStringArray, List, MultiLineStringArray, MultiPointArray,
+    complete_rows, downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray,
     MultiPolygonArray, PointArray, PolygonArray, ValidCoords,
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
-use polars_arrow::bitmap::Bitmap;
-use polars_arrow::datatypes::ArrowDataType;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::coords::kernel_output_type_same_geometry;
 use crate::geoarrow::{describe, Kind};
-
-// PERF: Validation runs in multiple passes.
-// We could make a fused 'validate' pass that does it all in one go.
 
 /// See python
 #[derive(Debug, Deserialize)]
@@ -55,22 +46,11 @@ impl Default for IsValidKwargs {
 }
 
 impl IsValidKwargs {
-    // Relating rings needs them finite, so with the fit checks on, they always are checked.
-    fn has_finite_check_for(&self, kind: Kind) -> bool {
-        self.check_finite_coordinates || self.has_fit_checks_for(kind)
-    }
-
-    fn has_fit_checks_for(&self, kind: Kind) -> bool {
-        let polygon = self.check_ring_self_intersect || self.check_polygon_self_overlap;
-        match kind {
-            Kind::Polygon => polygon,
-            Kind::MultiPolygon => polygon || self.check_multi_polygon_self_overlap,
-            Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString => false,
-        }
-    }
-
-    fn fit_checks(&self) -> FitChecks {
-        FitChecks {
+    fn checks(&self) -> ValidityChecks {
+        ValidityChecks {
+            bounds: self.bounds,
+            check_finite_coordinates: self.check_finite_coordinates,
+            check_line_string_zero_length_sections: self.check_line_string_zero_length_sections,
             check_ring_self_intersect: self.check_ring_self_intersect,
             check_polygon_self_overlap: self.check_polygon_self_overlap,
             check_multi_polygon_self_overlap: self.check_multi_polygon_self_overlap,
@@ -78,24 +58,10 @@ impl IsValidKwargs {
     }
 }
 
-/// A missing row is `false` in `passed`'s values, so they alone say what stays.
-fn keep_rows_that_passed(rows: &List, passed: BooleanArray) -> List {
-    rows.clone().with_validity(Some(passed.values().clone()))
-}
-
-fn rows_still_valid_or_null_where_chunk_is(
-    still_valid: Option<Bitmap>,
-    chunk: &dyn Array,
-) -> BooleanArray {
-    let values = still_valid.unwrap_or_else(|| Bitmap::new_with_value(true, chunk.len()));
-    BooleanArray::new(ArrowDataType::Boolean, values, chunk.validity().cloned())
-}
-
 /// [`are_valid`] for one chunk of the storage of a `kind`.
 ///
 /// With `check_missing_coordinates`, a row missing anything below it is first set missing
 /// (see [complete_rows]), so that the views can trust the rest.
-/// Then every check that is on runs as its own pass, over the rows that passed so far.
 fn chunk_is_valid(
     chunk: &dyn Array,
     kind: Kind,
@@ -106,104 +72,45 @@ fn chunk_is_valid(
     } else {
         chunk.validity().cloned()
     };
-    let (finite, bounds) = (kwargs.has_finite_check_for(kind), kwargs.bounds.as_ref());
-    let coordinates = finite || bounds.is_some();
-    let zero = kwargs.check_line_string_zero_length_sections;
-    let fit = kwargs.has_fit_checks_for(kind);
+    let checks = kwargs.checks();
 
-    if kind == Kind::Point {
-        if !coordinates {
-            return Ok(rows_still_valid_or_null_where_chunk_is(complete, chunk));
-        }
+    let valid = if kind == Kind::Point {
         let array = PointArray::new(Coords::from_valid(ValidCoords::new(chunk)?, complete));
-        let valid = points_have_valid_coordinates(&array, finite, bounds);
-        return Ok(valid.with_validity(chunk.validity().cloned()));
-    }
-
-    let rows: &ListArray<i64> = downcast(chunk, "a list of parts")?;
-    let rows = match kind {
-        Kind::Point => unreachable!("handled above"),
-        Kind::LineString => {
-            let mut array = LineStringArray::new(rows)?;
-            array.rows = array.rows.with_validity(complete);
-            if coordinates {
-                array.rows = keep_rows_that_passed(
-                    &array.rows,
-                    line_strings_have_valid_coordinates(&array, finite, bounds),
-                );
+        points_are_valid(&array, &checks)
+    } else {
+        let rows: &ListArray<i64> = downcast(chunk, "a list of parts")?;
+        match kind {
+            Kind::Point => unreachable!("handled above"),
+            Kind::LineString => {
+                let mut array = LineStringArray::new(rows)?;
+                array.rows = array.rows.with_validity(complete);
+                line_strings_are_valid(&array, &checks)
             }
-            array.rows =
-                keep_rows_that_passed(&array.rows, line_strings_have_valid_shape(&array, zero));
-            array.rows
-        }
-        Kind::MultiPoint => {
-            let mut array = MultiPointArray::new(rows)?;
-            array.rows = array.rows.with_validity(complete);
-            if coordinates {
-                array.rows = keep_rows_that_passed(
-                    &array.rows,
-                    multi_points_have_valid_coordinates(&array, finite, bounds),
-                );
+            Kind::MultiPoint => {
+                let mut array = MultiPointArray::new(rows)?;
+                array.rows = array.rows.with_validity(complete);
+                multi_points_are_valid(&array, &checks)
             }
-            array.rows
-        }
-        Kind::MultiLineString => {
-            let mut array = MultiLineStringArray::new(rows)?;
-            array.rows = array.rows.with_validity(complete);
-            if coordinates {
-                array.rows = keep_rows_that_passed(
-                    &array.rows,
-                    multi_line_strings_have_valid_coordinates(&array, finite, bounds),
-                );
+            Kind::MultiLineString => {
+                let mut array = MultiLineStringArray::new(rows)?;
+                array.rows = array.rows.with_validity(complete);
+                multi_line_strings_are_valid(&array, &checks)
             }
-            array.rows = keep_rows_that_passed(
-                &array.rows,
-                multi_line_strings_have_valid_shape(&array, zero),
-            );
-            array.rows
-        }
-        Kind::Polygon => {
-            let mut array = PolygonArray::new(rows)?;
-            array.rows = array.rows.with_validity(complete);
-            if coordinates {
-                array.rows = keep_rows_that_passed(
-                    &array.rows,
-                    polygons_have_valid_coordinates(&array, finite, bounds),
-                );
+            Kind::Polygon => {
+                let mut array = PolygonArray::new(rows)?;
+                array.rows = array.rows.with_validity(complete);
+                polygons_are_valid(&array, &checks)
             }
-            array.rows =
-                keep_rows_that_passed(&array.rows, polygons_have_valid_shape(&array, zero));
-            if fit {
-                array.rows =
-                    keep_rows_that_passed(&array.rows, polygons_fit(&array, &kwargs.fit_checks()));
+            Kind::MultiPolygon => {
+                let mut array = MultiPolygonArray::new(rows)?;
+                array.rows = array.rows.with_validity(complete);
+                multi_polygons_are_valid(&array, &checks)
             }
-            array.rows
-        }
-        Kind::MultiPolygon => {
-            let mut array = MultiPolygonArray::new(rows)?;
-            array.rows = array.rows.with_validity(complete);
-            if coordinates {
-                array.rows = keep_rows_that_passed(
-                    &array.rows,
-                    multi_polygons_have_valid_coordinates(&array, finite, bounds),
-                );
-            }
-            array.rows =
-                keep_rows_that_passed(&array.rows, multi_polygons_have_valid_shape(&array, zero));
-            if fit {
-                array.rows = keep_rows_that_passed(
-                    &array.rows,
-                    multi_polygons_fit(&array, &kwargs.fit_checks()),
-                );
-            }
-            array.rows
         }
     };
-    // A missing row stays missing, and an incomplete one is invalid.
-    Ok(rows_still_valid_or_null_where_chunk_is(
-        rows.validity().cloned(),
-        chunk,
-    ))
+    // A missing row stays missing, and an incomplete one is invalid:
+    // both are `false` in `valid`'s values.
+    Ok(valid.with_validity(chunk.validity().cloned()))
 }
 
 pub(crate) fn are_valid(

@@ -3,20 +3,18 @@
 //! See `is_valid` in Python for the rules.
 //!
 //! Every polygon is assumed to have a valid shape already
-//! (see [crate::native::polygons_have_valid_shape]),
-//! and to be finite in x and y (see [crate::native::polygons_have_valid_coordinates]).
+//! (see [crate::native::polygon_shape_is_valid]),
+//! and to be finite in x and y (see [crate::native::coordinates_are_valid]).
 
 use ::rsgeo::coordinate_position::CoordPos;
 use ::rsgeo::dimensions::Dimensions;
 use ::rsgeo::relate::IntersectionMatrix;
 use ::rsgeo::{Polygon, PreparedGeometry, Relate};
-use geopolars_core::{MultiPolygonArray, PolygonArray, ScalarLineString, ScalarPolygon};
-use polars_arrow::array::BooleanArray;
+use geopolars_core::{ScalarLineString, ScalarPolygon};
 
 use super::rings_overlap::overlap;
 use super::self_intersects::finite_line_self_intersects;
 use super::to_rsgeo_ring;
-use crate::native::per_row_bool;
 
 fn touch_only_at_points(matrix: &IntersectionMatrix) -> bool {
     matrix.get(CoordPos::OnBoundary, CoordPos::OnBoundary) != Dimensions::OneDimensional
@@ -45,7 +43,7 @@ fn polygon_rings_fit(rings: &[Polygon<f64>]) -> bool {
 
 /// Whether a multipolygon's parts fit together:
 /// no two parts share any area, and they only touch at points.
-fn multi_polygon_parts_fit(parts: &[Polygon<f64>]) -> bool {
+pub(crate) fn multi_polygon_parts_fit(parts: &[Polygon<f64>]) -> bool {
     let prepared: Vec<_> = parts.iter().map(PreparedGeometry::from).collect();
     prepared.iter().enumerate().all(|(i, part)| {
         prepared[i + 1..].iter().all(|other| {
@@ -58,7 +56,7 @@ fn multi_polygon_parts_fit(parts: &[Polygon<f64>]) -> bool {
 /// The checks on how a polygon's rings, and a multipolygon's parts, fit together.
 /// See `is_valid` in Python.
 #[derive(Debug, Clone, Copy)]
-pub struct FitChecks {
+pub(crate) struct FitChecks {
     pub check_ring_self_intersect: bool,
     pub check_polygon_self_overlap: bool,
     /// Only read for multipolygons.
@@ -73,7 +71,7 @@ fn ring_is_valid(ring: &ScalarLineString, checks: &FitChecks) -> bool {
 /// Whether the rings of `polygon`, which passed the shape checks, are valid and fit together.
 /// If `keep=true`, they are returned as one rsgeo polygon to relate further.
 /// `Err(())` if they are not valid, `Ok(None)` for the empty polygon (or without `keep`).
-fn polygon_fits(
+pub(crate) fn polygon_fits(
     polygon: &ScalarPolygon,
     checks: &FitChecks,
     keep: bool,
@@ -106,26 +104,4 @@ fn polygon_fits(
             .expect("a polygon that is not empty has an exterior");
         Polygon::new(exterior, rings.collect())
     }))
-}
-
-pub fn polygons_fit(array: &PolygonArray, checks: &FitChecks) -> BooleanArray {
-    per_row_bool(&array.rows, |i| {
-        polygon_fits(&array.get(i), checks, false).is_ok()
-    })
-}
-
-/// [polygons_fit] for every part, and, if `check_multi_polygon_self_overlap=true`,
-/// whether the parts fit together.
-pub fn multi_polygons_fit(array: &MultiPolygonArray, checks: &FitChecks) -> BooleanArray {
-    let multi = checks.check_multi_polygon_self_overlap;
-    per_row_bool(&array.rows, |i| {
-        let mut parts = Vec::new();
-        for polygon in array.get(i).polygons() {
-            match polygon_fits(&polygon, checks, multi) {
-                Ok(part) => parts.extend(part),
-                Err(()) => return false,
-            }
-        }
-        !multi || multi_polygon_parts_fit(&parts)
-    })
 }

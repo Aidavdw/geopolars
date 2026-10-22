@@ -23,12 +23,9 @@ pub use is_ccw::{
     line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,
 };
 pub use is_ring::{is_ring, line_strings_are_rings, multi_line_strings_are_rings, same_place};
-pub use is_valid::{
-    line_strings_have_valid_coordinates, line_strings_have_valid_shape,
-    multi_line_strings_have_valid_coordinates, multi_line_strings_have_valid_shape,
-    multi_points_have_valid_coordinates, multi_polygons_have_valid_coordinates,
-    multi_polygons_have_valid_shape, points_have_valid_coordinates,
-    polygons_have_valid_coordinates, polygons_have_valid_shape, Bounds,
+pub use is_valid::Bounds;
+pub(crate) use is_valid::{
+    coordinates_are_valid, line_string_shape_is_valid, point_is_valid, polygon_shape_is_valid,
 };
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use rings::{
