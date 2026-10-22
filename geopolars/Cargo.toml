@@ -31,11 +31,8 @@ pyo3-polars = { workspace = true, features = ["derive"] }
 pyo3 = { workspace = true, features = ["abi3-py310"] }
 
 serde = { workspace = true, features = ["derive"] }
-# Named `rsgeo` so it cannot be confused with our own `geo` namespace and modules.
-rsgeo = { package = "geo", version = "0.33.1", features = ["proj"] }
 geo-traits = "0.3.0"
-# Used by 'geo'. This sets it so that proj is bundled with the plugin,
-# rather than using the system installation (portability).
+# Bundled with the plugin rather than using the system installation (portability).
 proj = { version = "0.31", features = ["bundled_proj"] }
 # The C API under `proj`.
 # Used for what it does not expose (e.g. a CRS's ellipsoid).

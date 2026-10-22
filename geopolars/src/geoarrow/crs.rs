@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use geoarrow_schema::{Crs, CrsType, Edges};
 use polars::prelude::*;
-use rsgeo::proj::Proj;
+use proj::Proj;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 

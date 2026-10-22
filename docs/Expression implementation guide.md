@@ -73,7 +73,7 @@ Kernels forwarding to GEOS live in `geopolars-compute`'s `geos` module.
 
 Examples are:
 
-- [PROJ](https://proj.org/) (through `rsgeo::proj`), to reproject coordinates.
+- [PROJ](https://proj.org/) (through the `proj` crate), to reproject coordinates.
   Each coordinate is passed to it as a tuple, one by one.
 - [geographiclib](https://geographiclib.sourceforge.io/), to measure along an ellipsoid.
 - The [geo ecosystem](https://georust.org/)
