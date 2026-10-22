@@ -3,8 +3,8 @@
 use geopolars_core::{LineStringArray, MultiLineStringArray, ScalarLineString};
 use polars_arrow::array::PrimitiveArray;
 
-use super::per_row;
 use super::DistanceMetric;
+use crate::per_row::per_row;
 use crate::{GeodesicMetric, Planar};
 
 /// A [`DistanceMetric`] that can also measure how long a linestring is, segment by segment.

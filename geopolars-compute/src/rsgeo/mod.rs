@@ -3,11 +3,16 @@
 //! rsgeo has geometry types of its own, so what it relates is copied into them.
 //! Its algorithms only look at x and y, so z and m are never read.
 
+// Only for `validity_checking`.
+#[cfg(feature = "native")]
 mod is_valid;
 mod rings_overlap;
 mod self_intersects;
 
-pub(crate) use is_valid::{multi_polygon_parts_fit, polygon_fits, FitChecks};
+#[cfg(feature = "native")]
+pub(crate) use is_valid::{
+    multi_polygon_topology_is_valid, polygon_topology_is_valid, TopologyChecks,
+};
 pub use rings_overlap::{rings_overlap_against_one, rings_overlap_pairwise};
 pub use self_intersects::{
     line_strings_self_intersect, multi_line_strings_self_intersect, multi_polygons_self_intersect,
@@ -16,12 +21,12 @@ pub use self_intersects::{
 
 use ::rsgeo::{Coord, LineString, Polygon};
 use geopolars_core::output::{bool_array, list_array};
-use geopolars_core::{List, ScalarLineString, ValidList};
+use geopolars_core::{is_ring, List, ScalarLineString, ValidList};
 use polars_arrow::array::{BooleanArray, ListArray};
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::offset::Offsets;
 
-use crate::native::{is_ring, per_row_values};
+use crate::per_row::per_row_values;
 use crate::{GeoComputeError, GeoComputeResult};
 
 /// Whether every vertex of `line` is finite in x and y.

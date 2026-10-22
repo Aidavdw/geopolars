@@ -14,7 +14,7 @@ use geopolars_core::{
 };
 use polars_arrow::bitmap::Bitmap;
 
-use super::per_row_values;
+use crate::per_row::per_row_values;
 
 /// Used at compile to drop loops
 /// Whether axis `k` is there.

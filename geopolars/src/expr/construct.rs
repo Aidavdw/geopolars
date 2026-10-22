@@ -10,9 +10,9 @@ use serde::Deserialize;
 
 use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
-use geopolars_compute::native::{close_open_rings, is_ring};
+use geopolars_compute::native::close_open_rings;
 use geopolars_compute::with_const_flags;
-use geopolars_core::{downcast, LineStringArray, ValidCoords, ValidList};
+use geopolars_core::{downcast, is_ring, LineStringArray, ValidCoords, ValidList};
 
 // TODO: Move this to geopolars_compute
 

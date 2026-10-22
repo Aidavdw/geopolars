@@ -35,6 +35,27 @@ pub fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
     is_close(a[0], b[0]) && is_close(a[1], b[1]) && is_close(a[2], b[2])
 }
 
+/// Whether coordinates `i` and `j` of `coords` lie at almost the same place:
+/// [`is_close`] in x and y, and in z if `Z=true`.
+/// m is a measure rather than a position, so it is not compared.
+#[inline(always)]
+pub fn same_place<const Z: bool>(coords: &ValidCoords, i: usize, j: usize) -> bool {
+    is_close(coords.x()[i], coords.x()[j])
+        && is_close(coords.y()[i], coords.y()[j])
+        && (!Z || {
+            let z = coords.z().expect("a z, with `Z`");
+            is_close(z[i], z[j])
+        })
+}
+
+/// Whether the coordinates `vertices` of `coords` make a ring:
+/// at least [MIN_RING_VERTICES] of them, with the last at the [same place](same_place) as the first.
+/// See [same_place] for `Z`.
+#[inline(always)]
+pub fn is_ring<const Z: bool>(coords: &ValidCoords, vertices: Range<usize>) -> bool {
+    vertices.len() >= MIN_RING_VERTICES && same_place::<Z>(coords, vertices.start, vertices.end - 1)
+}
+
 /// Coordinates that are all assumed to be valid.
 /// Use for coordinates that **cannot** include invalid coordinates (nested geometries).
 /// Otherwise, use [Coords].

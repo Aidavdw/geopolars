@@ -14,10 +14,11 @@ use polars_arrow::bitmap::Bitmap;
 use polars_arrow::datatypes::ArrowDataType;
 
 use crate::native::{
-    coordinates_are_valid, line_string_shape_is_valid, per_row_bool, point_is_valid,
-    polygon_shape_is_valid, Bounds,
+    coordinates_are_valid, line_string_shape_is_valid, point_is_valid, polygon_shape_is_valid,
+    Bounds,
 };
-use crate::rsgeo::{multi_polygon_parts_fit, polygon_fits, FitChecks};
+use crate::per_row::per_row_bool;
+use crate::rsgeo::{multi_polygon_topology_is_valid, polygon_topology_is_valid, TopologyChecks};
 
 /// The checks to run. See `is_valid` in Python.
 /// Missing values below the row are not checked here:
@@ -39,20 +40,20 @@ impl ValidityChecks {
         self.bounds.unwrap_or_default()
     }
 
-    /// The fit checks that are on, `None` if there are none.
+    /// The topology checks that are on, `None` if there are none.
     /// If `multi=true`, the check on how a multipolygon's parts fit counts too.
-    fn fit_checks(&self, multi: bool) -> Option<FitChecks> {
+    fn topology_checks(&self, multi: bool) -> Option<TopologyChecks> {
         let polygon = self.check_ring_self_intersect || self.check_polygon_self_overlap;
-        (polygon || (multi && self.check_multi_polygon_self_overlap)).then_some(FitChecks {
+        (polygon || (multi && self.check_multi_polygon_self_overlap)).then_some(TopologyChecks {
             check_ring_self_intersect: self.check_ring_self_intersect,
             check_polygon_self_overlap: self.check_polygon_self_overlap,
             check_multi_polygon_self_overlap: self.check_multi_polygon_self_overlap,
         })
     }
 
-    // Relating rings needs them finite, so with the fit checks on, they always are checked.
-    fn has_finite_check(&self, fit: Option<&FitChecks>) -> bool {
-        self.check_finite_coordinates || fit.is_some()
+    // Relating rings needs them finite, so with the topology checks on, they always are checked.
+    fn has_finite_check(&self, topology: Option<&TopologyChecks>) -> bool {
+        self.check_finite_coordinates || topology.is_some()
     }
 }
 
@@ -164,7 +165,7 @@ pub fn multi_line_strings_are_valid(
 }
 
 /// See [coordinates_are_valid] and [polygon_shape_is_valid] for the flags.
-/// `fit` holds the fit checks, if any are on.
+/// `topology` holds the topology checks, if any are on.
 fn polygons_are_valid_with<
     const FINITE: bool,
     const BOUNDS: bool,
@@ -174,29 +175,28 @@ fn polygons_are_valid_with<
 >(
     array: &PolygonArray,
     bounds: &Bounds,
-    fit: Option<&FitChecks>,
+    topology: Option<&TopologyChecks>,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         let polygon = array.get(i);
         let vertices = array.rings.span(array.rows.range(i));
         coordinates_are_valid::<FINITE, BOUNDS, Z, M>(&array.coords, vertices, bounds)
             && polygon_shape_is_valid::<ZERO, Z>(&polygon)
-            && fit.is_none_or(|fit| polygon_fits(&polygon, fit, false).is_ok())
+            && topology.is_none_or(|checks| polygon_topology_is_valid(&polygon, checks))
     })
 }
 
 pub fn polygons_are_valid(array: &PolygonArray, checks: &ValidityChecks) -> BooleanArray {
     let dim = array.coords.dim();
-    let fit = checks.fit_checks(false);
+    let topology = checks.topology_checks(false);
     with_const_flags!(
-        polygons_are_valid_with(array, &checks.bounds_or_any(), fit.as_ref());
-        checks.has_finite_check(fit.as_ref()), checks.bounds.is_some(), dim.has_z(), dim.has_m(),
-        checks.check_line_string_zero_length_sections
+        polygons_are_valid_with(array, &checks.bounds_or_any(), topology.as_ref());
+        checks.has_finite_check(topology.as_ref()), checks.bounds.is_some(),
+        dim.has_z(), dim.has_m(), checks.check_line_string_zero_length_sections
     )
 }
 
 /// See [polygons_are_valid_with].
-/// The parts also have to fit together, if `check_multi_polygon_self_overlap=true` in `fit`.
 fn multi_polygons_are_valid_with<
     const FINITE: bool,
     const BOUNDS: bool,
@@ -206,27 +206,16 @@ fn multi_polygons_are_valid_with<
 >(
     array: &MultiPolygonArray,
     bounds: &Bounds,
-    fit: Option<&FitChecks>,
+    topology: Option<&TopologyChecks>,
 ) -> BooleanArray {
-    let multi = fit.is_some_and(|fit| fit.check_multi_polygon_self_overlap);
     per_row_bool(&array.rows, |i| {
+        let multi = array.get(i);
         let vertices = array.rings.span(array.polygons.span(array.rows.range(i)));
-        if !coordinates_are_valid::<FINITE, BOUNDS, Z, M>(&array.coords, vertices, bounds) {
-            return false;
-        }
-        let mut parts = Vec::new();
-        for polygon in array.get(i).polygons() {
-            if !polygon_shape_is_valid::<ZERO, Z>(&polygon) {
-                return false;
-            }
-            if let Some(fit) = fit {
-                match polygon_fits(&polygon, fit, multi) {
-                    Ok(part) => parts.extend(part),
-                    Err(()) => return false,
-                }
-            }
-        }
-        !multi || multi_polygon_parts_fit(&parts)
+        coordinates_are_valid::<FINITE, BOUNDS, Z, M>(&array.coords, vertices, bounds)
+            && multi
+                .polygons()
+                .all(|polygon| polygon_shape_is_valid::<ZERO, Z>(&polygon))
+            && topology.is_none_or(|checks| multi_polygon_topology_is_valid(&multi, checks))
     })
 }
 
@@ -235,10 +224,10 @@ pub fn multi_polygons_are_valid(
     checks: &ValidityChecks,
 ) -> BooleanArray {
     let dim = array.coords.dim();
-    let fit = checks.fit_checks(true);
+    let topology = checks.topology_checks(true);
     with_const_flags!(
-        multi_polygons_are_valid_with(array, &checks.bounds_or_any(), fit.as_ref());
-        checks.has_finite_check(fit.as_ref()), checks.bounds.is_some(), dim.has_z(), dim.has_m(),
-        checks.check_line_string_zero_length_sections
+        multi_polygons_are_valid_with(array, &checks.bounds_or_any(), topology.as_ref());
+        checks.has_finite_check(topology.as_ref()), checks.bounds.is_some(),
+        dim.has_z(), dim.has_m(), checks.check_line_string_zero_length_sections
     )
 }

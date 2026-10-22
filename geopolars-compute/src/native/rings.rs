@@ -8,14 +8,12 @@ use std::ops::Range;
 
 use geopolars_core::output::list_array;
 use geopolars_core::{
-    LineStringArray, List, MultiLineStringArray, MultiPolygonArray, PolygonArray, ValidCoords,
-    ValidList,
+    same_place, LineStringArray, List, MultiLineStringArray, MultiPolygonArray, PolygonArray,
+    ValidCoords, ValidList,
 };
 use polars_arrow::array::ListArray;
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::offset::{Offsets, OffsetsBuffer};
-
-use super::same_place;
 
 /// Which of a polygon's rings `rings` to keep.
 type Keep = fn(Range<usize>) -> Range<usize>;

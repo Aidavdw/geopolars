@@ -3,34 +3,13 @@
 //! A multilinestring is a ring when its parts chain into one (see [multi_line_strings_are_rings]).
 //! m is a measure rather than a position, so it is not compared.
 
-use std::ops::Range;
-
 use geopolars_core::{
-    is_close, LineStringArray, MultiLineStringArray, ScalarMultiLineString, ValidCoords,
+    is_ring, same_place, LineStringArray, MultiLineStringArray, ScalarMultiLineString,
     MIN_RING_VERTICES,
 };
 use polars_arrow::array::BooleanArray;
 
-use super::per_row_bool;
-
-/// Whether coordinates `i` and `j` of `coords` lie at almost the same place:
-/// [`is_close`] in x and y, and in z if `Z=true`.
-#[inline(always)]
-pub fn same_place<const Z: bool>(coords: &ValidCoords, i: usize, j: usize) -> bool {
-    is_close(coords.x()[i], coords.x()[j])
-        && is_close(coords.y()[i], coords.y()[j])
-        && (!Z || {
-            let z = coords.z().expect("a z, with `Z`");
-            is_close(z[i], z[j])
-        })
-}
-
-/// Whether the coordinates `vertices` of `coords` make a ring.
-/// See [same_place] for `Z`.
-#[inline(always)]
-pub fn is_ring<const Z: bool>(coords: &ValidCoords, vertices: Range<usize>) -> bool {
-    vertices.len() >= MIN_RING_VERTICES && same_place::<Z>(coords, vertices.start, vertices.end - 1)
-}
+use crate::per_row::per_row_bool;
 
 /// See [same_place] for `Z`.
 pub fn line_strings_are_rings<const Z: bool>(array: &LineStringArray) -> BooleanArray {

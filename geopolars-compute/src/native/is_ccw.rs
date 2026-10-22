@@ -8,7 +8,7 @@ use geopolars_core::{
 use polars_arrow::array::BooleanArray;
 
 use super::area::twice_signed_area;
-use super::per_row_bool;
+use crate::per_row::per_row_bool;
 
 /// Whether `ring` runs counter-clockwise, or clockwise if `CW=true`.
 /// An empty ring runs either way.

@@ -5,9 +5,7 @@
 
 use std::ops::Range;
 
-use geopolars_core::{ScalarPolygon, ValidCoords};
-
-use super::{is_ring, same_place};
+use geopolars_core::{is_ring, same_place, ScalarPolygon, ValidCoords};
 
 /// Where `x` and `y` may lie, as `[xmin, ymin, xmax, ymax]`, ends included.
 pub type Bounds = [f64; 4];

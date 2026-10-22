@@ -32,10 +32,12 @@ pub mod geos;
 mod metric;
 #[cfg(feature = "native")]
 pub mod native;
+#[cfg(any(feature = "native", feature = "rsgeo"))]
+mod per_row;
 pub mod proj;
 #[cfg(feature = "rsgeo")]
 pub mod rsgeo;
-#[cfg(feature = "rsgeo")]
+#[cfg(all(feature = "native", feature = "rsgeo"))]
 pub mod validity_checking;
 
 use error::row_or_missing;

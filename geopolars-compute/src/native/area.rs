@@ -6,7 +6,7 @@ use geographiclib_rs::{PolygonArea, Winding};
 use geopolars_core::{MultiPolygonArray, PolygonArray, ScalarLineString, ScalarPolygon};
 use polars_arrow::array::PrimitiveArray;
 
-use super::per_row;
+use crate::per_row::per_row;
 use crate::{BaseMetric, GeoComputeError, GeodesicMetric, Planar};
 
 /// How the area a ring encloses is measured

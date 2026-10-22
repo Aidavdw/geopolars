@@ -11,6 +11,8 @@ The crate holds:
 - kernels forwarding to GEOS in `geos`, behind the `geos` feature.
 - kernels forwarding to rsgeo (the Rust `geo` crate) in `rsgeo`, behind the `rsgeo` feature.
 - kernels forwarding to PROJ in `proj`.
+- `is_valid`'s kernels in `validity_checking`, which run the checks of `native` and `rsgeo` in one pass per row.
+  These need both features.
 
 ## Writing kernels
 

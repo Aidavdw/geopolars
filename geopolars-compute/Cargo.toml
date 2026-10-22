@@ -11,8 +11,7 @@ native = []
 # Kernels forwarding to GEOS.
 geos = ["dep:geos"]
 # Kernels forwarding to rsgeo.
-# Needs `native` for the ring check they share with `is_ring`.
-rsgeo = ["dep:rsgeo", "native"]
+rsgeo = ["dep:rsgeo"]
 
 [dependencies]
 # The views and output arrays the kernels are written against.
