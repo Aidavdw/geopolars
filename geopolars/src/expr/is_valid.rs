@@ -24,6 +24,9 @@ use serde::Deserialize;
 use super::coords::kernel_output_type_same_geometry;
 use crate::geoarrow::{describe, Kind};
 
+// PERF: Validation runs in multiple passes.
+// We could make a fused 'validate' pass that does it all in one go.
+
 /// See python
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
