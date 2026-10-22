@@ -157,7 +157,11 @@ class ExprGeoNameSpace:
         return interior(self._expr)
 
     def convex_hull(
-        self, *, ignore_per_row_errors: bool = False, ccw_outer: bool = False
+        self,
+        *,
+        ignore_per_row_errors: bool = False,
+        ccw_outer: bool = False,
+        early_finite_check: bool = False,
     ) -> pl.Expr:
         from geopolars.geo.convex_hull import convex_hull
 
@@ -165,6 +169,7 @@ class ExprGeoNameSpace:
             self._expr,
             ignore_per_row_errors=ignore_per_row_errors,
             ccw_outer=ccw_outer,
+            early_finite_check=early_finite_check,
         )
 
     def simplify(
@@ -173,6 +178,7 @@ class ExprGeoNameSpace:
         *,
         preserve_topology: bool = False,
         ignore_per_row_errors: bool = False,
+        early_finite_check: bool = False,
     ) -> pl.Expr:
         from geopolars.geo.simplify import simplify
 
@@ -181,6 +187,7 @@ class ExprGeoNameSpace:
             tolerance,
             preserve_topology=preserve_topology,
             ignore_per_row_errors=ignore_per_row_errors,
+            early_finite_check=early_finite_check,
         )
 
     def boundary(self) -> pl.Expr:

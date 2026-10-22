@@ -23,15 +23,25 @@ impl ToGeos for ScalarPolygon<'_> {
 }
 
 impl ToGeosRows for PolygonArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
+    fn to_geos_rows(
+        &self,
+        ignore_per_row_errors: bool,
+        early_finite_check: bool,
+    ) -> GeoComputeResult<GeosGeometries> {
         let axes = axes(&self.coords);
         let size_hint = SizeHint {
             coords: self.coords.len(),
             parts: [self.rings.len(), 0],
         };
-        rows_to_geos(&self.rows, size_hint, ignore_per_row_errors, |parts| {
-            polygon_to_geos(&axes, &self.rings, parts)
-        })
+        rows_to_geos(
+            &self.rows,
+            &axes,
+            size_hint,
+            ignore_per_row_errors,
+            early_finite_check,
+            |parts| self.rings.span(parts),
+            |parts| polygon_to_geos(&axes, &self.rings, parts),
+        )
     }
 }
 
@@ -49,15 +59,25 @@ impl ToGeos for ScalarMultiPolygon<'_> {
 }
 
 impl ToGeosRows for MultiPolygonArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
+    fn to_geos_rows(
+        &self,
+        ignore_per_row_errors: bool,
+        early_finite_check: bool,
+    ) -> GeoComputeResult<GeosGeometries> {
         let axes = axes(&self.coords);
         let size_hint = SizeHint {
             coords: self.coords.len(),
             parts: [self.rings.len(), self.polygons.len()],
         };
-        rows_to_geos(&self.rows, size_hint, ignore_per_row_errors, |parts| {
-            multi_polygon_to_geos(&axes, &self.polygons, &self.rings, parts)
-        })
+        rows_to_geos(
+            &self.rows,
+            &axes,
+            size_hint,
+            ignore_per_row_errors,
+            early_finite_check,
+            |parts| self.rings.span(self.polygons.span(parts)),
+            |parts| multi_polygon_to_geos(&axes, &self.polygons, &self.rings, parts),
+        )
     }
 }
 

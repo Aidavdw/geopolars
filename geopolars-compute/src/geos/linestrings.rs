@@ -23,15 +23,25 @@ impl ToGeos for ScalarLineString<'_> {
 }
 
 impl ToGeosRows for LineStringArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
+    fn to_geos_rows(
+        &self,
+        ignore_per_row_errors: bool,
+        early_finite_check: bool,
+    ) -> GeoComputeResult<GeosGeometries> {
         let axes = axes(&self.coords);
         let size_hint = SizeHint {
             coords: self.coords.len(),
             parts: [0, 0],
         };
-        rows_to_geos(&self.rows, size_hint, ignore_per_row_errors, |parts| {
-            line_string_to_geos(&axes, parts)
-        })
+        rows_to_geos(
+            &self.rows,
+            &axes,
+            size_hint,
+            ignore_per_row_errors,
+            early_finite_check,
+            |vertices| vertices,
+            |vertices| line_string_to_geos(&axes, vertices),
+        )
     }
 }
 
@@ -44,15 +54,25 @@ impl ToGeos for ScalarMultiLineString<'_> {
 }
 
 impl ToGeosRows for MultiLineStringArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
+    fn to_geos_rows(
+        &self,
+        ignore_per_row_errors: bool,
+        early_finite_check: bool,
+    ) -> GeoComputeResult<GeosGeometries> {
         let axes = axes(&self.coords);
         let size_hint = SizeHint {
             coords: self.coords.len(),
             parts: [self.lines.len(), 0],
         };
-        rows_to_geos(&self.rows, size_hint, ignore_per_row_errors, |parts| {
-            multi_line_string_to_geos(&axes, &self.lines, parts)
-        })
+        rows_to_geos(
+            &self.rows,
+            &axes,
+            size_hint,
+            ignore_per_row_errors,
+            early_finite_check,
+            |parts| self.lines.span(parts),
+            |parts| multi_line_string_to_geos(&axes, &self.lines, parts),
+        )
     }
 }
 

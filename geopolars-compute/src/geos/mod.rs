@@ -25,7 +25,7 @@ use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
 use polars_arrow::offset::{Offsets, OffsetsBuffer};
 
-use crate::{row_or_missing, GeoComputeResult};
+use crate::{row_or_missing, GeoComputeError, GeoComputeResult};
 
 /// Converts a single geometry into a GEOS geometry.
 /// For an array, see [`ToGeosRows`].
@@ -41,8 +41,13 @@ pub trait ToGeos {
 /// The size hint is the size of the array itself.
 /// If `ignore_per_row_errors=true`, a row GEOS fails to build is missing too;
 /// otherwise its error is returned.
+/// See python for `early_finite_check`
 pub trait ToGeosRows {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries>;
+    fn to_geos_rows(
+        &self,
+        ignore_per_row_errors: bool,
+        early_finite_check: bool,
+    ) -> GeoComputeResult<GeosGeometries>;
 }
 
 fn coord_type(dim: GeoDimension) -> CoordType {
@@ -60,7 +65,7 @@ impl ToGeos for ScalarPoint<'_> {
 
     fn to_geos(&self) -> GeoComputeResult<Option<Geometry>> {
         let dim = self.coords.dim();
-        point_to_geos(
+        point_to_geos::<false>(
             self.coords,
             self.index,
             dim.field_names().len(),
@@ -70,16 +75,15 @@ impl ToGeos for ScalarPoint<'_> {
 }
 
 impl ToGeosRows for PointArray {
-    fn to_geos_rows(&self, ignore_per_row_errors: bool) -> GeoComputeResult<GeosGeometries> {
-        // GEOS has no batch constructor, so only the per-column work is shared.
-        let dim = self.coords.dim();
-        let len = dim.field_names().len();
-        let coord_type = coord_type(dim);
-        let mut geometries = Vec::with_capacity(self.coords.len());
-        for i in 0..self.coords.len() {
-            let point = point_to_geos(&self.coords, i, len, coord_type);
-            geometries.push(row_or_missing(point, ignore_per_row_errors)?.into());
-        }
+    fn to_geos_rows(
+        &self,
+        ignore_per_row_errors: bool,
+        early_finite_check: bool,
+    ) -> GeoComputeResult<GeosGeometries> {
+        let geometries = with_const_flags!(
+            points_to_geos(&self.coords, ignore_per_row_errors);
+            early_finite_check
+        )?;
         Ok(GeosGeometries {
             geometries,
             size_hint: SizeHint {
@@ -90,10 +94,28 @@ impl ToGeosRows for PointArray {
     }
 }
 
+fn points_to_geos<const EARLY_FINITE_CHECK: bool>(
+    coords: &Coords,
+    ignore_per_row_errors: bool,
+) -> GeoComputeResult<Vec<GeosRow>> {
+    // GEOS has no batch constructor, so only the per-column work is shared.
+    let dim = coords.dim();
+    let len = dim.field_names().len();
+    let coord_type = coord_type(dim);
+    let mut geometries = Vec::with_capacity(coords.len());
+    for i in 0..coords.len() {
+        let point = point_to_geos::<EARLY_FINITE_CHECK>(coords, i, len, coord_type);
+        geometries.push(row_or_missing(point, ignore_per_row_errors)?.into());
+    }
+    Ok(geometries)
+}
+
 /// Point `i` of `coords`, which carry `len` axes of `coord_type`.
 /// `None` if it is missing.
+/// If `EARLY_FINITE_CHECK=true`, a NaN or infinite x or y is an error,
+/// unless both are NaN (the empty point).
 #[inline(always)]
-fn point_to_geos(
+fn point_to_geos<const EARLY_FINITE_CHECK: bool>(
     coords: &Coords,
     i: usize,
     len: usize,
@@ -106,6 +128,9 @@ fn point_to_geos(
     if x.is_nan() && y.is_nan() {
         return Ok(Some(Geometry::create_empty_point()?));
     }
+    if EARLY_FINITE_CHECK {
+        xy_is_finite_or_error(&[x], &[y])?;
+    }
     let mut buffer = [0.0; 4];
     for (n, value) in buffer[..len].iter_mut().enumerate() {
         *value = coords.nth(i, n);
@@ -116,15 +141,19 @@ fn point_to_geos(
 
 /// [`ToGeosRows`] for the rows of a list array, whose size is `size_hint`.
 /// `to_geos` builds one geometry from the range of a row's parts.
+/// `span` gives where the coordinates of those parts sit in `axes`.
 fn rows_to_geos(
     rows: &List,
+    axes: &Axes,
     size_hint: SizeHint<2>,
     ignore_per_row_errors: bool,
+    early_finite_check: bool,
+    span: impl Fn(Range<usize>) -> Range<usize>,
     to_geos: impl Fn(Range<usize>) -> GeoComputeResult<Geometry>,
 ) -> GeoComputeResult<GeosGeometries> {
     let geometries = with_const_flags!(
-        rows_to_geos_with(rows, ignore_per_row_errors, to_geos);
-        rows.is_all_valid()
+        rows_to_geos_with(rows, axes, ignore_per_row_errors, span, to_geos);
+        rows.is_all_valid(), early_finite_check
     )?;
     Ok(GeosGeometries {
         geometries,
@@ -134,12 +163,16 @@ fn rows_to_geos(
 
 /// See [`rows_to_geos`].
 /// If `ALL_VALID=true`, no row is checked for being missing first.
+/// `EARLY_FINITE_CHECK` is the `early_finite_check` of [`ToGeosRows`].
 /// Errors are the exception, so `ignore_per_row_errors` is checked per row rather than made const.
-fn rows_to_geos_with<const ALL_VALID: bool>(
+fn rows_to_geos_with<const ALL_VALID: bool, const EARLY_FINITE_CHECK: bool>(
     rows: &List,
+    axes: &Axes,
     ignore_per_row_errors: bool,
+    span: impl Fn(Range<usize>) -> Range<usize>,
     to_geos: impl Fn(Range<usize>) -> GeoComputeResult<Geometry>,
 ) -> GeoComputeResult<Vec<GeosRow>> {
+    let (x, y, _, _) = axes;
     let mut geometries = Vec::with_capacity(rows.len());
     for i in 0..rows.len() {
         // A missing row's offsets point anywhere, so it is not converted.
@@ -151,7 +184,13 @@ fn rows_to_geos_with<const ALL_VALID: bool>(
         geometries.push(if parts.is_empty() {
             GeosRow::Empty
         } else {
-            row_or_missing(to_geos(parts).map(Some), ignore_per_row_errors)?.into()
+            let geometry = if EARLY_FINITE_CHECK {
+                let coords = span(parts.clone());
+                xy_is_finite_or_error(&x[coords.clone()], &y[coords]).and_then(|()| to_geos(parts))
+            } else {
+                to_geos(parts)
+            };
+            row_or_missing(geometry.map(Some), ignore_per_row_errors)?.into()
         });
     }
     Ok(geometries)
@@ -168,6 +207,25 @@ fn axes(coords: &ValidCoords) -> Axes<'_> {
         GeoDimension::XYM => (x, y, None, Some(coords.axis(2))),
         GeoDimension::XYZM => (x, y, Some(coords.axis(2)), Some(coords.axis(3))),
     }
+}
+
+/// An error for the first coordinate with a NaN or infinite `x` or `y`, if there is one.
+/// GEOS takes neither, and has no empty point inside a geometry.
+/// z is not checked: GEOS itself uses a NaN z for a coordinate without one.
+#[inline(always)]
+fn xy_is_finite_or_error(x: &[f64], y: &[f64]) -> GeoComputeResult<()> {
+    // Does not stop at the first that fails, so that it vectorises.
+    let finite = |axis: &[f64]| axis.iter().fold(true, |ok, value| ok & value.is_finite());
+    if finite(x) && finite(y) {
+        return Ok(());
+    }
+    let position = x
+        .iter()
+        .zip(y)
+        .map(|(&x, &y)| (x, y))
+        .find(|(x, y)| !(x.is_finite() && y.is_finite()))
+        .expect("a non-finite coordinate, as the check above failed");
+    Err(GeoComputeError::NotFinite { position })
 }
 
 /// The coordinates at `vertices`, copied from `axes` in one go.

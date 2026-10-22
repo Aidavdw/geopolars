@@ -14,14 +14,16 @@ use crate::GeoComputeResult;
 /// If `preserve_topology=true`, the result never self-intersects.
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
 /// otherwise its error is returned.
+/// See [`ToGeosRows`] for `early_finite_check`.
 pub fn simplify_line_strings(
     array: &LineStringArray,
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
+    early_finite_check: bool,
 ) -> GeoComputeResult<LineStringArray> {
     let geos_geometries = simplify_via_geos(
-        array.to_geos_rows(ignore_per_row_errors)?,
+        array.to_geos_rows(ignore_per_row_errors, early_finite_check)?,
         tolerance,
         preserve_topology,
         ignore_per_row_errors,
@@ -39,14 +41,16 @@ pub fn simplify_line_strings(
 /// If `preserve_topology=true`, the result never self-intersects.
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
 /// otherwise its error is returned.
+/// See [`ToGeosRows`] for `early_finite_check`.
 pub fn simplify_multi_line_strings(
     array: &MultiLineStringArray,
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
+    early_finite_check: bool,
 ) -> GeoComputeResult<MultiLineStringArray> {
     let geos_geometries = simplify_via_geos(
-        array.to_geos_rows(ignore_per_row_errors)?,
+        array.to_geos_rows(ignore_per_row_errors, early_finite_check)?,
         tolerance,
         preserve_topology,
         ignore_per_row_errors,
@@ -70,14 +74,16 @@ pub fn simplify_multi_line_strings(
 ///
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
 /// otherwise its error is returned.
+/// See [`ToGeosRows`] for `early_finite_check`.
 pub fn simplify_polygons(
     array: &PolygonArray,
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
+    early_finite_check: bool,
 ) -> GeoComputeResult<PolygonArray> {
     simplify_via_geos(
-        array.to_geos_rows(ignore_per_row_errors)?,
+        array.to_geos_rows(ignore_per_row_errors, early_finite_check)?,
         tolerance,
         preserve_topology,
         ignore_per_row_errors,
@@ -94,14 +100,16 @@ pub fn simplify_polygons(
 ///
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
 /// otherwise its error is returned.
+/// See [`ToGeosRows`] for `early_finite_check`.
 pub fn simplify_multi_polygons(
     array: &MultiPolygonArray,
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
+    early_finite_check: bool,
 ) -> GeoComputeResult<MultiPolygonArray> {
     let geos_geometries = simplify_via_geos(
-        array.to_geos_rows(ignore_per_row_errors)?,
+        array.to_geos_rows(ignore_per_row_errors, early_finite_check)?,
         tolerance,
         preserve_topology,
         ignore_per_row_errors,

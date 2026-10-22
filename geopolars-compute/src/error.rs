@@ -19,6 +19,8 @@ pub enum GeoComputeError {
     },
     /// A linestring that has to be a ring, but is not one.
     NotARing { vertices: usize },
+    /// A coordinate with a NaN or infinite x or y, which GEOS cannot take.
+    NotFinite { position: (f64, f64) },
     #[cfg(feature = "geos")]
     Geos(geos::Error),
 }
@@ -52,6 +54,11 @@ impl fmt::Display for GeoComputeError {
                 "expects rings (at least {MIN_RING_VERTICES} vertices, the last at the first), \
                 got a linestring of {vertices} vertices that is not one"
             ),
+            Self::NotFinite { position: (x, y) } => write!(
+                f,
+                "GEOS expects finite x and y, got ({x}, {y}). \
+                GEOS does not support empty points inside a geometry"
+            ),
             #[cfg(feature = "geos")]
             Self::Geos(source) => write!(f, "{source}"),
         }
@@ -62,7 +69,7 @@ impl std::error::Error for GeoComputeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Reproject { source, .. } => Some(source),
-            Self::Transformation { .. } | Self::NotARing { .. } => None,
+            Self::Transformation { .. } | Self::NotARing { .. } | Self::NotFinite { .. } => None,
             #[cfg(feature = "geos")]
             Self::Geos(source) => Some(source),
         }

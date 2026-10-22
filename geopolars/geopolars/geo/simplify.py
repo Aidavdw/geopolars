@@ -27,6 +27,7 @@ def simplify(
     *,
     preserve_topology: bool = False,
     ignore_per_row_errors: bool = False,
+    early_finite_check: bool = False,
 ) -> pl.Expr:
     """Every geometry with fewer vertices,
     none of which strays more than `tolerance` from the original.
@@ -73,6 +74,17 @@ def simplify(
     failing the query.
     With `ignore_per_row_errors=True`, it gives a missing geometry instead.
 
+    GEOS supports neither empty points inside a geometry (a vertex with NaN x and y)
+    nor any other NaN or infinite x or y.
+    By default they go to GEOS as they are.
+    With `preserve_topology=True`, GEOS then raises.
+    With `preserve_topology=False`, such a vertex is silently left out,
+    unless it starts a ring, where GEOS raises.
+    With `early_finite_check=True`, a geometry with such a vertex is caught before it reaches GEOS.
+    It then raises, or gives a missing geometry with `ignore_per_row_errors=True`.
+    This only adds a short path.
+    It pays off when you expect many non-finite coordinates in your data.
+
     ```python
     df.select(geo.simplify("parcel", 0.5))
     ```
@@ -92,6 +104,7 @@ def simplify(
                 "tolerance": float(tolerance),
                 "preserve_topology": preserve_topology,
                 "ignore_per_row_errors": ignore_per_row_errors,
+                "early_finite_check": early_finite_check,
             },
             is_elementwise=True,
         )

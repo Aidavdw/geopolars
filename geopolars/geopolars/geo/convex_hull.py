@@ -39,6 +39,7 @@ def convex_hull(
     *,
     ignore_per_row_errors: bool = False,
     ccw_outer: bool = False,
+    early_finite_check: bool = False,
 ) -> pl.Expr:
     """The smallest convex polygon that contains every vertex of a linestring or polygon,
     with its CRS.
@@ -70,6 +71,16 @@ def convex_hull(
     A geometry GEOS fails on raises GEOS's error, failing the query.
     With `ignore_per_row_errors=True`, it gives a missing polygon instead.
 
+    GEOS supports neither empty points inside a geometry (a vertex with NaN x and y)
+    nor any other NaN or infinite x or y.
+    By default they go to GEOS as they are.
+    Depending on where such a vertex sits, it is left out of the hull,
+    the polygon is missing, or GEOS raises.
+    With `early_finite_check=True`, a geometry with such a vertex is caught before it reaches GEOS.
+    It then raises, or gives a missing polygon with `ignore_per_row_errors=True`.
+    This only adds a short path.
+    It pays off when you expect many non-finite coordinates in your data.
+
     The exterior runs as GEOS gives it, clockwise.
     With `ccw_outer=True`, it runs counter-clockwise instead at a minimal performance cost.
 
@@ -92,6 +103,7 @@ def convex_hull(
             kwargs={
                 "ignore_per_row_errors": ignore_per_row_errors,
                 "ccw_outer": ccw_outer,
+                "early_finite_check": early_finite_check,
             },
             is_elementwise=True,
         )

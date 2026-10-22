@@ -53,6 +53,7 @@ pub struct SimplifyKwargs {
     tolerance: f64,
     preserve_topology: bool,
     ignore_per_row_errors: bool,
+    early_finite_check: bool,
 }
 
 /// One chunk of `kind` geometries, simplified.
@@ -66,6 +67,7 @@ fn chunk_simplified(
         tolerance,
         preserve_topology,
         ignore_per_row_errors,
+        early_finite_check,
     } = *kwargs;
     match kind {
         Kind::LineString => simplify_line_strings(
@@ -73,6 +75,7 @@ fn chunk_simplified(
             tolerance,
             preserve_topology,
             ignore_per_row_errors,
+            early_finite_check,
         )
         .map(LineStringArray::into_list_array),
         Kind::MultiLineString => simplify_multi_line_strings(
@@ -80,6 +83,7 @@ fn chunk_simplified(
             tolerance,
             preserve_topology,
             ignore_per_row_errors,
+            early_finite_check,
         )
         .map(MultiLineStringArray::into_list_array),
         Kind::Polygon => simplify_polygons(
@@ -87,6 +91,7 @@ fn chunk_simplified(
             tolerance,
             preserve_topology,
             ignore_per_row_errors,
+            early_finite_check,
         )
         .map(PolygonArray::into_list_array),
         Kind::MultiPolygon => simplify_multi_polygons(
@@ -94,6 +99,7 @@ fn chunk_simplified(
             tolerance,
             preserve_topology,
             ignore_per_row_errors,
+            early_finite_check,
         )
         .map(MultiPolygonArray::into_list_array),
         Kind::Point | Kind::MultiPoint => return Err(already_simple(dtype)),

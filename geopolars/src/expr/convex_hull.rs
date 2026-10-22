@@ -59,6 +59,7 @@ fn kernel_output_type_convex_hull(input_fields: &[Field]) -> PolarsResult<Field>
 pub struct ConvexHullKwargs {
     ignore_per_row_errors: bool,
     ccw_outer: bool,
+    early_finite_check: bool,
 }
 
 /// The convex hulls of one chunk of `kind` geometries, as polygons.
@@ -68,23 +69,39 @@ fn chunk_hulls(
     dtype: &DataType,
     kwargs: &ConvexHullKwargs,
 ) -> PolarsResult<ListArray<i64>> {
-    let (ignore_errors, ccw_outer) = (kwargs.ignore_per_row_errors, kwargs.ccw_outer);
+    let (ignore_errors, ccw_outer, early) = (
+        kwargs.ignore_per_row_errors,
+        kwargs.ccw_outer,
+        kwargs.early_finite_check,
+    );
     match kind {
-        Kind::LineString => {
-            line_string_convex_hulls(&LineStringArray::new(rows)?, ignore_errors, ccw_outer)
-        }
-        Kind::MultiPoint => {
-            multi_point_convex_hulls(&MultiPointArray::new(rows)?, ignore_errors, ccw_outer)
-        }
+        Kind::LineString => line_string_convex_hulls(
+            &LineStringArray::new(rows)?,
+            ignore_errors,
+            ccw_outer,
+            early,
+        ),
+        Kind::MultiPoint => multi_point_convex_hulls(
+            &MultiPointArray::new(rows)?,
+            ignore_errors,
+            ccw_outer,
+            early,
+        ),
         Kind::MultiLineString => multi_line_string_convex_hulls(
             &MultiLineStringArray::new(rows)?,
             ignore_errors,
             ccw_outer,
+            early,
         ),
-        Kind::Polygon => polygon_convex_hulls(&PolygonArray::new(rows)?, ignore_errors, ccw_outer),
-        Kind::MultiPolygon => {
-            multi_polygon_convex_hulls(&MultiPolygonArray::new(rows)?, ignore_errors, ccw_outer)
+        Kind::Polygon => {
+            polygon_convex_hulls(&PolygonArray::new(rows)?, ignore_errors, ccw_outer, early)
         }
+        Kind::MultiPolygon => multi_polygon_convex_hulls(
+            &MultiPolygonArray::new(rows)?,
+            ignore_errors,
+            ccw_outer,
+            early,
+        ),
         Kind::Point => return Err(encloses_nothing(dtype)),
     }
     .map(PolygonArray::into_list_array)
