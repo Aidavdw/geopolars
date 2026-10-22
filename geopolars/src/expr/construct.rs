@@ -3,18 +3,24 @@
 use std::sync::Arc;
 
 use polars::prelude::*;
-use polars_arrow::array::{Array, ListArray};
-use polars_arrow::bitmap::Bitmap;
+use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
+use super::coords::trimmed;
 use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
+use geopolars_compute::inner_nulls::{
+    propagate_inner_nulls_of_line_strings, propagate_inner_nulls_of_multi_line_strings,
+    propagate_inner_nulls_of_multi_points, propagate_inner_nulls_of_multi_polygons,
+    propagate_inner_nulls_of_polygons,
+};
 use geopolars_compute::native::close_open_rings;
+use geopolars_compute::validity_checking::{
+    multi_polygons_are_valid, polygons_are_valid, ValidityChecks,
+};
 use geopolars_compute::with_const_flags;
-use geopolars_core::{downcast, is_ring, LineStringArray, ValidCoords, ValidList};
-
-// TODO: Move this to geopolars_compute
+use geopolars_core::{UncheckedStorage, ValidCoords, ValidList};
 
 /// The keyword arguments of the constructors that build polygons:
 /// [`MetadataKwargs`], plus whether to close open rings.
@@ -154,123 +160,80 @@ fn kernel_output_type_multipolygon(
     )
 }
 
-/// Elementwise check:
-/// is this geometry there in full, down to the last coordinate?
-///
-/// A part that is missing anywhere below the outermost level
-/// (e.g. a vertex of a linestring, a ring of a polygon, a vertex of one of those rings)
-/// counts as missing here rather than as null,
-/// because the geometry around it cannot stand without it.
-fn complete(values: &Series, nesting: u8) -> PolarsResult<BooleanChunked> {
-    if nesting == 0 {
-        let coords = values.struct_()?;
-        return Ok(coords
-            .fields_as_series()
-            .iter()
-            .fold(values.is_not_null(), |present, coord| {
-                present & coord.is_not_null()
-            }));
-    }
-
-    let parts = values.list()?;
-    let inner = complete(&parts.get_inner(), nesting - 1)?;
-    // Borrow the offsets to ask the same question one level further out.
-    parts
-        .with_inner_values(&inner.into_series())
-        .amortized_iter()
-        .map(|part| match part {
-            // At the outermost level this says "incomplete" of a row that is
-            // already null, which nulling it again leaves alone.
-            None => Ok(false),
-            Some(part) => Ok(part.as_ref().bool()?.all()),
-        })
-        .collect()
-}
-
-/// Null out every geometry that is missing a part, or a coordinate of one.
-///
-/// This enforces that GeoArrow allows nulls only at the outermost level.
-fn only_complete(parts: Series, nesting: u8) -> PolarsResult<Series> {
-    // `complete` reads every level through `get_inner`, which is the values array whole:
-    // on a slice (such as a streaming morsel) that is every part of the column it came from.
-    let parts = parts.trim_lists_to_normalized_offsets().unwrap_or(parts);
-    let complete = complete(&parts, nesting)?;
-    if complete.all() {
-        return Ok(parts);
-    }
-
-    let missing = Series::full_null(parts.name().clone(), parts.len(), parts.dtype());
-    parts.zip_with(&complete, &missing)
-}
-
-/// The validity of `lists`, also missing where any of its parts is not `ok`.
-/// `None` if none are missing.
-fn with_parts(lists: &ListArray<i64>, ok: impl Fn(usize) -> bool) -> Option<Bitmap> {
-    let valid = Bitmap::from_iter((0..lists.len()).map(|i| {
-        let (start, end) = lists.offsets().start_end(i);
-        lists.is_valid(i) && (start..end).all(&ok)
-    }));
-    (valid.unset_bits() > 0).then_some(valid)
-}
+/// Only the shape checks, which every polygon has to pass: all rings empty, or all of them rings.
+const SHAPE_ONLY: ValidityChecks = ValidityChecks {
+    bounds: None,
+    check_finite_coordinates: false,
+    check_line_string_zero_length_sections: false,
+    check_ring_self_intersect: false,
+    check_polygon_self_overlap: false,
+    check_multi_polygon_self_overlap: false,
+};
 
 /// See [`close_open_rings`].
-fn close_rings(rings: &ListArray<i64>) -> PolarsResult<Option<ListArray<i64>>> {
-    let coords = ValidCoords::new(rings.values().as_ref())?;
+/// The rings and their coordinates, or `None` if every ring was closed already.
+fn close_rings(rings: &ValidList, coords: &ValidCoords) -> Option<(ValidList, ValidCoords)> {
     let z = coords.dim().has_z();
-    let rings = ValidList::new(rings);
-    let closed = with_const_flags!(close_open_rings(&rings, &coords); z);
-    Ok(closed.map(LineStringArray::into_list_array))
+    let closed = with_const_flags!(close_open_rings(rings, coords); z)?;
+    Some((closed.rows.ignoring_validity().clone(), closed.coords))
 }
 
-/// `polygons`, missing where one of their rings is not a ring (see [`is_ring`]).
-/// With `close`, the open rings are closed first.
-fn ringed_polygons(polygons: &ListArray<i64>, close: bool) -> PolarsResult<ListArray<i64>> {
-    let rings = downcast::<ListArray<i64>>(polygons.values().as_ref(), "a list of rings")?;
-    let closed = if close { close_rings(rings)? } else { None };
-    let rings = closed.as_ref().unwrap_or(rings);
-    let coords = ValidCoords::new(rings.values().as_ref())?;
-    let z = coords.dim().has_z();
-    let valid = with_parts(polygons, |ring| {
-        let (start, end) = rings.offsets().start_end(ring);
-        with_const_flags!(is_ring(&coords, start..end); z)
-    });
-    Ok(ListArray::<i64>::new(
-        polygons.dtype().clone(),
-        polygons.offsets().clone(),
-        rings.clone().boxed(),
-        valid,
-    ))
+/// One chunk of the storage of a `kind`, with every missing value below a row moved out to it.
+/// A polygon is also missing where its shape is not valid (see [SHAPE_ONLY]).
+/// If `close=true`, the open rings of a polygon are closed first.
+fn validated_chunk(chunk: &dyn Array, kind: Kind, close: bool) -> PolarsResult<Box<dyn Array>> {
+    let storage = UncheckedStorage::new(chunk)?;
+    Ok(match kind {
+        Kind::Point => unreachable!("constructors always gather into lists"),
+        Kind::LineString => propagate_inner_nulls_of_line_strings(storage)
+            .into_list_array()
+            .boxed(),
+        Kind::MultiPoint => propagate_inner_nulls_of_multi_points(storage)
+            .into_list_array()
+            .boxed(),
+        Kind::MultiLineString => propagate_inner_nulls_of_multi_line_strings(storage)
+            .into_list_array()
+            .boxed(),
+        Kind::Polygon => {
+            let mut array = propagate_inner_nulls_of_polygons(storage);
+            if let Some((rings, coords)) = close
+                .then(|| close_rings(&array.rings, &array.coords))
+                .flatten()
+            {
+                (array.rings, array.coords) = (rings, coords);
+            }
+            // A missing row is `false` in the values too.
+            let valid = polygons_are_valid(&array, &SHAPE_ONLY).values().clone();
+            array.rows = array.rows.with_validity(Some(valid));
+            array.into_list_array().boxed()
+        }
+        Kind::MultiPolygon => {
+            let mut array = propagate_inner_nulls_of_multi_polygons(storage);
+            if let Some((rings, coords)) = close
+                .then(|| close_rings(&array.rings, &array.coords))
+                .flatten()
+            {
+                (array.rings, array.coords) = (rings, coords);
+            }
+            // A missing row is `false` in the values too.
+            let valid = multi_polygons_are_valid(&array, &SHAPE_ONLY)
+                .values()
+                .clone();
+            array.rows = array.rows.with_validity(Some(valid));
+            array.into_list_array().boxed()
+        }
+    })
 }
 
-/// Null out every polygon with a ring that is not a ring (see [`is_ring`]),
-/// and every multipolygon with such a polygon (leaving the polygon itself in place).
-/// With `close`, an open ring is closed first by repeating its first vertex at its end.
-/// Other kinds come back as they are.
-fn only_rings(storage: Series, kind: Kind, close: bool) -> PolarsResult<Series> {
-    let multi = match kind {
-        Kind::Polygon => false,
-        Kind::MultiPolygon => true,
-        Kind::Point | Kind::LineString | Kind::MultiPoint | Kind::MultiLineString => {
-            return Ok(storage)
-        }
-    };
-    let chunks = storage.list()?.downcast_iter().map(|chunk| {
-        if !multi {
-            return Ok(ringed_polygons(chunk, close)?.boxed());
-        }
-        let polygons = downcast::<ListArray<i64>>(chunk.values().as_ref(), "a list of polygons")?;
-        let polygons = ringed_polygons(polygons, close)?;
-        let valid = with_parts(chunk, |polygon| polygons.is_valid(polygon));
-        Ok(ListArray::<i64>::new(
-            chunk.dtype().clone(),
-            chunk.offsets().clone(),
-            polygons.with_validity(None).boxed(),
-            valid,
-        )
-        .boxed())
-    });
-    let chunks = chunks.collect::<PolarsResult<Vec<_>>>()?;
-    // SAFETY: only validity and ring lengths change, so every chunk is still the storage.
+/// [validated_chunk] for every chunk of `storage`.
+fn validated(storage: Series, kind: Kind, close: bool) -> PolarsResult<Series> {
+    let storage = trimmed(&storage);
+    let chunks = storage
+        .chunks()
+        .iter()
+        .map(|chunk| validated_chunk(chunk.as_ref(), kind, close))
+        .collect::<PolarsResult<Vec<_>>>()?;
+    // SAFETY: the kind and dimension stay the same, so every chunk is still the storage.
     Ok(unsafe {
         Series::from_chunks_and_dtype_unchecked(storage.name().clone(), chunks, storage.dtype())
     })
@@ -294,8 +257,7 @@ fn gather(
         })
     })?;
 
-    let storage = only_complete(storage.into_series(), kind.nesting())?;
-    Ok(only_rings(storage, kind, close)?.into_extension(geo.instance()))
+    Ok(validated(storage.into_series(), kind, close)?.into_extension(geo.instance()))
 }
 
 /// See `linestring_from_vertices`.
@@ -492,8 +454,7 @@ fn zip(
     }
 
     let storage = interleave(&columns, kind.nesting())?;
-    let storage = only_complete(storage, kind.nesting())?;
-    Ok(only_rings(storage, kind, close)?.into_extension(geo.instance()))
+    Ok(validated(storage, kind, close)?.into_extension(geo.instance()))
 }
 
 /// See `linestring_from_columns`.
@@ -524,25 +485,4 @@ fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsRe
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipolygon_coords)]
 fn multipolygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs.metadata(), kwargs.close, Kind::MultiPolygon)
-}
-
-#[cfg(test)]
-mod tests {
-    //! What the Python suite cannot see: how much of the column a slice drags along.
-
-    use super::*;
-    use crate::expr::coords::tests::{coords, lists};
-
-    #[test]
-    fn a_slice_of_polygons_keeps_only_its_own_coordinates() {
-        // Three polygons of two rings each, of 2 + 3, 4 + 5 and 6 + 7 coordinates.
-        let polygons = lists(lists(coords(27), &[2, 3, 4, 5, 6, 7]), &[2, 2, 2]);
-        let middle = polygons.slice(1, 1);
-
-        let out = only_complete(middle.clone(), 2).unwrap();
-
-        assert_eq!(out, middle);
-        let rings = out.list().unwrap().get_inner();
-        assert_eq!(rings.list().unwrap().get_inner().len(), 9);
-    }
 }

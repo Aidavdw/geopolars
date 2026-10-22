@@ -401,6 +401,7 @@ def polygon_from_rings(
     Every ring has to be a ring (see [`is_ring`][geopolars.geo.is_ring]):
     at least 4 vertices, the last one repeating the first.
     A polygon with a ring that is not one is missing in the result.
+    The exception is a polygon whose rings are all empty, which is the empty polygon.
     With `close=True`, an open ring is first closed by repeating its first vertex
     at its end. A ring that is still too short after that stays refused.
 

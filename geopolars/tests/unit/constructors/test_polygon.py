@@ -354,9 +354,10 @@ def test_close_leaves_a_ring_that_is_almost_closed_alone() -> None:
 
 
 def test_close_cannot_save_a_ring_that_is_too_short() -> None:
+    """A polygon of only an empty ring is the empty polygon, so it is kept."""
     out = _from_rings([_ring_xy((0, 0), (1, 0))], [[]], close=True)
 
-    assert out.is_null().to_list() == [True, True]
+    assert out.is_null().to_list() == [True, False]
 
 
 def test_close_on_a_sliced_column() -> None:

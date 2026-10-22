@@ -20,35 +20,3 @@ pub fn trimmed(storage: &Series) -> Series {
         .trim_lists_to_normalized_offsets()
         .unwrap_or_else(|| storage.clone())
 }
-
-#[cfg(test)]
-pub(crate) mod tests {
-    //! Helpers to build storage, for the tests of other expressions.
-
-    use super::*;
-
-    pub(crate) fn coords(n: usize) -> Series {
-        let x = Series::new("x".into(), vec![1.0; n]);
-        let y = Series::new("y".into(), vec![2.0; n]);
-        StructChunked::from_series("".into(), n, [x, y].iter())
-            .unwrap()
-            .into_series()
-    }
-
-    /// Each of `lengths` as one list over consecutive values of `inner`.
-    pub(crate) fn lists(inner: Series, lengths: &[i64]) -> Series {
-        let offsets = std::iter::once(0)
-            .chain(lengths.iter().scan(0, |end, len| {
-                *end += len;
-                Some(*end)
-            }))
-            .collect::<Vec<i64>>();
-        let arr = LargeListArray::new(
-            LargeListArray::default_datatype(inner.dtype().to_arrow(CompatLevel::newest())),
-            offsets.try_into().unwrap(),
-            inner.rechunk().chunks()[0].clone(),
-            None,
-        );
-        Series::from_arrow("".into(), arr.boxed()).unwrap()
-    }
-}

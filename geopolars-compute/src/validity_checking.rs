@@ -5,6 +5,11 @@
 //!
 //! Each gives a `bool` per row, `false` for a missing row.
 
+// TODO: geoarrow accepts 1-vertex linestrings.
+// We should have a function to cull them though probably.
+
+// TODO: Add a function to remove empty geometries. Add this to the repair function?
+
 use geopolars_core::{
     LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PointArray,
     PolygonArray,
