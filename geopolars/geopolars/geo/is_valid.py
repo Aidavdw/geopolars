@@ -1,15 +1,13 @@
 """Whether a geometry is valid, and nulling out the ones that are not.
 
-A native kernel (A-tier) checks every coordinate and part in place.
-A polygon's rings, and a multipolygon's parts,
-are related to each other through rsgeo's `Relate` (B-tier).
+A native kernel (A-tier) checks every coordinate first, then every row's shape.
 The CRS bounds are looked up once, while the plan is built.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from polars.plugins import register_plugin_function
 
@@ -22,30 +20,46 @@ if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
 
+CrsBounds = Literal[
+    "off",
+    "crs",
+    "crs_wrapped_longitude",
+    "area_of_use",
+    "area_of_use_wrapped_longitude",
+]
+
+# What each `crs_bounds` asks of `_crs_bounds`, as
+# `(allow_wrapped_longitude, within_area_of_use)`. `None` asks nothing.
+_CRS_BOUNDS: dict[str, tuple[bool, bool] | None] = {
+    "off": None,
+    "crs": (False, False),
+    "crs_wrapped_longitude": (True, False),
+    "area_of_use": (False, True),
+    "area_of_use_wrapped_longitude": (True, True),
+}
+
 
 def _kernel(
     function_name: str,
     *,
-    allow_wrapped_longitude: bool,
-    within_area_of_use: bool,
+    crs_bounds: CrsBounds,
     check_missing_coordinates: bool,
     check_finite_coordinates: bool,
-    check_crs_bounds: bool,
-    check_line_string_zero_length_sections: bool,
-    check_ring_self_intersect: bool,
-    check_polygon_self_overlap: bool,
-    check_multi_polygon_self_overlap: bool,
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
+    if crs_bounds not in _CRS_BOUNDS:
+        msg = f"`crs_bounds` must be one of {list(_CRS_BOUNDS)}, got {crs_bounds!r}"
+        raise ValueError(msg)
+    asked = _CRS_BOUNDS[crs_bounds]
+
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-        # The bounds are only for the bounds check, so PROJ is not asked without it.
-        bounds = (
-            geometry._crs_bounds(
+        # PROJ is only asked when there are bounds to check.
+        bounds = None
+        if asked is not None:
+            allow_wrapped_longitude, within_area_of_use = asked
+            bounds = geometry._crs_bounds(
                 allow_wrapped_longitude=allow_wrapped_longitude,
                 within_area_of_use=within_area_of_use,
             )
-            if check_crs_bounds
-            else None
-        )
         return register_plugin_function(
             plugin_path=LIB,
             args=[column],
@@ -55,12 +69,6 @@ def _kernel(
                 "bounds": bounds,
                 "check_missing_coordinates": check_missing_coordinates,
                 "check_finite_coordinates": check_finite_coordinates,
-                "check_line_string_zero_length_sections": (
-                    check_line_string_zero_length_sections
-                ),
-                "check_ring_self_intersect": check_ring_self_intersect,
-                "check_polygon_self_overlap": check_polygon_self_overlap,
-                "check_multi_polygon_self_overlap": check_multi_polygon_self_overlap,
             },
         )
 
@@ -70,90 +78,66 @@ def _kernel(
 def is_valid(
     geometry: IntoExprColumn,
     *,
-    allow_wrapped_longitude: bool = True,
-    within_area_of_use: bool = False,
+    crs_bounds: CrsBounds = "crs_wrapped_longitude",
     check_missing_coordinates: bool = True,
     check_finite_coordinates: bool = True,
-    check_crs_bounds: bool = True,
-    check_line_string_zero_length_sections: bool = True,
-    check_ring_self_intersect: bool = True,
-    check_polygon_self_overlap: bool = True,
-    check_multi_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
     """Whether each geometry is valid: one `bool` per row, a multi-geometry included.
     A missing geometry gives a missing result.
+
+    Valid means it follows the GeoArrow spec, plus a few rules of ours on top of it.
+    A valid geometry is safe to hand to every other operation.
+    For geometries that are valid, but not useful (repeated points, empty,
+    or rings that cross), see `is_degenerate`.
 
     Every coordinate has to be:
 
     - there, with every axis: GeoArrow allows nulls only at the outermost level
       (<https://geoarrow.org/format.html#missing-values-null>);
-    - finite on every axis (x, y, z and m): no NaN, no infinity;
-    - inside the CRS's bounds, if it has any (see below).
+    - finite on every axis (x, y, z and m): no NaN, no infinity.
+      The exception is the empty point, which is NaN in x and y. It may stand anywhere, also as a vertex;
+    - inside the CRS's bounds, if it has any (see `crs_bounds` below).
+      The empty point is exempt.
 
     On top of that, per geometry:
 
-    | geometry          | valid when                                                       |
-    |-------------------|------------------------------------------------------------------|
-    | point             | a valid coordinate, or NaN on every axis (the empty point)       |
-    | linestring        | no vertices, or at least 2; no two in a row at the same place    |
-    | polygon           | no missing rings; all empty, or valid rings that fit (see below) |
-    | multi-geometries  | no missing parts, and every part valid as the geometry above     |
-    | multipolygon      | also, its parts fit together (see below)                         |
+    | geometry          | valid when                                                     |
+    |-------------------|----------------------------------------------------------------|
+    | point             | a valid coordinate                                             |
+    | linestring        | no vertices, or at least 2                                     |
+    | polygon           | all rings empty, or all of them rings                          |
+    | multi-geometries  | every part valid as the geometry above                         |
 
-    A ring is a valid linestring that is also a ring (see `is_ring`):
-    at least 4 vertices, the last at the same place as the first.
-    "At the same place" is within the default margin of `pl.Expr.is_close`, in x, y and z.
+    The GeoArrow spec only requires a ring to be closed.
+    On top of that, a ring needs at least 4 vertices
+    (see `is_ring`), and the last has to lie at the same place as the first:
+    within the default margin of `pl.Expr.is_close`, in x, y and z.
+    A linestring of 1 vertex, and a polygon with an empty exterior around a hole, are invalid too.
 
-    A polygon's rings also have to fit together, in x and y:
+    `crs_bounds` says which bounds the coordinates have to lie in.
+    They only apply to a column that declares a CRS PROJ can read.
+    An opaque SRID is skipped, unless an area of use is asked for, which then raises.
 
-    - no ring crosses or touches itself (see `self_intersects`);
-    - every hole lies inside the exterior;
-    - no two holes share any area, nor does one lie inside another;
-    - rings may touch each other only at points, never along a line.
-      Whether the interior stays in one piece is not checked.
-
-    A multipolygon's parts also have to fit together, in x and y:
-    no two parts share any area (one may lie inside a hole of another),
-    and they may touch each other only at points, never along a line.
-
-    A linestring may still cross itself.
-
-    CRS bounds only apply to a column that declares a CRS PROJ can read.
-    An opaque SRID is skipped, unless `within_area_of_use` is asked for, which then raises.
-
-    - In a geographic CRS, latitude has to lie within a quarter turn of the equator
+    - `"off"` does not check bounds, and does not ask PROJ for any.
+    - `"crs"`: in a geographic CRS, latitude has to lie within a quarter turn of the equator
       (±90 for degrees), and longitude within half a turn of the prime meridian (±180).
-      `allow_wrapped_longitude` lets longitude run up to a full turn east (360),
+      A projected CRS has no bounds of its own.
+    - `"crs_wrapped_longitude"`, the default: as `"crs"`, but longitude may run up to a full turn east (360),
       so that data in the 0 to 360 convention is valid as well.
-    - `within_area_of_use` also requires `x` and `y` to lie inside the area
+    - `"area_of_use"`: as `"crs"`, and `x` and `y` also have to lie inside the area
       PROJ says the CRS is meant for (UTM zone 31N covers 0 to 6 degrees east, for one).
-      Data just past it is common and often fine, so this is off by default.
+      Data just past it is common and often fine.
+    - `"area_of_use_wrapped_longitude"`: as `"area_of_use"`, with longitude as in `"crs_wrapped_longitude"`.
 
-    Parts of the check can be individually turned off.
+    The other checks can be individually turned off.
     This can be used to reduce computation time when you know for sure that
-    your data is valid in some way.
-    The other shape rules in the table (vertex counts, closed rings) always apply.
+    your data is valid in some way. The shape rules in the table always apply.
 
     - `check_missing_coordinates=False` skips looking for missing values below the row,
       and trusts the column to hold to GeoArrow's rule on them.
       A missing coordinate is then read as whatever values lie under it.
       Do not use this unless you know for sure the inner data is valid!
     - `check_finite_coordinates=False` lets coordinates use NaN (partial missing) or infinite.
-    - `check_crs_bounds=False` means it is not checked if the coordinates are
-      within the range of validity of the CRS. If this flag is set,
-      `allow_wrapped_longitude` and `within_area_of_use` do nothing.
-    - `check_line_string_zero_length_sections=False` lets two vertices in a row
-      lie at the same place, in a linestring as well as in a ring.
-    - `check_ring_self_intersect=False` skips checking for a polygon's ring crossing itself.
-    - `check_polygon_self_overlap=False` drops the rules on how the rings sit together
-      (inside the exterior, not overlapping, touching only at points).
-      This has the biggest performance impact out of all of the checks for polygons.
-    - `check_multi_polygon_self_overlap=False` drops the rules on how a multipolygon's
-      parts sit together (not overlapping, touching only at points).
-      This compares every pair of parts, so its cost grows quickly with their number.
-
-    How a polygon's rings cross or fit is only known for finite coordinates,
-    so every axis is checked to be finite while any of the last three checks is on.
 
     ```python
     df.filter(geo.is_valid("parcel"))
@@ -163,15 +147,9 @@ def is_valid(
         geometry,
         _kernel(
             "is_valid",
-            allow_wrapped_longitude=allow_wrapped_longitude,
-            within_area_of_use=within_area_of_use,
+            crs_bounds=crs_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_finite_coordinates=check_finite_coordinates,
-            check_crs_bounds=check_crs_bounds,
-            check_line_string_zero_length_sections=check_line_string_zero_length_sections,
-            check_ring_self_intersect=check_ring_self_intersect,
-            check_polygon_self_overlap=check_polygon_self_overlap,
-            check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         ),
     )
 
@@ -179,15 +157,9 @@ def is_valid(
 def null_out_invalid(
     geometry: IntoExprColumn,
     *,
-    allow_wrapped_longitude: bool = True,
-    within_area_of_use: bool = False,
+    crs_bounds: CrsBounds = "crs_wrapped_longitude",
     check_missing_coordinates: bool = True,
     check_finite_coordinates: bool = True,
-    check_crs_bounds: bool = True,
-    check_line_string_zero_length_sections: bool = True,
-    check_ring_self_intersect: bool = True,
-    check_polygon_self_overlap: bool = True,
-    check_multi_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
     """Null out every geometry that `is_valid` rejects, keeping the rest as they are.
     The arguments are those of `is_valid`.
@@ -206,14 +178,8 @@ def null_out_invalid(
         geometry,
         _kernel(
             "null_out_invalid",
-            allow_wrapped_longitude=allow_wrapped_longitude,
-            within_area_of_use=within_area_of_use,
+            crs_bounds=crs_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_finite_coordinates=check_finite_coordinates,
-            check_crs_bounds=check_crs_bounds,
-            check_line_string_zero_length_sections=check_line_string_zero_length_sections,
-            check_ring_self_intersect=check_ring_self_intersect,
-            check_polygon_self_overlap=check_polygon_self_overlap,
-            check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         ),
     )

@@ -25,8 +25,10 @@ the comment says when one without a CRS takes a different tier.
 | `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes fwd `rings_overlap` | - | | B | LPP | B | LPP |
 | `rings_overlap` | - | | B | hacked as polygon's RGR | - | | - | | - | | - | |
 | `is_ccw` | - | | A | CCW | A | | - | | A | every part combined | A | every part combined |
-| `is_valid` | A | bounds from PROJ (plan-time) | A | | A/B | rings via rsgeo relate | A | EP | A | EP | A/B | EP and RGR |
+| `is_valid` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
+| `is_degenerate` | A | | A | | A/B | RGR | A | | A | EP | A/B | EP and RGR |
+| `null_out_degenerate` | A | nulls what `is_degenerate` finds | A | | A/B | | A | | A | | A/B | |
 | `distance` | A/B | [^2] | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |

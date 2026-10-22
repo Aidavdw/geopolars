@@ -1,10 +1,10 @@
-//! Topology checks used in `is_valid`, as predicates on one polygon or multipolygon.
+//! Topology checks used in `is_degenerate`, as predicates on one polygon or multipolygon.
 //! Answers how the rings of a polygon, and the parts of a multipolygon, fit together in x and y.
-//! See `is_valid` in Python for the rules.
+//! See `is_degenerate` in Python for the rules.
 //!
-//! Every polygon is assumed to have a valid shape already (all rings empty, or all of them rings),
-//! and to be finite in x and y.
-//! [crate::validity_checking] checks both before calling these.
+//! Every polygon is assumed to have a valid shape already (all rings empty, or all of them rings).
+//! The typed views of [crate::degeneracy] stand for that.
+//! Rings have to be finite in x and y to be related, so that is checked here first.
 
 use ::rsgeo::coordinate_position::CoordPos;
 use ::rsgeo::dimensions::Dimensions;
@@ -14,7 +14,7 @@ use geopolars_core::{ScalarLineString, ScalarMultiPolygon, ScalarPolygon};
 
 use super::rings_overlap::overlap;
 use super::self_intersects::finite_line_self_intersects;
-use super::to_rsgeo_ring;
+use super::{to_rsgeo_ring, xy_is_finite};
 
 fn touch_only_at_points(matrix: &IntersectionMatrix) -> bool {
     matrix.get(CoordPos::OnBoundary, CoordPos::OnBoundary) != Dimensions::OneDimensional
@@ -52,26 +52,48 @@ fn parts_do_not_overlap(parts: &[Polygon<f64>]) -> bool {
     })
 }
 
-/// The topology checks to run. See `is_valid` in Python.
+/// The topology checks to run on a polygon. See `is_degenerate` in Python.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct TopologyChecks {
+pub struct PolygonTopologyChecks {
     pub check_ring_self_intersect: bool,
     pub check_polygon_self_overlap: bool,
-    /// Only read for multipolygons.
+}
+
+impl PolygonTopologyChecks {
+    pub fn checks_anything(&self) -> bool {
+        self.check_ring_self_intersect || self.check_polygon_self_overlap
+    }
+}
+
+/// The topology checks to run on a multipolygon. See `is_degenerate` in Python.
+#[derive(Debug, Clone, Copy)]
+pub struct MultiPolygonTopologyChecks {
+    /// What every part is checked for.
+    pub polygons: PolygonTopologyChecks,
     pub check_multi_polygon_self_overlap: bool,
 }
 
+impl MultiPolygonTopologyChecks {
+    pub fn checks_anything(&self) -> bool {
+        self.polygons.checks_anything() || self.check_multi_polygon_self_overlap
+    }
+}
+
 /// Whether `ring` does not cross itself, if `check_ring_self_intersect=true`.
-fn ring_passes_self_intersect_check(ring: &ScalarLineString, checks: &TopologyChecks) -> bool {
+fn ring_passes_self_intersect_check(
+    ring: &ScalarLineString,
+    checks: &PolygonTopologyChecks,
+) -> bool {
     !(checks.check_ring_self_intersect && finite_line_self_intersects(ring))
 }
 
 /// Runs the polygon checks of `checks` on `polygon`.
 /// If `keep=true`, its rings are returned as one rsgeo polygon to relate further.
-/// `Err(())` if a check fails, `Ok(None)` for the empty polygon (or without `keep`).
+/// `Err(())` if a check fails or a ring is not finite in x and y,
+/// `Ok(None)` for the empty polygon (or without `keep`).
 fn check_polygon_topology(
     polygon: &ScalarPolygon,
-    checks: &TopologyChecks,
+    checks: &PolygonTopologyChecks,
     keep: bool,
 ) -> Result<Option<Polygon<f64>>, ()> {
     // A valid shape has either every ring empty, or none.
@@ -81,6 +103,9 @@ fn check_polygon_topology(
         .is_none_or(|exterior| exterior.vertices.is_empty())
     {
         return Ok(None);
+    }
+    if !polygon.rings().all(|ring| xy_is_finite(&ring)) {
+        return Err(());
     }
     if !polygon
         .rings()
@@ -107,7 +132,10 @@ fn check_polygon_topology(
     }))
 }
 
-pub(crate) fn polygon_topology_is_valid(polygon: &ScalarPolygon, checks: &TopologyChecks) -> bool {
+pub(crate) fn polygon_topology_is_valid(
+    polygon: &ScalarPolygon,
+    checks: &PolygonTopologyChecks,
+) -> bool {
     check_polygon_topology(polygon, checks, false).is_ok()
 }
 
@@ -115,12 +143,12 @@ pub(crate) fn polygon_topology_is_valid(polygon: &ScalarPolygon, checks: &Topolo
 /// if `check_multi_polygon_self_overlap=true`, whether the [parts do not overlap](parts_do_not_overlap).
 pub(crate) fn multi_polygon_topology_is_valid(
     multi: &ScalarMultiPolygon,
-    checks: &TopologyChecks,
+    checks: &MultiPolygonTopologyChecks,
 ) -> bool {
     let check_parts = checks.check_multi_polygon_self_overlap;
     let mut parts = Vec::new();
     for polygon in multi.polygons() {
-        match check_polygon_topology(&polygon, checks, check_parts) {
+        match check_polygon_topology(&polygon, &checks.polygons, check_parts) {
             Ok(part) => parts.extend(part),
             Err(()) => return false,
         }

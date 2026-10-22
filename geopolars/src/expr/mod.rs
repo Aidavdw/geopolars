@@ -17,6 +17,7 @@ pub mod coords;
 pub mod crs;
 pub mod distance;
 pub mod is_ccw;
+pub mod is_degenerate;
 pub mod is_ring;
 pub mod is_valid;
 pub mod length;

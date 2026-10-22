@@ -43,6 +43,7 @@ from geopolars.geo.distance import distance
 from geopolars.geo.exterior import exterior
 from geopolars.geo.interior import interior
 from geopolars.geo.is_ccw import is_ccw
+from geopolars.geo.is_degenerate import is_degenerate, null_out_degenerate
 from geopolars.geo.is_empty import is_empty
 from geopolars.geo.is_ring import is_ring
 from geopolars.geo.is_valid import is_valid, null_out_invalid
@@ -73,6 +74,7 @@ __all__ = [
     "from_wkt",
     "interior",
     "is_ccw",
+    "is_degenerate",
     "is_empty",
     "is_geographic",
     "is_ring",
@@ -92,6 +94,7 @@ __all__ = [
     "multi_polygon",
     "multi_polygon_from_columns",
     "multi_polygon_from_polygons",
+    "null_out_degenerate",
     "null_out_invalid",
     "point",
     "polygon",

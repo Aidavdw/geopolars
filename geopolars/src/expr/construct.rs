@@ -16,9 +16,7 @@ use geopolars_compute::inner_nulls::{
     propagate_inner_nulls_of_polygons,
 };
 use geopolars_compute::native::close_open_rings;
-use geopolars_compute::validity_checking::{
-    multi_polygons_are_valid, polygons_are_valid, ValidityChecks,
-};
+use geopolars_compute::validity::{multi_polygons_are_valid, polygons_are_valid, CoordinateChecks};
 use geopolars_compute::with_const_flags;
 use geopolars_core::{UncheckedStorage, ValidCoords, ValidList};
 
@@ -160,14 +158,10 @@ fn kernel_output_type_multipolygon(
     )
 }
 
-/// Only the shape checks, which every polygon has to pass: all rings empty, or all of them rings.
-const SHAPE_ONLY: ValidityChecks = ValidityChecks {
+/// No coordinate checks, so that only the shape rules apply: all rings empty, or all of them rings.
+const SHAPE_ONLY: CoordinateChecks = CoordinateChecks {
     bounds: None,
     check_finite_coordinates: false,
-    check_line_string_zero_length_sections: false,
-    check_ring_self_intersect: false,
-    check_polygon_self_overlap: false,
-    check_multi_polygon_self_overlap: false,
 };
 
 /// See [`close_open_rings`].

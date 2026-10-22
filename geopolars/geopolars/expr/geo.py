@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
+    from geopolars.geo.is_valid import CrsBounds
 
 
 @pl.api.register_expr_namespace("geo")
@@ -229,54 +230,70 @@ class ExprGeoNameSpace:
     def is_valid(
         self,
         *,
-        allow_wrapped_longitude: bool = True,
-        within_area_of_use: bool = False,
+        crs_bounds: CrsBounds = "crs_wrapped_longitude",
         check_missing_coordinates: bool = True,
         check_finite_coordinates: bool = True,
-        check_crs_bounds: bool = True,
-        check_line_string_zero_length_sections: bool = True,
-        check_ring_self_intersect: bool = True,
-        check_polygon_self_overlap: bool = True,
-        check_multi_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
         from geopolars.geo.is_valid import is_valid
 
         return is_valid(
             self._expr,
-            allow_wrapped_longitude=allow_wrapped_longitude,
-            within_area_of_use=within_area_of_use,
+            crs_bounds=crs_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_finite_coordinates=check_finite_coordinates,
-            check_crs_bounds=check_crs_bounds,
-            check_line_string_zero_length_sections=check_line_string_zero_length_sections,
-            check_ring_self_intersect=check_ring_self_intersect,
-            check_polygon_self_overlap=check_polygon_self_overlap,
-            check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         )
 
     def null_out_invalid(
         self,
         *,
-        allow_wrapped_longitude: bool = True,
-        within_area_of_use: bool = False,
+        crs_bounds: CrsBounds = "crs_wrapped_longitude",
         check_missing_coordinates: bool = True,
         check_finite_coordinates: bool = True,
-        check_crs_bounds: bool = True,
-        check_line_string_zero_length_sections: bool = True,
-        check_ring_self_intersect: bool = True,
-        check_polygon_self_overlap: bool = True,
-        check_multi_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
         from geopolars.geo.is_valid import null_out_invalid
 
         return null_out_invalid(
             self._expr,
-            allow_wrapped_longitude=allow_wrapped_longitude,
-            within_area_of_use=within_area_of_use,
+            crs_bounds=crs_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_finite_coordinates=check_finite_coordinates,
-            check_crs_bounds=check_crs_bounds,
-            check_line_string_zero_length_sections=check_line_string_zero_length_sections,
+        )
+
+    def is_degenerate(
+        self,
+        *,
+        check_repeated_points: bool = True,
+        check_empty: bool = True,
+        check_ring_self_intersect: bool = True,
+        check_polygon_self_overlap: bool = True,
+        check_multi_polygon_self_overlap: bool = True,
+    ) -> pl.Expr:
+        from geopolars.geo.is_degenerate import is_degenerate
+
+        return is_degenerate(
+            self._expr,
+            check_repeated_points=check_repeated_points,
+            check_empty=check_empty,
+            check_ring_self_intersect=check_ring_self_intersect,
+            check_polygon_self_overlap=check_polygon_self_overlap,
+            check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
+        )
+
+    def null_out_degenerate(
+        self,
+        *,
+        check_repeated_points: bool = True,
+        check_empty: bool = True,
+        check_ring_self_intersect: bool = True,
+        check_polygon_self_overlap: bool = True,
+        check_multi_polygon_self_overlap: bool = True,
+    ) -> pl.Expr:
+        from geopolars.geo.is_degenerate import null_out_degenerate
+
+        return null_out_degenerate(
+            self._expr,
+            check_repeated_points=check_repeated_points,
+            check_empty=check_empty,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,

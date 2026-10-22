@@ -1,6 +1,6 @@
 //! Kernels on GeoArrow, taking the views of `geopolars-core`:
 //! [native] ones of our own, and [geos], [rsgeo] and [proj] ones forwarding to those libraries.
-//! [validity_checking] combines native and rsgeo checks.
+//! [validity] and [degeneracy] are the checks of `is_valid` and `is_degenerate`.
 //! [inner_nulls] moves missing values below the rows out to the rows.
 //!
 //! See the README.
@@ -27,6 +27,8 @@ macro_rules! with_const_flags {
     };
 }
 
+#[cfg(all(feature = "native", feature = "rsgeo"))]
+pub mod degeneracy;
 mod error;
 #[cfg(feature = "geos")]
 pub mod geos;
@@ -39,8 +41,8 @@ mod per_row;
 pub mod proj;
 #[cfg(feature = "rsgeo")]
 pub mod rsgeo;
-#[cfg(all(feature = "native", feature = "rsgeo"))]
-pub mod validity_checking;
+#[cfg(feature = "native")]
+pub mod validity;
 
 use error::row_or_missing;
 pub use error::{GeoComputeError, GeoComputeResult};

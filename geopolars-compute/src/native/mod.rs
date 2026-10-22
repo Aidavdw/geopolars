@@ -6,8 +6,7 @@ mod centroid;
 pub mod distance;
 mod is_ccw;
 mod is_ring;
-// Only for `validity_checking`.
-#[cfg(feature = "rsgeo")]
+// Only for `validity` and `degeneracy`.
 mod is_valid;
 mod length;
 mod rings;
@@ -25,12 +24,13 @@ pub use is_ccw::{
     line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,
 };
 pub use is_ring::{line_strings_are_rings, multi_line_strings_are_rings};
-#[cfg(feature = "rsgeo")]
 pub use is_valid::Bounds;
-#[cfg(feature = "rsgeo")]
 pub(crate) use is_valid::{
-    coordinates_are_valid, line_string_shape_is_valid, point_is_valid, polygon_shape_is_valid,
+    coordinate_is_valid, line_string_shape_is_valid, polygon_shape_is_valid,
 };
+// Only for `degeneracy`.
+#[cfg(feature = "rsgeo")]
+pub(crate) use is_valid::is_empty_point;
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,

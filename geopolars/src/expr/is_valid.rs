@@ -1,4 +1,4 @@
-//! Whether a geometry is valid, through `geopolars_compute::validity_checking`.
+//! Whether a geometry is valid, through `geopolars_compute::validity`.
 //! See `is_valid` in Python for the rules.
 
 use geopolars_compute::inner_nulls::{
@@ -7,9 +7,9 @@ use geopolars_compute::inner_nulls::{
     propagate_inner_nulls_of_points, propagate_inner_nulls_of_polygons,
 };
 use geopolars_compute::native::Bounds;
-use geopolars_compute::validity_checking::{
+use geopolars_compute::validity::{
     line_strings_are_valid, multi_line_strings_are_valid, multi_points_are_valid,
-    multi_polygons_are_valid, points_are_valid, polygons_are_valid, ValidityChecks,
+    multi_polygons_are_valid, points_are_valid, polygons_are_valid, CoordinateChecks,
 };
 use geopolars_core::{
     downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
@@ -30,10 +30,6 @@ pub struct IsValidKwargs {
     bounds: Option<Bounds>,
     check_missing_coordinates: bool,
     check_finite_coordinates: bool,
-    check_line_string_zero_length_sections: bool,
-    check_ring_self_intersect: bool,
-    check_polygon_self_overlap: bool,
-    check_multi_polygon_self_overlap: bool,
 }
 
 impl Default for IsValidKwargs {
@@ -42,23 +38,15 @@ impl Default for IsValidKwargs {
             bounds: None,
             check_missing_coordinates: true,
             check_finite_coordinates: true,
-            check_line_string_zero_length_sections: true,
-            check_ring_self_intersect: true,
-            check_polygon_self_overlap: true,
-            check_multi_polygon_self_overlap: true,
         }
     }
 }
 
 impl IsValidKwargs {
-    fn checks(&self) -> ValidityChecks {
-        ValidityChecks {
+    fn checks(&self) -> CoordinateChecks {
+        CoordinateChecks {
             bounds: self.bounds,
             check_finite_coordinates: self.check_finite_coordinates,
-            check_line_string_zero_length_sections: self.check_line_string_zero_length_sections,
-            check_ring_self_intersect: self.check_ring_self_intersect,
-            check_polygon_self_overlap: self.check_polygon_self_overlap,
-            check_multi_polygon_self_overlap: self.check_multi_polygon_self_overlap,
         }
     }
 }
@@ -158,30 +146,31 @@ fn is_valid(inputs: &[Series], kwargs: IsValidKwargs) -> PolarsResult<Series> {
     Ok(are_valid(&inputs[0], &kwargs)?.into_series())
 }
 
-/// See `null_out_invalid`.
-#[polars_expr(output_type_func=kernel_output_type_same_geometry)]
-fn null_out_invalid(inputs: &[Series], kwargs: IsValidKwargs) -> PolarsResult<Series> {
-    let geometries = &inputs[0];
-    let valid = are_valid(geometries, &kwargs)?;
-    // Missing rows do not count, and stay missing.
-    if valid.all() {
+/// `geometries`, missing where `keep` is `false`.
+/// `keep`'s values alone say what stays: a missing row has to be `false` in them.
+/// On a column where every row stays, it copies nothing.
+pub(crate) fn keep_rows(geometries: &Series, keep: &BooleanChunked) -> PolarsResult<Series> {
+    if keep.all() {
         return Ok(geometries.clone());
     }
-
     let geo = describe(geometries.dtype())?;
     let storage = geometries.ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()
-        .zip(valid.downcast_iter())
-        .map(|(chunk, valid)| {
-            // A missing row is `false` in `valid`'s values, so they alone say what stays.
-            chunk.with_validity(Some(valid.values().clone()))
-        })
+        .zip(keep.downcast_iter())
+        .map(|(chunk, keep)| chunk.with_validity(Some(keep.values().clone())))
         .collect();
     // SAFETY: only the outer validity changed, so every chunk is still the storage.
     let storage = unsafe {
         Series::from_chunks_and_dtype_unchecked(storage.name().clone(), chunks, storage.dtype())
     };
     Ok(storage.into_extension(geo.typ.clone()))
+}
+
+/// See `null_out_invalid`.
+#[polars_expr(output_type_func=kernel_output_type_same_geometry)]
+fn null_out_invalid(inputs: &[Series], kwargs: IsValidKwargs) -> PolarsResult<Series> {
+    // A missing row is `false` in the values.
+    keep_rows(&inputs[0], &are_valid(&inputs[0], &kwargs)?)
 }
