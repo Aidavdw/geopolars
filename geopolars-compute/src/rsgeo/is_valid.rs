@@ -30,9 +30,6 @@ fn polygon_rings_fit(rings: &[Polygon<f64>]) -> bool {
     let [exterior, holes @ ..] = rings else {
         return true;
     };
-    if holes.is_empty() {
-        return true;
-    }
     let exterior = PreparedGeometry::from(exterior);
     let holes: Vec<_> = holes.iter().map(PreparedGeometry::from).collect();
     holes.iter().enumerate().all(|(i, hole)| {
@@ -92,7 +89,8 @@ fn polygon_fits(
     if !polygon.rings().all(|ring| ring_is_valid(&ring, checks)) {
         return Err(());
     }
-    let fit = checks.check_polygon_self_overlap;
+    // A lone exterior has nothing to fit with.
+    let fit = checks.check_polygon_self_overlap && polygon.parts.len() > 1;
     if !(fit || keep) {
         return Ok(None);
     }
