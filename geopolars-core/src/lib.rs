@@ -3,7 +3,6 @@
 //!
 //! See the README.
 
-mod complete;
 mod coords;
 mod dimension;
 mod geotraits;
@@ -12,11 +11,11 @@ mod lists;
 pub mod output;
 mod points;
 mod polygons;
+mod unchecked;
 
 use polars_arrow::array::Array;
 use polars_core::prelude::{polars_err, PolarsResult};
 
-pub use complete::complete_rows;
 pub use coords::{
     is_close, is_ring, same_place, same_position, AxisArrays, Coords, ValidCoords, ABS_TOL,
     MIN_RING_VERTICES, REL_TOL,
@@ -29,6 +28,7 @@ pub use linestrings::{
 pub use lists::{List, ValidList};
 pub use points::{MultiPointArray, PointArray, ScalarMultiPoint, ScalarPoint};
 pub use polygons::{MultiPolygonArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon};
+pub use unchecked::UncheckedStorage;
 
 /// Downcast one level of the storage to the array it has to be.
 /// The dtype was already checked, so this failing is a bug.

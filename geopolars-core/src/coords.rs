@@ -61,6 +61,7 @@ pub fn is_ring<const Z: bool>(coords: &ValidCoords, vertices: Range<usize>) -> b
 /// Otherwise, use [Coords].
 ///
 /// See the README on views.
+#[derive(Clone)]
 pub struct ValidCoords {
     x: Buffer<f64>,
     y: Buffer<f64>,

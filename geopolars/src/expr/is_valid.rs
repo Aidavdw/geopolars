@@ -1,14 +1,19 @@
 //! Whether a geometry is valid, through `geopolars_compute::validity_checking`.
 //! See `is_valid` in Python for the rules.
 
+use geopolars_compute::inner_nulls::{
+    propagate_inner_nulls_of_line_strings, propagate_inner_nulls_of_multi_line_strings,
+    propagate_inner_nulls_of_multi_points, propagate_inner_nulls_of_multi_polygons,
+    propagate_inner_nulls_of_points, propagate_inner_nulls_of_polygons,
+};
 use geopolars_compute::native::Bounds;
 use geopolars_compute::validity_checking::{
     line_strings_are_valid, multi_line_strings_are_valid, multi_points_are_valid,
     multi_polygons_are_valid, points_are_valid, polygons_are_valid, ValidityChecks,
 };
 use geopolars_core::{
-    complete_rows, downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray,
-    MultiPolygonArray, PointArray, PolygonArray, ValidCoords,
+    downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
+    PointArray, PolygonArray, UncheckedStorage,
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
@@ -60,52 +65,66 @@ impl IsValidKwargs {
 
 /// [`are_valid`] for one chunk of the storage of a `kind`.
 ///
-/// With `check_missing_coordinates`, a row missing anything below it is first set missing
-/// (see [complete_rows]), so that the views can trust the rest.
+/// If `check_missing_coordinates=true`, every missing value below a row is first moved out to the row
+/// (see [geopolars_compute::inner_nulls]), so that the views can trust the rest.
 fn chunk_is_valid(
     chunk: &dyn Array,
     kind: Kind,
     kwargs: &IsValidKwargs,
 ) -> PolarsResult<BooleanArray> {
-    let complete = if kwargs.check_missing_coordinates {
-        complete_rows(chunk, kind.nesting())?
-    } else {
-        chunk.validity().cloned()
-    };
+    let propagate = kwargs.check_missing_coordinates;
+    let unchecked = || UncheckedStorage::new(chunk);
+    let rows = || downcast::<ListArray<i64>>(chunk, "a list of parts");
     let checks = kwargs.checks();
 
-    let valid = if kind == Kind::Point {
-        let array = PointArray::new(Coords::from_valid(ValidCoords::new(chunk)?, complete));
-        points_are_valid(&array, &checks)
-    } else {
-        let rows: &ListArray<i64> = downcast(chunk, "a list of parts")?;
-        match kind {
-            Kind::Point => unreachable!("handled above"),
-            Kind::LineString => {
-                let mut array = LineStringArray::new(rows)?;
-                array.rows = array.rows.with_validity(complete);
-                line_strings_are_valid(&array, &checks)
-            }
-            Kind::MultiPoint => {
-                let mut array = MultiPointArray::new(rows)?;
-                array.rows = array.rows.with_validity(complete);
-                multi_points_are_valid(&array, &checks)
-            }
-            Kind::MultiLineString => {
-                let mut array = MultiLineStringArray::new(rows)?;
-                array.rows = array.rows.with_validity(complete);
-                multi_line_strings_are_valid(&array, &checks)
-            }
-            Kind::Polygon => {
-                let mut array = PolygonArray::new(rows)?;
-                array.rows = array.rows.with_validity(complete);
-                polygons_are_valid(&array, &checks)
-            }
-            Kind::MultiPolygon => {
-                let mut array = MultiPolygonArray::new(rows)?;
-                array.rows = array.rows.with_validity(complete);
-                multi_polygons_are_valid(&array, &checks)
-            }
+    let valid = match kind {
+        Kind::Point => {
+            let array = if propagate {
+                propagate_inner_nulls_of_points(unchecked()?)
+            } else {
+                PointArray::new(Coords::new(chunk)?)
+            };
+            points_are_valid(&array, &checks)
+        }
+        Kind::LineString => {
+            let array = if propagate {
+                propagate_inner_nulls_of_line_strings(unchecked()?)
+            } else {
+                LineStringArray::new(rows()?)?
+            };
+            line_strings_are_valid(&array, &checks)
+        }
+        Kind::MultiPoint => {
+            let array = if propagate {
+                propagate_inner_nulls_of_multi_points(unchecked()?)
+            } else {
+                MultiPointArray::new(rows()?)?
+            };
+            multi_points_are_valid(&array, &checks)
+        }
+        Kind::MultiLineString => {
+            let array = if propagate {
+                propagate_inner_nulls_of_multi_line_strings(unchecked()?)
+            } else {
+                MultiLineStringArray::new(rows()?)?
+            };
+            multi_line_strings_are_valid(&array, &checks)
+        }
+        Kind::Polygon => {
+            let array = if propagate {
+                propagate_inner_nulls_of_polygons(unchecked()?)
+            } else {
+                PolygonArray::new(rows()?)?
+            };
+            polygons_are_valid(&array, &checks)
+        }
+        Kind::MultiPolygon => {
+            let array = if propagate {
+                propagate_inner_nulls_of_multi_polygons(unchecked()?)
+            } else {
+                MultiPolygonArray::new(rows()?)?
+            };
+            multi_polygons_are_valid(&array, &checks)
         }
     };
     // A missing row stays missing, and an incomplete one is invalid:

@@ -1,6 +1,7 @@
 //! Kernels on GeoArrow, taking the views of `geopolars-core`:
 //! [native] ones of our own, and [geos], [rsgeo] and [proj] ones forwarding to those libraries.
 //! [validity_checking] combines native and rsgeo checks.
+//! [inner_nulls] moves missing values below the rows out to the rows.
 //!
 //! See the README.
 
@@ -29,6 +30,7 @@ macro_rules! with_const_flags {
 mod error;
 #[cfg(feature = "geos")]
 pub mod geos;
+pub mod inner_nulls;
 mod metric;
 #[cfg(feature = "native")]
 pub mod native;

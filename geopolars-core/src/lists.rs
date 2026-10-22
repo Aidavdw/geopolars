@@ -84,6 +84,12 @@ impl List {
         Self { validity, ..self }
     }
 
+    /// The lists, for once it is known which are there.
+    #[inline]
+    pub fn ignoring_validity(&self) -> &ValidList {
+        &self.lists
+    }
+
     pub(crate) fn into_parts(self) -> (OffsetsBuffer<i64>, Option<Bitmap>) {
         (self.lists.into_offsets(), self.validity)
     }

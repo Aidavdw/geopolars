@@ -22,7 +22,7 @@ use crate::rsgeo::{multi_polygon_topology_is_valid, polygon_topology_is_valid, T
 
 /// The checks to run. See `is_valid` in Python.
 /// Missing values below the row are not checked here:
-/// the views have to be built from complete rows (see `complete_rows`).
+/// the views have to be built with them moved out to the rows (see [crate::inner_nulls]).
 #[derive(Debug, Clone, Copy)]
 pub struct ValidityChecks {
     /// Where x and y have to lie, if anywhere.
