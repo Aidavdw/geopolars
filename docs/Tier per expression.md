@@ -29,8 +29,8 @@ the comment says when one without a CRS takes a different tier.
 | `is_close` | A | pairwise or against one | A | same coordinates in order | A | same rings | A | | A | same parts | A | same polygons and rings |
 | `is_valid` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
-| `is_degenerate` | A | | A | | A/B | GEOS | A | | A | EP | A/B | EP and GEOS |
-| `null_out_degenerate` | A | nulls what `is_degenerate` finds | A | | A/B | | A | | A | | A/B | |
+| `is_malformed` | A | | A | | A/B | GEOS | A | | A | EP | A/B | EP and GEOS |
+| `null_out_malformed` | A | nulls what `is_malformed` finds | A | | A/B | | A | | A | | A/B | |
 | `distance` | A/B | [^2] | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |

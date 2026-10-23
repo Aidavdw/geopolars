@@ -9,7 +9,7 @@ mod is_ccw;
 mod is_close;
 mod is_empty;
 mod is_ring;
-// Only for `validity` and `degeneracy`.
+// Only for `validity` and `malformation`.
 mod is_valid;
 mod length;
 mod rings;
@@ -44,7 +44,7 @@ pub use is_valid::Bounds;
 pub(crate) use is_valid::{
     coordinate_is_valid, line_string_shape_is_valid, polygon_shape_is_valid,
 };
-// Only for `degeneracy`.
+// Only for `malformation`.
 #[cfg(feature = "geos")]
 pub(crate) use is_empty::only_empty_points;
 #[cfg(feature = "geos")]

@@ -309,7 +309,7 @@ class ExprGeoNameSpace:
             check_finite_coordinates=check_finite_coordinates,
         )
 
-    def is_degenerate(
+    def is_malformed(
         self,
         *,
         check_repeated_points: bool = True,
@@ -318,9 +318,9 @@ class ExprGeoNameSpace:
         check_polygon_self_overlap: bool = True,
         check_multi_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
-        from geopolars.geo.is_degenerate import is_degenerate
+        from geopolars.geo.is_malformed import is_malformed
 
-        return is_degenerate(
+        return is_malformed(
             self._expr,
             check_repeated_points=check_repeated_points,
             check_empty=check_empty,
@@ -329,7 +329,7 @@ class ExprGeoNameSpace:
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         )
 
-    def null_out_degenerate(
+    def null_out_malformed(
         self,
         *,
         check_repeated_points: bool = True,
@@ -338,9 +338,9 @@ class ExprGeoNameSpace:
         check_polygon_self_overlap: bool = True,
         check_multi_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
-        from geopolars.geo.is_degenerate import null_out_degenerate
+        from geopolars.geo.is_malformed import null_out_malformed
 
-        return null_out_degenerate(
+        return null_out_malformed(
             self._expr,
             check_repeated_points=check_repeated_points,
             check_empty=check_empty,

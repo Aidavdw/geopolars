@@ -1,9 +1,9 @@
-//! Whether a geometry is degenerate, through `geopolars_compute::degeneracy`.
-//! See `is_degenerate` in Python for the rules.
+//! Whether a geometry is malformed, through `geopolars_compute::malformation`.
+//! See `is_malformed` in Python for the rules.
 
-use geopolars_compute::degeneracy::{
-    line_strings_are_degenerate, multi_line_strings_are_degenerate, multi_points_are_degenerate,
-    multi_polygons_are_degenerate, points_are_degenerate, polygons_are_degenerate,
+use geopolars_compute::malformation::{
+    line_strings_are_malformed, multi_line_strings_are_malformed, multi_points_are_malformed,
+    multi_polygons_are_malformed, points_are_malformed, polygons_are_malformed,
     MultiPolygonTopologyChecks, PolygonTopologyChecks,
 };
 use geopolars_core::{
@@ -22,7 +22,7 @@ use crate::geoarrow::{describe, Kind};
 /// See python
 #[derive(Debug, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-pub struct IsDegenerateKwargs {
+pub struct IsMalformedKwargs {
     check_repeated_points: bool,
     check_empty: bool,
     check_ring_self_intersect: bool,
@@ -32,7 +32,7 @@ pub struct IsDegenerateKwargs {
     rel_tol: Option<f64>,
 }
 
-impl Default for IsDegenerateKwargs {
+impl Default for IsMalformedKwargs {
     fn default() -> Self {
         Self {
             check_repeated_points: true,
@@ -46,7 +46,7 @@ impl Default for IsDegenerateKwargs {
     }
 }
 
-impl IsDegenerateKwargs {
+impl IsMalformedKwargs {
     /// `None` when neither tolerance is given; otherwise the missing one is `0.0`.
     fn tolerance(&self) -> Option<Tolerance> {
         (self.abs_tol.is_some() || self.rel_tol.is_some()).then(|| Tolerance {
@@ -71,15 +71,15 @@ impl IsDegenerateKwargs {
 }
 
 fn compute_err(e: impl std::fmt::Display) -> PolarsError {
-    polars_err!(ComputeError: "is_degenerate {e}")
+    polars_err!(ComputeError: "is_malformed {e}")
 }
 
-/// [`are_degenerate`] for one chunk of the storage of a `kind`.
+/// [`are_malformed`] for one chunk of the storage of a `kind`.
 /// The chunk is trusted to be valid (see `is_valid`), so its views are built directly.
-fn chunk_is_degenerate(
+fn chunk_is_malformed(
     chunk: &dyn Array,
     kind: Kind,
-    kwargs: &IsDegenerateKwargs,
+    kwargs: &IsMalformedKwargs,
 ) -> PolarsResult<BooleanArray> {
     let rows = || downcast::<ListArray<i64>>(chunk, "a list of parts");
     let (repeated, empty, tolerance) = (
@@ -88,18 +88,18 @@ fn chunk_is_degenerate(
         kwargs.tolerance(),
     );
     Ok(match kind {
-        Kind::Point => points_are_degenerate(&PointArray::new(Coords::new(chunk)?), empty),
+        Kind::Point => points_are_malformed(&PointArray::new(Coords::new(chunk)?), empty),
         Kind::LineString => {
-            line_strings_are_degenerate(&LineStringArray::new(rows()?)?, repeated, empty, tolerance)
+            line_strings_are_malformed(&LineStringArray::new(rows()?)?, repeated, empty, tolerance)
         }
         Kind::MultiPoint => {
-            multi_points_are_degenerate(&MultiPointArray::new(rows()?)?, repeated, empty, tolerance)
+            multi_points_are_malformed(&MultiPointArray::new(rows()?)?, repeated, empty, tolerance)
         }
         Kind::MultiLineString => {
             let array = MultiLineStringArray::new(rows()?)?;
-            multi_line_strings_are_degenerate(&array, repeated, empty, tolerance)
+            multi_line_strings_are_malformed(&array, repeated, empty, tolerance)
         }
-        Kind::Polygon => polygons_are_degenerate(
+        Kind::Polygon => polygons_are_malformed(
             &PolygonArray::new(rows()?)?,
             repeated,
             empty,
@@ -107,7 +107,7 @@ fn chunk_is_degenerate(
             tolerance,
         )
         .map_err(compute_err)?,
-        Kind::MultiPolygon => multi_polygons_are_degenerate(
+        Kind::MultiPolygon => multi_polygons_are_malformed(
             &MultiPolygonArray::new(rows()?)?,
             repeated,
             empty,
@@ -118,50 +118,47 @@ fn chunk_is_degenerate(
     })
 }
 
-fn are_degenerate(
-    geometries: &Series,
-    kwargs: &IsDegenerateKwargs,
-) -> PolarsResult<BooleanChunked> {
+fn are_malformed(geometries: &Series, kwargs: &IsMalformedKwargs) -> PolarsResult<BooleanChunked> {
     let kind = describe(geometries.dtype())?.kind;
     let storage = geometries.ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()
-        .map(|chunk| chunk_is_degenerate(chunk.as_ref(), kind, kwargs));
+        .map(|chunk| chunk_is_malformed(chunk.as_ref(), kind, kwargs));
     BooleanChunked::try_from_chunk_iter(geometries.name().clone(), chunks)
 }
 
-/// For [`is_degenerate`]: a `bool` per geometry.
-fn kernel_output_type_is_degenerate(input_fields: &[Field]) -> PolarsResult<Field> {
+/// For [`is_malformed`]: a `bool` per geometry.
+fn kernel_output_type_is_malformed(input_fields: &[Field]) -> PolarsResult<Field> {
     let field = &input_fields[0];
     describe(field.dtype())?;
     Ok(Field::new(field.name().clone(), DataType::Boolean))
 }
 
-/// See `is_degenerate`.
-#[polars_expr(output_type_func=kernel_output_type_is_degenerate)]
-fn is_degenerate(inputs: &[Series], kwargs: IsDegenerateKwargs) -> PolarsResult<Series> {
-    Ok(are_degenerate(&inputs[0], &kwargs)?.into_series())
+/// See `is_malformed`.
+#[polars_expr(output_type_func=kernel_output_type_is_malformed)]
+fn is_malformed(inputs: &[Series], kwargs: IsMalformedKwargs) -> PolarsResult<Series> {
+    Ok(are_malformed(&inputs[0], &kwargs)?.into_series())
 }
 
-/// The rows of `degenerate` that are there and not degenerate.
-fn not_degenerate(degenerate: &BooleanArray) -> BooleanArray {
-    let values = match degenerate.validity() {
-        Some(rows) => &!degenerate.values() & rows,
-        None => !degenerate.values(),
+/// The rows of `malformed` that are there and not malformed.
+fn not_malformed(malformed: &BooleanArray) -> BooleanArray {
+    let values = match malformed.validity() {
+        Some(rows) => &!malformed.values() & rows,
+        None => !malformed.values(),
     };
     BooleanArray::new(
         ArrowDataType::Boolean,
         values,
-        degenerate.validity().cloned(),
+        malformed.validity().cloned(),
     )
 }
 
-/// See `null_out_degenerate`.
+/// See `null_out_malformed`.
 #[polars_expr(output_type_func=kernel_output_type_same_geometry)]
-fn null_out_degenerate(inputs: &[Series], kwargs: IsDegenerateKwargs) -> PolarsResult<Series> {
-    let degenerate = are_degenerate(&inputs[0], &kwargs)?;
-    let chunks = degenerate.downcast_iter().map(not_degenerate);
-    let keep = BooleanChunked::from_chunk_iter(degenerate.name().clone(), chunks);
+fn null_out_malformed(inputs: &[Series], kwargs: IsMalformedKwargs) -> PolarsResult<Series> {
+    let malformed = are_malformed(&inputs[0], &kwargs)?;
+    let chunks = malformed.downcast_iter().map(not_malformed);
+    let keep = BooleanChunked::from_chunk_iter(malformed.name().clone(), chunks);
     keep_rows(&inputs[0], &keep)
 }

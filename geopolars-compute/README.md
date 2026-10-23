@@ -13,7 +13,7 @@ The crate holds:
 - kernels forwarding to PROJ in `proj`.
 - `is_valid`'s kernels in `validity`, which check the coordinates, then the shape of every row.
   These need the `native` feature.
-- `is_degenerate`'s kernels in `degeneracy`, which run the checks of `native` and `geos` in one pass per row.
+- `is_malformed`'s kernels in `malformation`, which run the checks of `native` and `geos` in one pass per row.
   These need both features.
 - the pass that moves every missing value below a row out to the row in `inner_nulls`.
 

@@ -45,8 +45,8 @@ from geopolars.geo.exterior import exterior
 from geopolars.geo.interior import interior
 from geopolars.geo.is_ccw import is_ccw
 from geopolars.geo.is_close import is_close
-from geopolars.geo.is_degenerate import is_degenerate, null_out_degenerate
 from geopolars.geo.is_empty import is_empty
+from geopolars.geo.is_malformed import is_malformed, null_out_malformed
 from geopolars.geo.is_ring import is_ring
 from geopolars.geo.is_valid import is_valid, null_out_invalid
 from geopolars.geo.length import length
@@ -78,9 +78,9 @@ __all__ = [
     "interior",
     "is_ccw",
     "is_close",
-    "is_degenerate",
     "is_empty",
     "is_geographic",
+    "is_malformed",
     "is_ring",
     "is_valid",
     "length",
@@ -98,8 +98,8 @@ __all__ = [
     "multi_polygon",
     "multi_polygon_from_columns",
     "multi_polygon_from_polygons",
-    "null_out_degenerate",
     "null_out_invalid",
+    "null_out_malformed",
     "point",
     "polygon",
     "polygon_from_columns",

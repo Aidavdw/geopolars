@@ -1,4 +1,4 @@
-"""Whether a geometry is degenerate, and/or nulling out the ones that are.
+"""Whether a geometry is malformed, and/or nulling out the ones that are.
 
 A bit of a compound operation, so some of it A-tier, some B-tier.
 """
@@ -35,7 +35,7 @@ def _kernel(
     return build
 
 
-def is_degenerate(
+def is_malformed(
     geometry: IntoExprColumn,
     *,
     check_repeated_points: bool = True,
@@ -46,13 +46,13 @@ def is_degenerate(
     abs_tol: float | None = None,
     rel_tol: float | None = None,
 ) -> pl.Expr:
-    """Whether each geometry is degenerate: technically valid, but practically not of much use.
+    """Whether each geometry is malformed: technically valid, but practically not of much use.
     One `bool` per row, `True` where a check fails. A missing geometry gives a missing result.
 
     The geometries have to be valid already (see `is_valid`): this trusts its input.
     On a geometry that is not, the result means nothing.
 
-    | check                              | geometry                       | degenerate when                                                               |
+    | check                              | geometry                       | malformed when                                                                |
     |------------------------------------|--------------------------------|-------------------------------------------------------------------------------|
     | `check_repeated_points`            | linestring, every ring         | two vertices in a row lie at the same place                                   |
     | `check_repeated_points`            | multipoint                     | any two points lie at the same place                                          |
@@ -81,7 +81,7 @@ def is_degenerate(
     and they touch each other only at points, never along a line.
 
     How rings cross or fit is only known for finite coordinates.
-    So with any of the last three checks on, a polygon with a non-finite x or y is degenerate,
+    So with any of the last three checks on, a polygon with a non-finite x or y is malformed,
     the empty point included.
 
     Every check can be turned off on its own, which can save computation time.
@@ -90,13 +90,13 @@ def is_degenerate(
     so its cost grows quickly with their number.
 
     ```python
-    df.filter(~geo.is_degenerate("parcel"))
+    df.filter(~geo.is_malformed("parcel"))
     ```
     """
     return on_geometry(
         geometry,
         _kernel(
-            "is_degenerate",
+            "is_malformed",
             check_repeated_points=check_repeated_points,
             check_empty=check_empty,
             check_ring_self_intersect=check_ring_self_intersect,
@@ -108,7 +108,7 @@ def is_degenerate(
     )
 
 
-def null_out_degenerate(
+def null_out_malformed(
     geometry: IntoExprColumn,
     *,
     check_repeated_points: bool = True,
@@ -119,19 +119,19 @@ def null_out_degenerate(
     abs_tol: float | None = None,
     rel_tol: float | None = None,
 ) -> pl.Expr:
-    """Null out every geometry that `is_degenerate` finds, keeping the rest as they are.
-    The arguments are those of `is_degenerate`, and so is the need for valid input.
+    """Null out every geometry that `is_malformed` finds, keeping the rest as they are.
+    The arguments are those of `is_malformed`, and so is the need for valid input.
 
     ```python
-    df.select(geo.null_out_degenerate(geo.null_out_invalid("parcel")))
+    df.select(geo.null_out_malformed(geo.null_out_invalid("parcel")))
     ```
 
-    On a column without degenerate geometries, it copies nothing.
+    On a column without malformed geometries, it copies nothing.
     """
     return on_geometry(
         geometry,
         _kernel(
-            "null_out_degenerate",
+            "null_out_malformed",
             check_repeated_points=check_repeated_points,
             check_empty=check_empty,
             check_ring_self_intersect=check_ring_self_intersect,

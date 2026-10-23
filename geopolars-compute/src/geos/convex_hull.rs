@@ -6,7 +6,7 @@
 //! For a polygon or a multipolygon, these are only the coordinates of the exteriors.
 //! A valid polygon will not change in size if you add or remove interior sections after all.
 //!
-//! Some degenerate cases can be caught in advance:
+//! Some cases where the hull collapses can be caught in advance:
 //! - A row of one coordinate encloses nothing, so it never goes to GEOS.
 //! - An set of coordinates cannot enclose anything
 //! - A two-point line can only enclose a line, so not a polygon -> also reject early
@@ -209,7 +209,7 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const EARLY_FINITE_CHECK: bo
     let mut row_y = Vec::new();
     let mut row_z = Vec::new();
 
-    // `None` if it is not a polygon (degenerate case)
+    // `None` if it is not a polygon (the hull collapsed)
     let hull = |row_x: &[f64], row_y: &[f64], row_z: &[f64]| {
         if EARLY_FINITE_CHECK {
             xy_is_finite_or_error(row_x, row_y)?;

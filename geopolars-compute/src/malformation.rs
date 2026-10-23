@@ -1,8 +1,8 @@
-//! Whether each geometry is degenerate: points repeated, empty, or rings that do not fit together.
-//! See `is_degenerate` in Python for the rules.
+//! Whether each geometry is malformed: points repeated, empty, or rings that do not fit together.
+//! See `is_malformed` in Python for the rules.
 //!
 //! The views have to hold valid geometries (see [crate::validity]).
-//! Each gives a `bool` per row, `true` where the geometry is degenerate, and `false` for a missing row.
+//! Each gives a `bool` per row, `true` where the geometry is malformed, and `false` for a missing row.
 //! The polygon kernels error when GEOS does.
 //! With every topology check on, GEOS's `is_valid` runs them all at once.
 //! Otherwise, each check runs on its own.
@@ -12,7 +12,7 @@
 //! ## `CHECK_EMPTY`
 //!
 //! Every kernel here is generic over `CHECK_EMPTY`.
-//! If `CHECK_EMPTY=true`, an empty geometry is degenerate.
+//! If `CHECK_EMPTY=true`, an empty geometry is malformed.
 //! A point is empty when it is the empty point (NaN in x and y).
 //! A multipoint or linestring is empty when it has only empty points, or none.
 //! A polygon is empty when it has only empty rings, or none.
@@ -21,7 +21,7 @@
 //! ## `CHECK_REPEATED_POINTS`
 //!
 //! The kernels of every kind but points are generic over `CHECK_REPEATED_POINTS`.
-//! If `CHECK_REPEATED_POINTS=true`, a geometry with two points that coincide is degenerate.
+//! If `CHECK_REPEATED_POINTS=true`, a geometry with two points that coincide is malformed.
 //! In a multipoint, those are any two of its points.
 //! In a linestring, those are two vertices in a row.
 //! In a multilinestring, those are two vertices in a row of one part.
@@ -56,7 +56,7 @@ use crate::native::{is_empty_point, only_empty_points};
 use crate::per_row::{per_row_bool, try_per_row_bool};
 use crate::GeoComputeResult;
 
-/// The topology checks to run on a polygon. See `is_degenerate` in Python.
+/// The topology checks to run on a polygon. See `is_malformed` in Python.
 #[derive(Debug, Clone, Copy)]
 pub struct PolygonTopologyChecks {
     pub check_ring_self_intersect: bool,
@@ -73,7 +73,7 @@ impl PolygonTopologyChecks {
     }
 }
 
-/// The topology checks to run on a multipolygon. See `is_degenerate` in Python.
+/// The topology checks to run on a multipolygon. See `is_malformed` in Python.
 #[derive(Debug, Clone, Copy)]
 pub struct MultiPolygonTopologyChecks {
     /// Every part is checked for these individually
@@ -226,7 +226,7 @@ fn multi_polygon_topology_is_valid(
     meet_only_at_points_and_no_overlap(&parts)
 }
 
-fn points_are_degenerate_with<const CHECK_EMPTY: bool>(array: &PointArray) -> BooleanArray {
+fn points_are_malformed_with<const CHECK_EMPTY: bool>(array: &PointArray) -> BooleanArray {
     let coords = &array.coords;
     let values = Bitmap::from_iter((0..coords.ignoring_validity().len()).map(|i| {
         CHECK_EMPTY && coords.is_valid(i) && is_empty_point(coords.ignoring_validity(), i)
@@ -234,11 +234,11 @@ fn points_are_degenerate_with<const CHECK_EMPTY: bool>(array: &PointArray) -> Bo
     BooleanArray::new(ArrowDataType::Boolean, values, coords.validity().cloned())
 }
 
-pub fn points_are_degenerate(array: &PointArray, check_empty: bool) -> BooleanArray {
-    with_const_flags!(points_are_degenerate_with(array); check_empty)
+pub fn points_are_malformed(array: &PointArray, check_empty: bool) -> BooleanArray {
+    with_const_flags!(points_are_malformed_with(array); check_empty)
 }
 
-fn multi_points_are_degenerate_with<
+fn multi_points_are_malformed_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
     const TOLERANCE_COINCIDENCE: bool,
@@ -259,7 +259,7 @@ fn multi_points_are_degenerate_with<
     })
 }
 
-pub fn multi_points_are_degenerate(
+pub fn multi_points_are_malformed(
     array: &MultiPointArray,
     check_repeated_points: bool,
     check_empty: bool,
@@ -267,12 +267,12 @@ pub fn multi_points_are_degenerate(
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        multi_points_are_degenerate_with(array, tolerance.unwrap_or_default());
+        multi_points_are_malformed_with(array, tolerance.unwrap_or_default());
         check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }
 
-fn line_strings_are_degenerate_with<
+fn line_strings_are_malformed_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
     const TOLERANCE_COINCIDENCE: bool,
@@ -293,7 +293,7 @@ fn line_strings_are_degenerate_with<
     })
 }
 
-pub fn line_strings_are_degenerate(
+pub fn line_strings_are_malformed(
     array: &LineStringArray,
     check_repeated_points: bool,
     check_empty: bool,
@@ -301,13 +301,13 @@ pub fn line_strings_are_degenerate(
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        line_strings_are_degenerate_with(array, tolerance.unwrap_or_default());
+        line_strings_are_malformed_with(array, tolerance.unwrap_or_default());
         check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }
 
-/// [line_strings_are_degenerate_with] for every part.
-fn multi_line_strings_are_degenerate_with<
+/// [line_strings_are_malformed_with] for every part.
+fn multi_line_strings_are_malformed_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
     const TOLERANCE_COINCIDENCE: bool,
@@ -330,7 +330,7 @@ fn multi_line_strings_are_degenerate_with<
     })
 }
 
-pub fn multi_line_strings_are_degenerate(
+pub fn multi_line_strings_are_malformed(
     array: &MultiLineStringArray,
     check_repeated_points: bool,
     check_empty: bool,
@@ -338,13 +338,13 @@ pub fn multi_line_strings_are_degenerate(
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        multi_line_strings_are_degenerate_with(array, tolerance.unwrap_or_default());
+        multi_line_strings_are_malformed_with(array, tolerance.unwrap_or_default());
         check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }
 
-/// A polygon that fails one of the `topology` checks is degenerate, if there are any.
-fn polygons_are_degenerate_with<
+/// A polygon that fails one of the `topology` checks is malformed, if there are any.
+fn polygons_are_malformed_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
     const TOLERANCE_COINCIDENCE: bool,
@@ -373,7 +373,7 @@ fn polygons_are_degenerate_with<
     })
 }
 
-pub fn polygons_are_degenerate(
+pub fn polygons_are_malformed(
     array: &PolygonArray,
     check_repeated_points: bool,
     check_empty: bool,
@@ -383,14 +383,14 @@ pub fn polygons_are_degenerate(
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        polygons_are_degenerate_with(array, topology, tolerance.unwrap_or_default());
+        polygons_are_malformed_with(array, topology, tolerance.unwrap_or_default());
         check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }
 
-/// [polygons_are_degenerate_with] for every part.
-/// A multipolygon that fails one of the `topology` checks is degenerate too, if there are any.
-fn multi_polygons_are_degenerate_with<
+/// [polygons_are_malformed_with] for every part.
+/// A multipolygon that fails one of the `topology` checks is malformed too, if there are any.
+fn multi_polygons_are_malformed_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
     const TOLERANCE_COINCIDENCE: bool,
@@ -421,7 +421,7 @@ fn multi_polygons_are_degenerate_with<
     })
 }
 
-pub fn multi_polygons_are_degenerate(
+pub fn multi_polygons_are_malformed(
     array: &MultiPolygonArray,
     check_repeated_points: bool,
     check_empty: bool,
@@ -431,7 +431,7 @@ pub fn multi_polygons_are_degenerate(
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        multi_polygons_are_degenerate_with(array, topology, tolerance.unwrap_or_default());
+        multi_polygons_are_malformed_with(array, topology, tolerance.unwrap_or_default());
         check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }

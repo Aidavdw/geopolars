@@ -118,7 +118,7 @@ def test_a_hole_is_the_second_ring_whichever_way_it_winds(planar_area: Area) -> 
     assert _areas(planar_area, _rings([_SQUARE, hole[::-1]])) == [15.0]
 
 
-def test_a_degenerate_ring_encloses_nothing(planar_area: Area) -> None:
+def test_a_malformed_ring_encloses_nothing(planar_area: Area) -> None:
     """Fewer than three distinct vertices cannot bound anything."""
     there_and_back = [
         {"x": 1.0, "y": 1.0},

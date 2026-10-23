@@ -44,7 +44,7 @@ def self_intersects(
 
     A polygon intersects itself when one of its rings does,
     or when two of its holes overlap (see `rings_overlap`; holes that only touch do not).
-    How the holes sit against the exterior is not looked at; see `is_degenerate` for that.
+    How the holes sit against the exterior is not looked at; see `is_malformed` for that.
     Every ring has to be a ring, as for `rings_overlap`, or this raises.
     With `ignore_per_row_errors=True`, it gives a missing result instead
     (a missing part, for a multipolygon).

@@ -1,6 +1,6 @@
 //! Kernels on GeoArrow, taking the views of `geopolars-core`:
 //! [native] ones of our own, and [geos], [rsgeo] and [proj] ones forwarding to those libraries.
-//! [validity] and [degeneracy] are the checks of `is_valid` and `is_degenerate`.
+//! [validity] and [malformation] are the checks of `is_valid` and `is_malformed`.
 //! [inner_nulls] moves missing values below the rows out to the rows.
 //!
 //! See the README.
@@ -27,12 +27,12 @@ macro_rules! with_const_flags {
     };
 }
 
-#[cfg(all(feature = "native", feature = "geos"))]
-pub mod degeneracy;
 mod error;
 #[cfg(feature = "geos")]
 pub mod geos;
 pub mod inner_nulls;
+#[cfg(all(feature = "native", feature = "geos"))]
+pub mod malformation;
 mod metric;
 #[cfg(feature = "native")]
 pub mod native;

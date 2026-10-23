@@ -88,7 +88,7 @@ def is_valid(
     Valid means it follows the GeoArrow spec, plus a few rules of ours on top of it.
     A valid geometry is safe to hand to every other operation.
     For geometries that are valid, but not useful (repeated points, empty,
-    or rings that cross), see `is_degenerate`.
+    or rings that cross), see `is_malformed`.
 
     Every coordinate has to be:
 
