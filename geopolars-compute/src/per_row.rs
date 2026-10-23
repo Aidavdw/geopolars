@@ -3,6 +3,7 @@
 use geopolars_core::output::{bool_array, f64_array};
 use geopolars_core::List;
 use polars_arrow::array::{BooleanArray, PrimitiveArray};
+use polars_arrow::bitmap::Bitmap;
 
 /// `measure` of every row of a chunk, with the rows' own validity.
 #[inline(always)]
@@ -15,9 +16,36 @@ pub(crate) fn per_row<E>(
 
 /// [per_row], for a `bool` per row.
 #[inline(always)]
+pub(crate) fn try_per_row_bool<E>(
+    rows: &List,
+    test: impl Fn(usize) -> Result<bool, E>,
+) -> Result<BooleanArray, E> {
+    Ok(bool_array(per_row_values(rows, test)?, rows.validity()))
+}
+
+#[inline(always)]
 pub(crate) fn per_row_bool(rows: &List, test: impl Fn(usize) -> bool) -> BooleanArray {
-    let Ok(values) = per_row_values(rows, |i| Ok::<_, std::convert::Infallible>(test(i)));
-    bool_array(values, rows.validity())
+    let Ok(tested) = try_per_row_bool(rows, |i| Ok::<_, std::convert::Infallible>(test(i)));
+    tested
+}
+
+/// A `bool` per item, missing where it is `None`.
+pub(crate) fn optional_bool_array(tested: &[Option<bool>]) -> BooleanArray {
+    let values = tested
+        .iter()
+        .map(|tested| tested.unwrap_or(false))
+        .collect();
+    let validity = Bitmap::from_iter(tested.iter().map(Option::is_some));
+    bool_array(values, Some(&validity))
+}
+
+/// `test` of every row of a chunk, missing where the row is or where `test` gives `None`.
+#[inline(always)]
+pub(crate) fn per_row_optional_bool<E>(
+    rows: &List,
+    test: impl Fn(usize) -> Result<Option<bool>, E>,
+) -> Result<BooleanArray, E> {
+    Ok(optional_bool_array(&per_row_values(rows, test)?))
 }
 
 /// `measure` of every row of a chunk, with a default value for a missing row.

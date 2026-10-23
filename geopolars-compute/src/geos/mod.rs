@@ -7,15 +7,19 @@
 mod convex_hull;
 mod linestrings;
 mod polygons;
+mod rings_overlap;
 mod simplify;
+mod topology;
 
 pub use convex_hull::{
     line_string_convex_hulls, multi_line_string_convex_hulls, multi_point_convex_hulls,
     multi_polygon_convex_hulls, polygon_convex_hulls,
 };
+pub use rings_overlap::{rings_overlap_against_one, rings_overlap_pairwise};
 pub use simplify::{
     simplify_line_strings, simplify_multi_line_strings, simplify_multi_polygons, simplify_polygons,
 };
+pub use topology::{meet_only_at_points_and_no_overlap, polygon_rings_fit};
 
 use std::ops::Range;
 

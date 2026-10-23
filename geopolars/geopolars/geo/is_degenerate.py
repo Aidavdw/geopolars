@@ -1,8 +1,6 @@
-"""Whether a geometry is degenerate, and nulling out the ones that are.
+"""Whether a geometry is degenerate, and/or nulling out the ones that are.
 
-A native kernel (A-tier) checks the points of every row.
-A polygon's rings, and a multipolygon's parts,
-are related to each other through rsgeo's `Relate` (B-tier).
+A bit of a compound operation, so some of it A-tier, some B-tier.
 """
 
 from __future__ import annotations
@@ -70,7 +68,7 @@ def is_degenerate(
     - every hole lies inside the exterior;
     - no two holes share any area, nor does one lie inside another;
     - rings touch each other only at points, never along a line.
-      Whether the interior stays in one piece is not checked.
+      Whether the interior stays in one piece is only checked when every topology check is on.
 
     A multipolygon's parts fit together, in x and y, when
     no two parts share any area (one may lie inside a hole of another),

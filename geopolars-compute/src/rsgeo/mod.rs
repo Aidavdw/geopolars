@@ -3,13 +3,14 @@
 //! rsgeo has geometry types of its own, so what it relates is copied into them.
 //! Its algorithms only look at x and y, so z and m are never read.
 
-// Only for `degeneracy`.
 #[cfg(feature = "native")]
+#[allow(dead_code)]
 mod is_valid;
 mod rings_overlap;
 mod self_intersects;
 
 #[cfg(feature = "native")]
+#[allow(unused_imports)]
 pub(crate) use is_valid::{multi_polygon_topology_is_valid, polygon_topology_is_valid};
 #[cfg(feature = "native")]
 pub use is_valid::{MultiPolygonTopologyChecks, PolygonTopologyChecks};
@@ -20,13 +21,12 @@ pub use self_intersects::{
 };
 
 use ::rsgeo::{Coord, LineString, Polygon};
-use geopolars_core::output::{bool_array, list_array};
+use geopolars_core::output::list_array;
 use geopolars_core::{is_ring, List, ScalarLineString, ValidList};
-use polars_arrow::array::{BooleanArray, ListArray};
-use polars_arrow::bitmap::Bitmap;
+use polars_arrow::array::ListArray;
 use polars_arrow::offset::Offsets;
 
-use crate::per_row::per_row_values;
+use crate::per_row::{optional_bool_array, per_row_optional_bool};
 use crate::{GeoComputeError, GeoComputeResult};
 
 /// Whether every vertex of `line` is finite in x and y.
@@ -60,25 +60,6 @@ fn to_rsgeo_ring(line: &ScalarLineString) -> Polygon<f64> {
         .map(|[x, y, _]| Coord { x, y })
         .collect();
     Polygon::new(LineString::new(vertices), vec![])
-}
-
-/// A `bool` per item, missing where it is `None`.
-fn optional_bool_array(tested: &[Option<bool>]) -> BooleanArray {
-    let values = tested
-        .iter()
-        .map(|tested| tested.unwrap_or(false))
-        .collect();
-    let validity = Bitmap::from_iter(tested.iter().map(Option::is_some));
-    bool_array(values, Some(&validity))
-}
-
-/// `test` of every row of a chunk, missing where the row is or where `test` gives `None`.
-#[inline(always)]
-fn per_row_optional_bool<E>(
-    rows: &List,
-    test: impl Fn(usize) -> Result<Option<bool>, E>,
-) -> Result<BooleanArray, E> {
-    Ok(optional_bool_array(&per_row_values(rows, test)?))
 }
 
 /// [per_row_optional_bool], as a list per row of a chunk, one per part.

@@ -22,12 +22,12 @@ the comment says when one without a CRS takes a different tier.
 | `convex_hull` | - | | B | GEOS [^3], straight=null | B | GEOS [^3] [^1] | B | GEOS [^3] [^1] | B | GEOS [^3] [^1] | B | GEOS[^3] [^1] |
 | `simplify` | C | returns the point | B | GEOS; z kept, m dropped | B | split by `buffer(0)` is a per-row error | C | returns the multipoint | B | | B | |
 | `is_ring` | - | | A | ≥ 4 vertices, ends ≈  x/y/z | - | | - | | A | parts chained into one ring | - | |
-| `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes fwd `rings_overlap` | - | | B | LPP | B | LPP |
-| `rings_overlap` | - | | B | hacked as polygon's RGR | - | | - | | - | | - | |
+| `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes RGR | - | | B | LPP | B | LPP |
+| `rings_overlap` | - | | B | hacked as polygon; GEOS | - | | - | | - | | - | |
 | `is_ccw` | - | | A | CCW | A | | - | | A | every part combined | A | every part combined |
 | `is_valid` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
-| `is_degenerate` | A | | A | | A/B | RGR | A | | A | EP | A/B | EP and RGR |
+| `is_degenerate` | A | | A | | A/B | GEOS | A | | A | EP | A/B | EP and GEOS |
 | `null_out_degenerate` | A | nulls what `is_degenerate` finds | A | | A/B | | A | | A | | A/B | |
 | `distance` | A/B | [^2] | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |

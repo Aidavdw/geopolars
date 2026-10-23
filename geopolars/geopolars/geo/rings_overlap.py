@@ -1,6 +1,6 @@
 """Check two rings for overlapping
 This is a hacky implementation that wraps two linestrings into a Polygon,
-and calls rsgeo's Relate.
+and relates them through GEOS.
 """
 
 from __future__ import annotations

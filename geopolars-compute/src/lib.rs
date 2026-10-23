@@ -27,7 +27,7 @@ macro_rules! with_const_flags {
     };
 }
 
-#[cfg(all(feature = "native", feature = "rsgeo"))]
+#[cfg(all(feature = "native", feature = "geos"))]
 pub mod degeneracy;
 mod error;
 #[cfg(feature = "geos")]
@@ -36,7 +36,9 @@ pub mod inner_nulls;
 mod metric;
 #[cfg(feature = "native")]
 pub mod native;
-#[cfg(any(feature = "native", feature = "rsgeo"))]
+#[cfg(any(feature = "native", feature = "rsgeo", feature = "geos"))]
+// Some helpers are only for the `native` kernels.
+#[cfg_attr(not(feature = "native"), allow(dead_code))]
 mod per_row;
 pub mod proj;
 #[cfg(feature = "rsgeo")]

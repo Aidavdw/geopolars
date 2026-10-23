@@ -3,21 +3,60 @@
 //!
 //! The views have to hold valid geometries (see [crate::validity]).
 //! Each gives a `bool` per row, `true` where the geometry is degenerate, and `false` for a missing row.
+//! The polygon kernels error when GEOS does.
+//! With every topology check on, GEOS's `is_valid` runs them all at once.
+//! Otherwise, each check runs on its own.
 
 use std::ops::Range;
 
 use geopolars_core::{
     same_place, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PointArray, PolygonArray, ValidCoords,
+    PointArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon, ValidCoords,
 };
+use geos::{Geom, Geometry};
 use polars_arrow::array::BooleanArray;
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::datatypes::ArrowDataType;
 
+use crate::geos::{meet_only_at_points_and_no_overlap, polygon_rings_fit, ToGeos};
 use crate::native::is_empty_point;
-use crate::per_row::per_row_bool;
-use crate::rsgeo::{multi_polygon_topology_is_valid, polygon_topology_is_valid};
-pub use crate::rsgeo::{MultiPolygonTopologyChecks, PolygonTopologyChecks};
+use crate::per_row::{per_row_bool, try_per_row_bool};
+use crate::GeoComputeResult;
+
+/// The topology checks to run on a polygon. See `is_degenerate` in Python.
+#[derive(Debug, Clone, Copy)]
+pub struct PolygonTopologyChecks {
+    pub check_ring_self_intersect: bool,
+    pub check_polygon_self_overlap: bool,
+}
+
+impl PolygonTopologyChecks {
+    pub fn checks_anything(&self) -> bool {
+        self.check_ring_self_intersect || self.check_polygon_self_overlap
+    }
+
+    pub fn checks_everything(&self) -> bool {
+        self.check_ring_self_intersect && self.check_polygon_self_overlap
+    }
+}
+
+/// The topology checks to run on a multipolygon. See `is_degenerate` in Python.
+#[derive(Debug, Clone, Copy)]
+pub struct MultiPolygonTopologyChecks {
+    /// Every part is checked for these individually
+    pub polygons: PolygonTopologyChecks,
+    pub check_multi_polygon_self_overlap: bool,
+}
+
+impl MultiPolygonTopologyChecks {
+    pub fn checks_anything(&self) -> bool {
+        self.polygons.checks_anything() || self.check_multi_polygon_self_overlap
+    }
+
+    pub fn checks_everything(&self) -> bool {
+        self.polygons.checks_everything() && self.check_multi_polygon_self_overlap
+    }
+}
 
 /// Whether two vertices in a row of `vertices` lie at the [same place](same_place).
 #[inline(always)]
@@ -37,6 +76,104 @@ fn has_repeated_points<const Z: bool>(coords: &ValidCoords, points: Range<usize>
 #[inline(always)]
 fn only_empty_points(coords: &ValidCoords, mut vertices: Range<usize>) -> bool {
     vertices.all(|i| is_empty_point(coords, i))
+}
+
+fn xy_is_finite(coords: &ValidCoords, vertices: Range<usize>) -> bool {
+    let (x, y) = (&coords.x()[vertices.clone()], &coords.y()[vertices]);
+    x.iter().chain(y).all(|value| value.is_finite())
+}
+
+fn is_empty_polygon(polygon: &ScalarPolygon) -> bool {
+    polygon
+        .rings()
+        .next()
+        .is_none_or(|exterior| exterior.vertices.is_empty())
+}
+
+fn needs_whole_polygon_in_geos(checks: &PolygonTopologyChecks) -> bool {
+    checks.checks_everything() || checks.check_ring_self_intersect
+}
+
+fn whole_polygon_passes(
+    geometry: &Geometry,
+    checks: &PolygonTopologyChecks,
+) -> GeoComputeResult<bool> {
+    Ok(if checks.checks_everything() {
+        geometry.is_valid()?
+    } else {
+        !checks.check_ring_self_intersect || geometry.is_simple()?
+    })
+}
+
+fn rings_fit_if_checked_separately(
+    polygon: &ScalarPolygon,
+    checks: &PolygonTopologyChecks,
+) -> GeoComputeResult<bool> {
+    // A lone exterior has nothing to fit with.
+    let fit = checks.check_polygon_self_overlap && !checks.checks_everything();
+    Ok(!fit || polygon.parts.len() < 2 || polygon_rings_fit(polygon)?)
+}
+
+/// [polygon_topology_is_valid] for a `polygon` that is not empty, and finite in x and y.
+fn finite_polygon_topology_is_valid(
+    polygon: &ScalarPolygon,
+    checks: &PolygonTopologyChecks,
+) -> GeoComputeResult<bool> {
+    if needs_whole_polygon_in_geos(checks) && !whole_polygon_passes(&polygon.to_geos()?, checks)? {
+        return Ok(false);
+    }
+    rings_fit_if_checked_separately(polygon, checks)
+}
+
+fn polygon_topology_is_valid(
+    polygon: &ScalarPolygon,
+    checks: &PolygonTopologyChecks,
+) -> GeoComputeResult<bool> {
+    if is_empty_polygon(polygon) {
+        return Ok(true);
+    }
+    if !xy_is_finite(polygon.coords, polygon.rings.span(polygon.parts.clone())) {
+        return Ok(false);
+    }
+    finite_polygon_topology_is_valid(polygon, checks)
+}
+
+/// Uses [polygon_topology_is_valid] for every part.
+/// if `check_multi_polygon_self_overlap=true`, uses [meet_only_at_points_and_no_overlap] for its parts.
+fn multi_polygon_topology_is_valid(
+    multi: &ScalarMultiPolygon,
+    checks: &MultiPolygonTopologyChecks,
+) -> GeoComputeResult<bool> {
+    let vertices = multi.rings.span(multi.polygons.span(multi.parts.clone()));
+    if !xy_is_finite(multi.coords, vertices) {
+        return Ok(false);
+    }
+    if checks.checks_everything() {
+        return Ok(multi.to_geos()?.is_valid()?);
+    }
+    let polygons = multi
+        .polygons()
+        .filter(|polygon| !is_empty_polygon(polygon));
+    if !checks.check_multi_polygon_self_overlap {
+        for polygon in polygons {
+            if !finite_polygon_topology_is_valid(&polygon, &checks.polygons)? {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+    // Every part is built once, for its own checks as well as to relate to the others.
+    let mut parts = Vec::with_capacity(multi.parts.len());
+    for polygon in polygons {
+        let geometry = polygon.to_geos()?;
+        if !whole_polygon_passes(&geometry, &checks.polygons)?
+            || !rings_fit_if_checked_separately(&polygon, &checks.polygons)?
+        {
+            return Ok(false);
+        }
+        parts.push(geometry);
+    }
+    meet_only_at_points_and_no_overlap(&parts)
 }
 
 /// If `CHECK_EMPTY=true`, the empty point is degenerate.
@@ -146,16 +283,19 @@ fn polygons_are_degenerate_with<
 >(
     array: &PolygonArray,
     topology: Option<&PolygonTopologyChecks>,
-) -> BooleanArray {
-    per_row_bool(&array.rows, |i| {
+) -> GeoComputeResult<BooleanArray> {
+    try_per_row_bool(&array.rows, |i| {
         let polygon = array.get(i);
         let vertices = array.rings.span(array.rows.range(i));
-        (CHECK_REPEATED_POINTS
+        Ok((CHECK_REPEATED_POINTS
             && polygon
                 .rings()
                 .any(|ring| has_repeated_vertices::<Z>(ring.coords, ring.vertices)))
             || (CHECK_EMPTY && only_empty_points(&array.coords, vertices))
-            || topology.is_some_and(|checks| !polygon_topology_is_valid(&polygon, checks))
+            || match topology {
+                Some(checks) => !polygon_topology_is_valid(&polygon, checks)?,
+                None => false,
+            })
     })
 }
 
@@ -164,7 +304,7 @@ pub fn polygons_are_degenerate(
     check_repeated_points: bool,
     check_empty: bool,
     topology: &PolygonTopologyChecks,
-) -> BooleanArray {
+) -> GeoComputeResult<BooleanArray> {
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
     with_const_flags!(
@@ -183,18 +323,21 @@ fn multi_polygons_are_degenerate_with<
 >(
     array: &MultiPolygonArray,
     topology: Option<&MultiPolygonTopologyChecks>,
-) -> BooleanArray {
-    per_row_bool(&array.rows, |i| {
+) -> GeoComputeResult<BooleanArray> {
+    try_per_row_bool(&array.rows, |i| {
         let multi = array.get(i);
         let vertices = array.rings.span(array.polygons.span(array.rows.range(i)));
-        (CHECK_REPEATED_POINTS
+        Ok((CHECK_REPEATED_POINTS
             && multi.polygons().any(|polygon| {
                 polygon
                     .rings()
                     .any(|ring| has_repeated_vertices::<Z>(ring.coords, ring.vertices))
             }))
             || (CHECK_EMPTY && only_empty_points(&array.coords, vertices))
-            || topology.is_some_and(|checks| !multi_polygon_topology_is_valid(&multi, checks))
+            || match topology {
+                Some(checks) => !multi_polygon_topology_is_valid(&multi, checks)?,
+                None => false,
+            })
     })
 }
 
@@ -203,7 +346,7 @@ pub fn multi_polygons_are_degenerate(
     check_repeated_points: bool,
     check_empty: bool,
     topology: &MultiPolygonTopologyChecks,
-) -> BooleanArray {
+) -> GeoComputeResult<BooleanArray> {
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
     with_const_flags!(

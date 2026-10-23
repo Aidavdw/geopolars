@@ -58,6 +58,10 @@ impl IsDegenerateKwargs {
     }
 }
 
+fn compute_err(e: impl std::fmt::Display) -> PolarsError {
+    polars_err!(ComputeError: "is_degenerate {e}")
+}
+
 /// [`are_degenerate`] for one chunk of the storage of a `kind`.
 /// The chunk is trusted to be valid (see `is_valid`), so its views are built directly.
 fn chunk_is_degenerate(
@@ -83,13 +87,15 @@ fn chunk_is_degenerate(
             repeated,
             empty,
             &kwargs.polygon_topology(),
-        ),
+        )
+        .map_err(compute_err)?,
         Kind::MultiPolygon => multi_polygons_are_degenerate(
             &MultiPolygonArray::new(rows()?)?,
             repeated,
             empty,
             &kwargs.multi_polygon_topology(),
-        ),
+        )
+        .map_err(compute_err)?,
     })
 }
 

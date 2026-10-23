@@ -16,8 +16,8 @@ use polars::prelude::*;
 use polars_arrow::array::PrimitiveArray;
 use polars_arrow::datatypes::ArrowDataType;
 use polars_core::utils::align_chunks_binary;
-use pyo3_polars::derive::polars_expr;
 use proj::Proj;
+use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use crate::geoarrow::{describe, Kind};

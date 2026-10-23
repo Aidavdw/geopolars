@@ -1,7 +1,7 @@
 //! Whether two rings overlap
-//! (see [`geopolars_compute::rsgeo::rings_overlap_pairwise`]).
+//! (see [`geopolars_compute::geos::rings_overlap_pairwise`]).
 
-use geopolars_compute::rsgeo::{rings_overlap_against_one, rings_overlap_pairwise};
+use geopolars_compute::geos::{rings_overlap_against_one, rings_overlap_pairwise};
 use geopolars_compute::with_const_flags;
 use geopolars_core::LineStringArray;
 use polars::prelude::*;

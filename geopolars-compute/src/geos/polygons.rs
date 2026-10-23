@@ -89,12 +89,7 @@ pub(super) fn polygon_to_geos(
     rings: &ValidList,
     parts: Range<usize>,
 ) -> GeoComputeResult<Geometry> {
-    let mut parts = parts.map(|j| {
-        Ok(Geometry::create_linear_ring(coord_seq(
-            axes,
-            rings.range(j),
-        )?)?)
-    });
+    let mut parts = parts.map(|j| linear_ring_to_geos(axes, rings.range(j)));
     // GEOS can't build a polygon without an exterior, so an empty one has its own constructor.
     let Some(exterior) = parts.next() else {
         return Ok(Geometry::create_empty_polygon()?);
@@ -103,6 +98,35 @@ pub(super) fn polygon_to_geos(
         exterior?,
         parts.collect::<GeoComputeResult<_>>()?,
     )?)
+}
+
+#[inline(always)]
+pub(super) fn polygon_enclosed_by_ring_to_geos(
+    axes: &Axes,
+    vertices: Range<usize>,
+) -> GeoComputeResult<Geometry> {
+    Ok(Geometry::create_polygon(
+        linear_ring_to_geos(axes, vertices)?,
+        vec![],
+    )?)
+}
+
+// TODO: Do we keep using our 'almost exactly equal' for line closing, or do we start using exact
+// equality as well?
+
+/// Our ring's ends only have to lie at the same place (see `is_ring`), but GEOS wants them *exactly* equal.
+/// So the last vertex is moved onto the first, in x and y.
+#[inline(always)]
+fn linear_ring_to_geos(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<Geometry> {
+    let mut seq = coord_seq(axes, vertices.clone())?;
+    let (x, y, _, _) = axes;
+    let (first, last) = (vertices.start, vertices.end.saturating_sub(1));
+    if !vertices.is_empty() && (x[first] != x[last] || y[first] != y[last]) {
+        let line = vertices.len() - 1;
+        seq.set_x(line, x[first])?;
+        seq.set_y(line, y[first])?;
+    }
+    Ok(Geometry::create_linear_ring(seq)?)
 }
 
 /// The multipolygon of `polygons` `parts`.
