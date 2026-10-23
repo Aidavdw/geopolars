@@ -56,6 +56,16 @@ geometry editing
 - [ ] Linestring joining
 - [ ] polygon construction from linestrings
 - [ ] Adding additional holes to polygons from linestrings
+- [ ] reverse lines
+- [ ] make lines cw/ccw
+- [ ] drop_dims(z: bool, m: bool)
+- [ ] to_linestring() takes list of points, multipoint, linestring
+- [ ] is_continuous (for multilinestring)
+
+repair:
+
+- [ ] repair: drop overlaps, with the options for reltol etc.
+- [ ] Close rings expr, can use this inside of 'repair'
 
 ## Binary predicates
 
