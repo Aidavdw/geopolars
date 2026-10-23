@@ -1,5 +1,7 @@
 //! Linestrings and multilinestrings to GEOS, and back.
 //!
+//! # Const generic flags
+//!
 //! See [super] for `Z`.
 
 use std::ops::Range;

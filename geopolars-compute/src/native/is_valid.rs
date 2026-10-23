@@ -3,11 +3,9 @@
 //!
 //! What a check reads for every vertex is a const flag.
 //!
-//! # `CHECK_FINITE_COORDINATES`, `CHECK_CRS_BOUNDS`, `Z` and `M`
+//! # Const generic flags
 //!
-//! [coordinate_is_valid] is generic over all four.
-//! [polygon_shape_is_valid] is generic over `Z`.
-//! See [crate::validity] for them.
+//! See [crate::validity] for `CHECK_FINITE_COORDINATES`, `CHECK_CRS_BOUNDS`, `Z` and `M`.
 
 use std::ops::Range;
 

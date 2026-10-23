@@ -1,11 +1,13 @@
 //! How long a linestring is, as a [LengthMetric] measures it.
 //!
-//! # `Z`
+//! # Const generic flags
+//!
+//! ## `Z`
 //!
 //! Every function here is generic over `Z`.
 //! If `Z=true`, the difference in z of a segment counts towards its length.
 //!
-//! # `IGNORE_NAN`
+//! ## `IGNORE_NAN`
 //!
 //! Every function here is generic over `IGNORE_NAN`.
 //! If `IGNORE_NAN=true`, a vertex with a NaN is skipped, so the line runs on to the next one.
