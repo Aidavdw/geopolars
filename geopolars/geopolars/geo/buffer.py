@@ -34,6 +34,15 @@ def _check_one_of(name: str, value: str, allowed: tuple[str, ...]) -> None:
         raise ValueError(msg)
 
 
+def _distances_of(geometry: pl.Expr, distance: IntoExprColumn) -> pl.Expr:
+    """One distance per geometry, broadcast from a single value.
+    Polars raises a `ShapeError` on any other length, which a plugin cannot.
+    A missing geometry gives a missing row either way, so its distance is dropped.
+    """
+    distance = _to_expr(distance).cast(pl.Float64)
+    return pl.when(geometry.is_null()).then(None).otherwise(distance)
+
+
 @doc(output="polygon")
 def buffer(
     geometry: IntoExprColumn,
@@ -163,7 +172,7 @@ def buffer(
                 f" got: {dtype!r}"
             )
             raise TypeError(msg)
-        args = [column] if constant else [column, _to_expr(distance).cast(pl.Float64)]
+        args = [column] if constant else [column, _distances_of(column, distance)]
         return register_plugin_function(
             plugin_path=LIB,
             args=args,

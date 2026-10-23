@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import polars as pl
 import pytest
-from polars.exceptions import ComputeError
+from polars.exceptions import ComputeError, ShapeError
 
 from geopolars import geo
 from geopolars.datatypes import (
@@ -19,6 +20,9 @@ from geopolars.datatypes import (
     PolygonXY,
 )
 from tests.unit.conftest import Dimension
+
+if TYPE_CHECKING:
+    from polars._typing import EngineType
 
 Ring = list[dict[str, float]]
 
@@ -361,11 +365,12 @@ def test_a_distance_series_of_one_value_is_broadcast() -> None:
     assert out.to_series().to_list() == pytest.approx([4 * _inscribed_area(8)] * 2)
 
 
-def test_a_distance_column_of_another_length_raises() -> None:
-    df = _column(PointXY, _ORIGIN, _ORIGIN, _ORIGIN)
+@pytest.mark.parametrize("engine", ["in-memory", "streaming"])
+def test_a_distance_column_of_another_length_raises(engine: EngineType) -> None:
+    lf = _column(PointXY, _ORIGIN, _ORIGIN, _ORIGIN).lazy()
 
-    with pytest.raises(ComputeError, match="3 geometries by 2 distances"):
-        df.select(geo.buffer("geom", pl.Series([1.0, 2.0])))
+    with pytest.raises(ShapeError):
+        lf.select(geo.buffer("geom", pl.Series([1.0, 2.0]))).collect(engine=engine)
 
 
 def test_an_integer_distance_works() -> None:

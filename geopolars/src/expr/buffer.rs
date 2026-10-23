@@ -178,13 +178,14 @@ fn buffer(inputs: &[Series], kwargs: BufferKwargs) -> PolarsResult<Series> {
             .collect::<PolarsResult<_>>()?,
         None => {
             let storage = storage.rechunk();
-            let distances = match (storage.len(), inputs[1].len()) {
-                (n, m) if n == m => inputs[1].rechunk(),
-                (n, 1) => inputs[1].new_from_index(0, n).rechunk(),
-                (n, m) => {
-                    polars_bail!(ShapeMismatch: "cannot buffer {n} geometries by {m} distances")
-                }
-            };
+            // Python broadcast the distances to one per geometry.
+            let distances = inputs[1].rechunk();
+            polars_ensure!(
+                distances.len() == storage.len(),
+                ShapeMismatch: "cannot buffer {} geometries by {} distances",
+                storage.len(),
+                distances.len()
+            );
             let distance = BufferDistance::PerRow(distances.f64()?.downcast_as_array());
             let rows = storage.chunks()[0].as_ref();
             vec![chunk_buffered(rows, kind, into_multi, distance, &kwargs)?.boxed()]
