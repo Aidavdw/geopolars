@@ -25,6 +25,7 @@ the comment says when one without a CRS takes a different tier.
 | `self_intersects` | - | | B | GEOS `is_simple`; x/y only | B | per ring; holes as `rings_overlap` | - | | B | LPP | B | LPP |
 | `rings_overlap` | - | | B | hacked as polygon; GEOS | - | | - | | - | | - | |
 | `is_ccw` | - | | A | CCW | A | | - | | A | every part combined | A | every part combined |
+| `is_close` | A | pairwise or against one | A | same coordinates in order | A | same rings | A | | A | same parts | A | same polygons and rings |
 | `is_valid` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
 | `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
 | `is_degenerate` | A | | A | | A/B | GEOS | A | | A | EP | A/B | EP and GEOS |

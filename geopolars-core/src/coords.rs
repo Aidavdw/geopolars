@@ -13,14 +13,15 @@ use crate::{downcast, GeoDimension};
 /// The fewest vertices a ring can have: a triangle, plus the vertex closing it.
 pub const MIN_RING_VERTICES: usize = 4;
 
-/// Whether two coordinate values are within a relative `tolerance` of each other:
-/// `|a - b| <= tolerance * max(|a|, |b|)`.
+/// Whether two coordinate values are almost the same, as `pl.Expr.is_close`:
+/// `|a - b| <= max(rel_tol * max(|a|, |b|), abs_tol)`.
 /// Infinities are only close to themselves, and NaN is close to nothing.
-pub fn is_close(a: f64, b: f64, tolerance: f64) -> bool {
+#[inline(always)]
+pub fn is_close(a: f64, b: f64, abs_tol: f64, rel_tol: f64) -> bool {
     if a.is_infinite() || b.is_infinite() {
         return a == b;
     }
-    (a - b).abs() <= tolerance * a.abs().max(b.abs())
+    (a - b).abs() <= (rel_tol * a.abs().max(b.abs())).max(abs_tol)
 }
 
 /// Whether two [positions](ValidCoords::position) are equal on every axis.
@@ -42,7 +43,7 @@ pub fn same_place<const Z: bool>(coords: &ValidCoords, i: usize, j: usize) -> bo
         })
 }
 
-/// [same_place], but every axis only has to be [`is_close`] within `tolerance`.
+/// [same_place], but every axis only has to be [`is_close`] within a relative `tolerance`.
 #[inline(always)]
 pub fn same_place_within<const Z: bool>(
     coords: &ValidCoords,
@@ -50,11 +51,11 @@ pub fn same_place_within<const Z: bool>(
     j: usize,
     tolerance: f64,
 ) -> bool {
-    is_close(coords.x()[i], coords.x()[j], tolerance)
-        && is_close(coords.y()[i], coords.y()[j], tolerance)
+    is_close(coords.x()[i], coords.x()[j], 0.0, tolerance)
+        && is_close(coords.y()[i], coords.y()[j], 0.0, tolerance)
         && (!Z || {
             let z = coords.z().expect("a z, with `Z`");
-            is_close(z[i], z[j], tolerance)
+            is_close(z[i], z[j], 0.0, tolerance)
         })
 }
 

@@ -5,6 +5,7 @@ mod area;
 mod centroid;
 pub mod distance;
 mod is_ccw;
+mod is_close;
 mod is_ring;
 // Only for `validity` and `degeneracy`.
 mod is_valid;
@@ -22,6 +23,10 @@ pub use centroid::{
 pub use distance::{against_one, pairwise, DistanceMetric};
 pub use is_ccw::{
     line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,
+};
+pub use is_close::{
+    line_strings_are_close, multi_line_strings_are_close, multi_points_are_close,
+    multi_polygons_are_close, points_are_close, polygons_are_close, Tolerance,
 };
 pub use is_ring::{line_strings_are_rings, multi_line_strings_are_rings};
 pub use is_valid::Bounds;

@@ -222,6 +222,26 @@ class ExprGeoNameSpace:
             ignore_per_row_errors=ignore_per_row_errors,
         )
 
+    def is_close(
+        self,
+        other: IntoExprColumn,
+        *,
+        abs_tol: float = 0.0,
+        rel_tol: float = 1e-09,
+        nans_equal: bool = False,
+        ignore_m: bool = False,
+    ) -> pl.Expr:
+        from geopolars.geo.is_close import is_close
+
+        return is_close(
+            self._expr,
+            other,
+            abs_tol=abs_tol,
+            rel_tol=rel_tol,
+            nans_equal=nans_equal,
+            ignore_m=ignore_m,
+        )
+
     def is_ccw(self, *, holes_cw: bool = True) -> pl.Expr:
         from geopolars.geo.is_ccw import is_ccw
 
