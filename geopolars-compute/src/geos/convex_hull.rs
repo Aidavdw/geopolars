@@ -28,8 +28,10 @@
 //!   GEOS can't build a ring starting with NaN, because its closing NaN ≠ NaN.
 //!   Here, that ring is hulled like any other NaN input.
 //!
-//! With `EARLY_FINITE_CHECK=false`, NaN coordinates are passed to GEOS as they are.
-//! What happens to them depends on where they are placed.
+//! # Const generic flags
+//!
+//! See [super] for `EARLY_FINITE_CHECK`.
+//! If `EARLY_FINITE_CHECK=false`, what happens to NaN coordinates depends on where they are placed.
 //! - only empty points (x and y NaN) -> a `POINT (NaN NaN)`, so the row is missing
 //! - an empty point first, then real ones -> also a `POINT (NaN NaN)`,
 //!   so the row is silently missing, even with `ignore_per_row_errors=false`;
@@ -37,8 +39,11 @@
 //! - a vertex with just one NaN axis -> an error ("orientationIndex encountered NaN/Inf numbers").
 //!   So the error is returned, or with `ignore_per_row_errors=true` the row is missing.
 //!
-//! With `EARLY_FINITE_CHECK=true`, a row with a NaN or infinite x or y never goes to GEOS.
-//! It fails the same way a GEOS error does, which makes this consistent.
+//! If `EARLY_FINITE_CHECK=true`, each of these rows fails the same way a GEOS error does,
+//! which makes this consistent.
+//!
+//!
+//! See [super] for `ALL_VALID` and `Z`.
 
 use std::ops::Range;
 
@@ -67,7 +72,6 @@ use crate::GeoComputeResult;
 /// If `ccw_outer=true`, the exterior is made to run counter-clockwise
 /// at a small performance cost. If it is not set, orientation is clockwise,
 /// as GEOS gives it.
-/// See [`ToGeosRows`](super::ToGeosRows) for `early_finite_check`.
 pub fn line_string_convex_hulls(
     array: &LineStringArray,
     ignore_per_row_errors: bool,
@@ -188,11 +192,6 @@ fn hulls(
 /// [`hulls`] as GEOS polygons.
 /// The size hint is an upper bound:
 /// a row's hull is one ring, which closes on at most one coordinate more than the row has.
-/// `Z` says whether the coordinates (and so the hulls) have z.
-/// if `ALL_VALID=true`, we don't first check for validity, and just send it to GEOS.
-/// (If it does contain invalid ones, it's fine because we still check for invalid returned values,
-/// but we're just wasting time because it could have been caught before)
-/// `EARLY_FINITE_CHECK` is the `early_finite_check` of [`ToGeosRows`](super::ToGeosRows).
 /// Errors are the exception, so `ignore_per_row_errors` is checked per row rather than made const.
 fn hulls_with<const Z: bool, const ALL_VALID: bool, const EARLY_FINITE_CHECK: bool>(
     rows: &List,

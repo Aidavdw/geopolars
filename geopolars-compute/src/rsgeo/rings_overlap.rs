@@ -1,4 +1,11 @@
 //! Whether two rings overlap, which is when the areas they enclose share area.
+//!
+//! # Const generic flags
+//!
+//! ## `TOUCHING`
+//!
+//! Every function here that relates two rings is generic over `TOUCHING`.
+//! If `TOUCHING=true`, rings that only touch overlap too.
 
 use ::rsgeo::coordinate_position::CoordPos;
 use ::rsgeo::dimensions::Dimensions;
@@ -13,7 +20,6 @@ use super::{per_row_optional_bool, ring_is_finite, to_rsgeo_ring};
 use crate::{row_or_missing, GeoComputeResult};
 
 /// Whether two rings related as `matrix` overlap.
-/// If `TOUCHING=true`, rings that only touch overlap too.
 #[inline(always)]
 pub(super) fn overlap<const TOUCHING: bool>(matrix: &IntersectionMatrix) -> bool {
     if TOUCHING {
@@ -31,7 +37,7 @@ fn finite_ring(line: &ScalarLineString) -> GeoComputeResult<Option<Polygon<f64>>
     Ok(ring_is_finite(line)?.then(|| to_rsgeo_ring(line)))
 }
 
-/// Whether rings `a` and `b` overlap. See [overlap] for `TOUCHING`.
+/// Whether rings `a` and `b` overlap.
 /// `None` if one of them is not finite in x or y.
 /// Errors if one of them is not a ring.
 #[inline(always)]
@@ -46,7 +52,6 @@ fn ring_pair_overlaps<const TOUCHING: bool>(
 }
 
 /// Whether the rings of `a` and `b`, which have the same length, overlap row by row.
-/// See [overlap] for `TOUCHING`.
 /// A row is missing where either ring is, or where one of them is not finite in x or y.
 /// If `ignore_per_row_errors=true`, a row where one of them is not a ring is missing too;
 /// otherwise that is the error.
@@ -71,7 +76,7 @@ pub fn rings_overlap_pairwise<const TOUCHING: bool>(
 /// Whether the single ring `one` overlaps each ring of `many`.
 /// Overlap goes both ways, so this serves a single ring on either side.
 /// `one` is copied for rsgeo and prepared once, rather than on every row.
-/// See [rings_overlap_pairwise] for `TOUCHING`, `ignore_per_row_errors`, and what is missing.
+/// See [rings_overlap_pairwise] for `ignore_per_row_errors`, and what is missing.
 /// Every row is missing where `one` would make it so.
 pub fn rings_overlap_against_one<const TOUCHING: bool>(
     one: &ScalarLineString,

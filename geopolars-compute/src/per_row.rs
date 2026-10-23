@@ -1,4 +1,11 @@
 //! Running a kernel over every row of a chunk.
+//!
+//! # Const generic flags
+//!
+//! ## `ALL_VALID`
+//!
+//! The loop over the rows is generic over `ALL_VALID`.
+//! If `ALL_VALID=true`, every row is there, so none is checked for being missing.
 
 use geopolars_core::output::{bool_array, f64_array, list_array};
 use geopolars_core::{List, ValidList};
@@ -69,8 +76,6 @@ pub(crate) fn per_row_values<T: Default, E>(
     }
 }
 
-/// If `ALL_VALID=true`, we don't have to individually check
-/// each row for validity.
 #[inline(always)]
 fn per_row_values_with<const ALL_VALID: bool, T: Default, E>(
     rows: &List,

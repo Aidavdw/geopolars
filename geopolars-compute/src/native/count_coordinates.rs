@@ -1,7 +1,9 @@
 //! How many coordinates a geometry is made of.
 //! See `count_coordinates` in Python for the rules.
 //!
-//! # `INCLUDE_EMPTY`
+//! # Const generic flags
+//!
+//! ## `INCLUDE_EMPTY`
 //!
 //! Every function here is generic over `INCLUDE_EMPTY`.
 //! If `INCLUDE_EMPTY=false`, the empty point (NaN in x and y) does not count.

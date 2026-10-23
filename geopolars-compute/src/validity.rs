@@ -7,6 +7,29 @@
 //!
 //! Missing values below the rows are not looked at here:
 //! the views have to be built with them moved out to the rows (see [crate::inner_nulls]).
+//!
+//! # Const generic flags
+//!
+//! ## `CHECK_FINITE_COORDINATES`
+//!
+//! The coordinate checks are generic over `CHECK_FINITE_COORDINATES`.
+//! If `CHECK_FINITE_COORDINATES=true`, every axis that is read has to be finite.
+//!
+//! ## `CHECK_CRS_BOUNDS`
+//!
+//! The coordinate checks are generic over `CHECK_CRS_BOUNDS`.
+//! If `CHECK_CRS_BOUNDS=true`, x and y have to lie inside the [Bounds].
+//!
+//! ## `Z`
+//!
+//! The coordinate checks and the polygon kernels are generic over `Z`.
+//! If `Z=true`, the z values are read too.
+//! A polygon then needs every ring to close in z as well (see [geopolars_core::is_ring]).
+//!
+//! ## `M`
+//!
+//! The coordinate checks are generic over `M`.
+//! If `M=true`, the m values are read too.
 
 use std::ops::Range;
 
@@ -37,7 +60,6 @@ impl CoordinateChecks {
     }
 }
 
-/// See [coordinate_is_valid] for the flags.
 fn coordinates_are_valid_with<
     const CHECK_FINITE_COORDINATES: bool,
     const CHECK_CRS_BOUNDS: bool,
@@ -115,7 +137,6 @@ pub fn multi_line_strings_are_valid(
     })
 }
 
-/// See [polygon_shape_is_valid] for `Z`.
 fn polygons_are_valid_with<const Z: bool>(
     array: &PolygonArray,
     valid: Option<&Bitmap>,
@@ -132,7 +153,6 @@ pub fn polygons_are_valid(array: &PolygonArray, checks: &CoordinateChecks) -> Bo
     with_const_flags!(polygons_are_valid_with(array, valid.as_ref()); z)
 }
 
-/// See [polygon_shape_is_valid] for `Z`.
 fn multi_polygons_are_valid_with<const Z: bool>(
     array: &MultiPolygonArray,
     valid: Option<&Bitmap>,

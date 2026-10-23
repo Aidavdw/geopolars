@@ -1,4 +1,6 @@
 //! Linestrings and multilinestrings to GEOS, and back.
+//!
+//! See [super] for `Z`.
 
 use std::ops::Range;
 
@@ -104,7 +106,6 @@ pub(super) fn multi_line_string_to_geos(
 impl GeosGeometries {
     /// Our linestring array of the geometries, one row each.
     /// Every GEOS geometry is freed once it is copied.
-    /// If `Z=true`, the coordinates keep their z.
     /// A geometry that is not a linestring is an error.
     /// If `ignore_per_row_errors=true`, its row is missing instead.
     pub fn into_line_string_array<const Z: bool>(

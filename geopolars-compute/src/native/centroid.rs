@@ -5,6 +5,19 @@
 //!
 //! A geometry without length or area has no centroid, so its row is missing.
 //! The centroid keeps the geometry's dimension.
+//!
+//! # Const generic flags
+//!
+//! ## `Z`
+//!
+//! Every function here is generic over `Z`.
+//! If `Z=true`, the z values are averaged too.
+//! A linestring's segments are then measured in x, y and z.
+//!
+//! ## `M`
+//!
+//! Every function here is generic over `M`.
+//! If `M=true`, the m values are averaged too, with the same weights as the other axes.
 
 use std::convert::Infallible;
 
@@ -19,7 +32,6 @@ use crate::per_row::per_row_values;
 /// Used at compile to drop loops
 /// Whether axis `k` is there.
 /// k=0 is x, k=1 is y etc
-/// z&m only if `Z=true` and/or `M=true`
 #[inline(always)]
 const fn has_axis<const Z: bool, const M: bool>(k: usize) -> bool {
     k < 2 || (k == 2 && Z) || (k == 3 && M)
@@ -58,8 +70,7 @@ impl<const Z: bool, const M: bool> Moment<Z, M> {
 }
 
 /// Adds `line` to the moment
-/// Σ len (a + b) / 2 and Σ len over its segments `ab`,
-/// where `len` is measured in xy, or xyz if `Z=true`.
+/// Σ len (a + b) / 2 and Σ len over its segments `ab`.
 #[inline(always)]
 fn add_line<const Z: bool, const M: bool>(moment: &mut Moment<Z, M>, line: &ScalarLineString) {
     let mut coordinates = line.coordinates::<Z, M>();
@@ -87,7 +98,7 @@ fn add_line<const Z: bool, const M: bool>(moment: &mut Moment<Z, M>, line: &Scal
 /// Over the ring, a = Σ cross, mx = Σ (x_i + x_{i+1}) cross and my = Σ (y_i + y_{i+1}) cross,
 /// with cross = x_i y_{i+1} - x_{i+1} y_i: its centroid is (mx, my) / 3a,
 /// so weighted by its area a / 2, (mx, my) / 6.
-/// z (if `Z=true`) and m (if `M=true`) are averaged over the area too:
+/// z and m are averaged over the area too:
 /// over the triangles fanning out from the first vertex `p0`,
 /// each weighted by its area, fan / 2 (with fan the cross of `p_i - p0` and `p_{i+1} - p0`),
 /// at the mean of its corners, (z_0 + z_i + z_{i+1}) / 3: Σ fan (z_0 + z_i + z_{i+1}) / 6.

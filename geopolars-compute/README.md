@@ -46,6 +46,8 @@ Sometimes you conditionally need to do something extra
 Write that as a generic function instead, and dispatch to its specific versions.
 The `with_const_flags!` macro is very useful here.
 Be careful you don't blow it up with combinatorics though.
+Describe each flag once, in a ``# `FLAG` `` section of the module doc (see `native/count_coordinates.rs`).
+A runtime `bool` that dispatches to it has the same name in lowercase, so it needs no doc of its own.
 
 ### Fallible functions
 

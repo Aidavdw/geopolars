@@ -3,6 +3,35 @@
 //! GEOS, as a C++ library, owns its coordinate storage,
 //! so arrow buffers can't be borrowed zero-copy.
 //! The copy is one memcpy-like op, so still not very heavy.
+//!
+//! # Const generic flags
+//!
+//! ## `EARLY_FINITE_CHECK`
+//!
+//! Converting rows to GEOS, and the convex hulls, are generic over `EARLY_FINITE_CHECK`.
+//! [`ToGeosRows`] takes it as `early_finite_check`.
+//! If `EARLY_FINITE_CHECK=true`, a row with a NaN or infinite x or y never goes to GEOS.
+//! It is an error instead, which `ignore_per_row_errors` treats like a GEOS error.
+//! For a point, the empty point (x and y NaN) is the exception.
+//! If `EARLY_FINITE_CHECK=false`, those coordinates go to GEOS as they are.
+//! See `early_finite_check` in Python for what GEOS makes of them.
+//!
+//! ## `ALL_VALID`
+//!
+//! The loops over the rows of a list array are generic over `ALL_VALID`.
+//! It is set when no row is missing ([`List::is_all_valid`]).
+//! If `ALL_VALID=true`, every row is there, so none is checked for being missing.
+//!
+//! ## `Z`
+//!
+//! Copying coordinates out of GEOS, and the convex hulls, are generic over `Z`.
+//! If `Z=true`, the z values are copied too.
+//!
+//! ## `REVERSED`
+//!
+//! Copying a linestring or a ring out of GEOS is generic over `REVERSED`.
+//! If `REVERSED=true`, its coordinates are copied in reverse order.
+//! For a polygon, this flips its orientation.
 
 mod convex_hull;
 mod linestrings;
@@ -50,7 +79,6 @@ pub trait ToGeos {
 /// The size hint is the size of the array itself.
 /// If `ignore_per_row_errors=true`, a row GEOS fails to build is missing too;
 /// otherwise its error is returned.
-/// See python for `early_finite_check`
 pub trait ToGeosRows {
     fn to_geos_rows(
         &self,
@@ -121,8 +149,6 @@ fn points_to_geos<const EARLY_FINITE_CHECK: bool>(
 
 /// Point `i` of `coords`, which carry `len` axes of `coord_type`.
 /// `None` if it is missing.
-/// If `EARLY_FINITE_CHECK=true`, a NaN or infinite x or y is an error,
-/// unless both are NaN (the empty point).
 #[inline(always)]
 fn point_to_geos<const EARLY_FINITE_CHECK: bool>(
     coords: &Coords,
@@ -171,8 +197,6 @@ fn rows_to_geos(
 }
 
 /// See [`rows_to_geos`].
-/// If `ALL_VALID=true`, no row is checked for being missing first.
-/// `EARLY_FINITE_CHECK` is the `early_finite_check` of [`ToGeosRows`].
 /// Errors are the exception, so `ignore_per_row_errors` is checked per row rather than made const.
 fn rows_to_geos_with<const ALL_VALID: bool, const EARLY_FINITE_CHECK: bool>(
     rows: &List,
@@ -350,8 +374,7 @@ impl CoordsBuilder {
     }
 
     /// Appends the coordinates of `geometry`, a linestring or a ring.
-    /// `Z` says whether the coordinates have z, which must match the builder.
-    /// If `REVERSED=true`, they are appended in reverse order.
+    /// `Z` must match the builder.
     fn push<const Z: bool, const REVERSED: bool>(
         &mut self,
         geometry: &impl Geom,

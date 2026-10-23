@@ -3,6 +3,26 @@
 //! - distance between arrays of two points
 //! - distance between one fixed and an array of others
 //! - n*n distances (between each and all other)
+//!
+//! # Const generic flags
+//!
+//! ## `Z`
+//!
+//! Every function here is generic over `Z`.
+//! If `Z=true`, the difference in z counts towards the distance.
+//!
+//! ## `STOP_ON_ERROR`
+//!
+//! Every function here is generic over `STOP_ON_ERROR`.
+//! If `STOP_ON_ERROR=true`, it stops at the first error and returns it.
+//! If `STOP_ON_ERROR=false`, it marks that row missing and carries on, so it never fails.
+//! For [against_one], an error on `one` marks every row missing.
+//!
+//! ## `NULLS`
+//!
+//! `pairwise_values` and `against_one_values` are generic over `NULLS`.
+//! If `NULLS=true`, a missing point is not measured.
+//! If `NULLS=false`, every point is measured, missing or not.
 
 use std::convert::Infallible;
 
@@ -84,8 +104,6 @@ impl DistanceMetric for GeodesicMetric {
 }
 
 /// The distance between the points of `a` and `b`, which are the same length.
-/// On an error, with `STOP_ON_ERROR` it stops and returns it;
-/// without, it marks that row missing and carries on, so it never fails.
 pub fn pairwise<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
     metric: &M,
     a: &PointArray,
@@ -114,8 +132,7 @@ pub fn pairwise<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
     ))
 }
 
-/// [pairwise]'s distances, and the rows that failed (only without `STOP_ON_ERROR`),
-/// measuring missing points only without `NULLS`.
+/// [pairwise]'s distances, and the rows that failed.
 /// A missing point's distance is masked by the validity afterwards.
 #[inline(always)]
 fn pairwise_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
@@ -154,8 +171,6 @@ where
 
 /// The distance between the single point at `one` and every point of `many`.
 /// `one` is prepared (reprojected) once, rather than on every row.
-/// On an error, with `STOP_ON_ERROR` it stops and returns it;
-/// without, it marks that row missing (every row, for `one`) and carries on, so it never fails.
 pub fn against_one<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
     metric: &M,
     one: [f64; 3],
@@ -200,8 +215,7 @@ pub fn against_one<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
     ))
 }
 
-/// [against_one]'s distances, and the rows that failed (only without `STOP_ON_ERROR`),
-/// measuring missing points only without `NULLS`.
+/// [against_one]'s distances, and the rows that failed.
 /// A missing point's distance is masked by the validity afterwards.
 #[inline(always)]
 fn against_one_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(

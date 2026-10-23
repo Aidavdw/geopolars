@@ -2,6 +2,10 @@
 //! with its last at exactly the same place as its first.
 //! A multilinestring is a ring when its parts chain into one (see [multi_line_strings_are_rings]).
 //! m is a measure rather than a position, so it is not compared.
+//!
+//! # Const generic flags
+//!
+//! See [same_place] for `Z`.
 
 use geopolars_core::{
     is_ring, same_place, LineStringArray, MultiLineStringArray, ScalarMultiLineString,
@@ -11,7 +15,6 @@ use polars_arrow::array::BooleanArray;
 
 use crate::per_row::per_row_bool;
 
-/// See [same_place] for `Z`.
 pub fn line_strings_are_rings<const Z: bool>(array: &LineStringArray) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         is_ring::<Z>(&array.coords, array.rows.range(i))
@@ -21,7 +24,6 @@ pub fn line_strings_are_rings<const Z: bool>(array: &LineStringArray) -> Boolean
 /// Whether the parts of `multi` chain into one ring.
 /// each part ends where the next starts, and the last ends where the first starts.
 /// Other than that same requirements as single linestring.
-/// See [same_place] for `Z`.
 #[inline(always)]
 fn parts_form_ring<const Z: bool>(multi: &ScalarMultiLineString) -> bool {
     let coords = multi.coords;
@@ -44,7 +46,7 @@ fn parts_form_ring<const Z: bool>(multi: &ScalarMultiLineString) -> bool {
     joined_vertices >= MIN_RING_VERTICES && same_place::<Z>(coords, first.vertices.start, end)
 }
 
-/// See [parts_form_ring] for what makes a ring, and `Z`.
+/// See [parts_form_ring] for what makes a ring.
 pub fn multi_line_strings_are_rings<const Z: bool>(array: &MultiLineStringArray) -> BooleanArray {
     per_row_bool(&array.rows, |i| parts_form_ring::<Z>(&array.get(i)))
 }

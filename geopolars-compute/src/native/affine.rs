@@ -3,6 +3,13 @@
 //!
 //! Translating, rotating, scaling and skewing are all one of these,
 //! so they share one kernel, and differ only in the matrix they hand it.
+//!
+//! # Const generic flags
+//!
+//! ## `NULLS`
+//!
+//! [transform_points] is generic over `NULLS`.
+//! If `NULLS=false`, every point is assumed to be there.
 
 use std::ops::Range;
 
@@ -327,7 +334,6 @@ fn transform<const D: usize>(coefficients: [f64; D], position: [f64; D]) -> f64 
 /// One output coordinate of each of the `rows` points: `coefficients` times its position
 /// (from `columns`), plus its `shift(i)` if there is one, then `offset`.
 /// A missing point gets `0.0`, and is never read.
-/// If `NULLS=false`, every point is assumed to be there.
 fn transform_points<const D: usize, const NULLS: bool>(
     coefficients: [f64; D],
     offset: f64,

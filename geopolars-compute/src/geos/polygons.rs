@@ -1,4 +1,8 @@
 //! Polygons and multipolygons to GEOS, and back.
+//!
+//! # Const generic flags
+//!
+//! See [super] for `Z` and `REVERSED`.
 
 use std::ops::Range;
 
@@ -136,24 +140,21 @@ pub(super) fn multi_polygon_to_geos(
 impl GeosGeometries {
     /// Our polygon array of the geometries, one row each.
     /// Every GEOS geometry is freed once it is copied.
-    /// If `has_z=true`, the coordinates keep their z.
     /// A geometry that is not a polygon is an error.
     /// If `ignore_per_row_errors=true`, its row is missing instead.
-    /// If `reversed=true`, every ring is copied in reverse order.
     pub fn into_polygon_array(
         self,
-        has_z: bool,
+        z: bool,
         ignore_per_row_errors: bool,
         reversed: bool,
     ) -> GeoComputeResult<PolygonArray> {
         with_const_flags!(
             into_polygon_array_with(self, ignore_per_row_errors);
-            has_z, reversed
+            z, reversed
         )
     }
 
     /// See [`GeosGeometries::into_polygon_array`].
-    /// If `Z=true`, the coordinates keep their z.
     /// GEOS gives a multipolygon of one part as a plain polygon.
     /// So a polygon is read as a single part, or as none if it is empty.
     /// A geometry that is not a polygon or multipolygon fails the same way.
@@ -237,9 +238,6 @@ fn into_polygon_array_with<const Z: bool, const REVERSED: bool>(
 /// Appends the rings of `polygon`, each ended in `rings`.
 /// The exterior comes first, then the interiors.
 /// An empty polygon has no rings.
-/// See [`CoordsBuilder::push`] for `Z`.
-/// If `REVERSED=true`, every ring is appended in reverse order,
-/// which flips the orientation of the polygon.
 #[inline(always)]
 fn push_rings<const Z: bool, const REVERSED: bool>(
     coords: &mut CoordsBuilder,

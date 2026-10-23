@@ -6,6 +6,38 @@
 //! The polygon kernels error when GEOS does.
 //! With every topology check on, GEOS's `is_valid` runs them all at once.
 //! Otherwise, each check runs on its own.
+//!
+//! # Const generic flags
+//!
+//! ## `CHECK_EMPTY`
+//!
+//! Every kernel here is generic over `CHECK_EMPTY`.
+//! If `CHECK_EMPTY=true`, an empty geometry is degenerate.
+//! A point is empty when it is the empty point (NaN in x and y).
+//! A multipoint or linestring is empty when it has only empty points, or none.
+//! A polygon is empty when it has only empty rings, or none.
+//! A multilinestring or multipolygon is empty when every part is, or it has none.
+//!
+//! ## `CHECK_REPEATED_POINTS`
+//!
+//! The kernels of every kind but points are generic over `CHECK_REPEATED_POINTS`.
+//! If `CHECK_REPEATED_POINTS=true`, a geometry with two points that coincide is degenerate.
+//! In a multipoint, those are any two of its points.
+//! In a linestring, those are two vertices in a row.
+//! In a multilinestring, those are two vertices in a row of one part.
+//! In a polygon or multipolygon, those are two vertices in a row of one ring.
+//!
+//! ## `TOLERANCE_COINCIDENCE`
+//!
+//! The kernels of every kind but points are generic over `TOLERANCE_COINCIDENCE`.
+//! If `TOLERANCE_COINCIDENCE=true`, two points coincide when they lie at the same place within `tolerance`
+//! ([same_place_within]).
+//! If `TOLERANCE_COINCIDENCE=false`, they have to lie at exactly the same place ([same_place]).
+//!
+//! ## `Z`
+//!
+//! The kernels of every kind but points are generic over `Z`.
+//! If `Z=true`, two points only coincide when their z values do too.
 
 use std::ops::Range;
 
@@ -59,7 +91,6 @@ impl MultiPolygonTopologyChecks {
     }
 }
 
-/// If `TOLERANCE_COINCIDENCE=true`, [same_place_within] `tolerance`. Otherwise [same_place].
 #[inline(always)]
 fn coincide<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
     coords: &ValidCoords,
@@ -201,7 +232,6 @@ fn multi_polygon_topology_is_valid(
     meet_only_at_points_and_no_overlap(&parts)
 }
 
-/// If `CHECK_EMPTY=true`, the empty point is degenerate.
 fn points_are_degenerate_with<const CHECK_EMPTY: bool>(array: &PointArray) -> BooleanArray {
     let coords = &array.coords;
     let values = Bitmap::from_iter((0..coords.ignoring_validity().len()).map(|i| {
@@ -214,9 +244,6 @@ pub fn points_are_degenerate(array: &PointArray, check_empty: bool) -> BooleanAr
     with_const_flags!(points_are_degenerate_with(array); check_empty)
 }
 
-/// If `CHECK_REPEATED_POINTS=true`, two points that [coincide] are degenerate.
-/// If `CHECK_EMPTY=true`, so is a multipoint of only empty points, or none.
-/// See [coincide] for `TOLERANCE_COINCIDENCE` and `Z`.
 fn multi_points_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
@@ -251,9 +278,6 @@ pub fn multi_points_are_degenerate(
     )
 }
 
-/// If `CHECK_REPEATED_POINTS=true`, two vertices in a row that [coincide] are degenerate.
-/// If `CHECK_EMPTY=true`, so is a linestring of only empty points, or none.
-/// See [coincide] for `TOLERANCE_COINCIDENCE` and `Z`.
 fn line_strings_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
@@ -289,7 +313,6 @@ pub fn line_strings_are_degenerate(
 }
 
 /// [line_strings_are_degenerate_with] for every part.
-/// If `CHECK_EMPTY=true`, it is degenerate when every part is empty, or there are none.
 fn multi_line_strings_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
@@ -326,10 +349,7 @@ pub fn multi_line_strings_are_degenerate(
     )
 }
 
-/// If `CHECK_REPEATED_POINTS=true`, two vertices in a row of a ring that [coincide] are degenerate.
-/// If `CHECK_EMPTY=true`, so is a polygon of only empty rings, or none.
-/// So is a polygon that fails one of the `topology` checks, if there are any.
-/// See [coincide] for `TOLERANCE_COINCIDENCE` and `Z`.
+/// A polygon that fails one of the `topology` checks is degenerate, if there are any.
 fn polygons_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
@@ -375,8 +395,7 @@ pub fn polygons_are_degenerate(
 }
 
 /// [polygons_are_degenerate_with] for every part.
-/// If `CHECK_EMPTY=true`, it is degenerate when every part is empty, or there are none.
-/// So is a multipolygon that fails one of the `topology` checks, if there are any.
+/// A multipolygon that fails one of the `topology` checks is degenerate too, if there are any.
 fn multi_polygons_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,

@@ -1,4 +1,12 @@
 //! Whether two rings overlap, which is when the areas they enclose share area.
+//!
+//!
+//! # Const generic flags
+//!
+//! ## `TOUCHING`
+//!
+//! Every function here that relates two rings is generic over `TOUCHING`.
+//! If `TOUCHING=true`, rings that only touch overlap too.
 
 use geopolars_core::{is_ring, LineStringArray, ScalarLineString};
 use geos::{Geometry, PreparedGeometry};
@@ -14,7 +22,6 @@ use crate::{row_or_missing, GeoComputeError, GeoComputeResult};
 /// Their interiors share no area.
 const INTERIORS_DISJOINT: &str = "F********";
 
-/// If `TOUCHING=true`, rings that only touch overlap too.
 #[inline(always)]
 pub(super) fn enclosed_areas_overlap<const TOUCHING: bool>(
     a: &PreparedGeometry,
@@ -73,7 +80,6 @@ fn ring_pair_overlaps<const TOUCHING: bool>(
 }
 
 /// Whether the rings of `a` and `b`, which have the same length, overlap row by row.
-/// See [enclosed_areas_overlap] for `TOUCHING`.
 /// A row is missing where either ring is, or where one of them is not finite in x or y.
 /// If `ignore_per_row_errors=true`, a row where one of them is not a ring is missing too;
 /// otherwise that is the error.

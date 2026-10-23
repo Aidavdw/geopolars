@@ -3,11 +3,25 @@
 //! PROJ takes one coordinate at a time, as four floats: `x`, `y`, `z` and the time `t`.
 //! It does so even for a 2D transformation.
 //! `x` and `y` always go through it.
-//! `z` only goes through it if `with_z=true`, and is `0.0` otherwise.
+//! `z` only goes through it if `Z=true` (see below).
 //! `m` never does.
 //! What does not go through PROJ keeps its buffer.
 //! `t` is the coordinate epoch, as a decimal year.
 //! It is always `f64::INFINITY`, which PROJ reads as "no time given".
+//!
+//! # Const generic flags
+//!
+//! ## `Z`
+//!
+//! Every function here that reprojects many coordinates is generic over `Z`, or takes it as `z`.
+//! If `Z=true`, `z` goes through PROJ too, which needs coordinates with a `z`.
+//! If `Z=false`, PROJ gets `0.0` for `z`, and there is no new `z`.
+//!
+//! ## `NULLS`
+//!
+//!
+//! The reprojection of a column of points is generic over `NULLS`.
+//! If `NULLS=false`, every point is assumed to be there.
 
 // TODO: Add support for CRSes that have a time/epoch
 
@@ -89,20 +103,19 @@ impl Drop for Transformation {
 
 /// For a column of points.
 /// A missing point is never handed to PROJ, and keeps its coordinates.
-/// If `with_z=true`, `z` is reprojected too, which needs points with a `z`.
 pub fn reproject_coords(
     transformation: &Transformation,
     coords: &Coords,
-    with_z: bool,
+    z: bool,
 ) -> GeoComputeResult<Coords> {
     assert!(
-        !with_z || coords.dim().has_z(),
+        !z || coords.dim().has_z(),
         "a z for coordinates without one"
     );
     let positions = with_const_flags!(
         reprojected_points(transformation, coords);
         !coords.is_all_valid(),
-        with_z
+        z
     )?;
     let axes = coords.ignoring_validity().with_positions(positions);
     Ok(Coords::from_valid(axes, coords.validity().cloned()))
@@ -112,19 +125,17 @@ pub fn reproject_coords(
 pub fn reproject_valid_coords(
     transformation: &Transformation,
     coords: &ValidCoords,
-    with_z: bool,
+    z: bool,
 ) -> GeoComputeResult<ValidCoords> {
     assert!(
-        !with_z || coords.dim().has_z(),
+        !z || coords.dim().has_z(),
         "a z for coordinates without one"
     );
-    let positions = with_const_flags!(reprojected_valid(transformation, coords); with_z)?;
+    let positions = with_const_flags!(reprojected_valid(transformation, coords); z)?;
     Ok(coords.with_positions(positions))
 }
 
 /// The new positions of [`reproject_coords`].
-/// If `NULLS=false`, every point is assumed to be there.
-/// If `Z=false`, there is no new `z`.
 fn reprojected_points<const NULLS: bool, const Z: bool>(
     transformation: &Transformation,
     coords: &Coords,
@@ -151,7 +162,6 @@ fn reprojected_points<const NULLS: bool, const Z: bool>(
 }
 
 /// The new positions of [`reproject_valid_coords`].
-/// If `Z=false`, there is no new `z`.
 fn reprojected_valid<const Z: bool>(
     transformation: &Transformation,
     coords: &ValidCoords,

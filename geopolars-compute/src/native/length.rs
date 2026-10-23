@@ -1,4 +1,14 @@
 //! How long a linestring is, as a [LengthMetric] measures it.
+//!
+//! # `Z`
+//!
+//! Every function here is generic over `Z`.
+//! If `Z=true`, the difference in z of a segment counts towards its length.
+//!
+//! # `IGNORE_NAN`
+//!
+//! Every function here is generic over `IGNORE_NAN`.
+//! If `IGNORE_NAN=true`, a vertex with a NaN is skipped, so the line runs on to the next one.
 
 use geopolars_core::{LineStringArray, MultiLineStringArray, ScalarLineString};
 use polars_arrow::array::PrimitiveArray;
@@ -15,7 +25,6 @@ impl LengthMetric for Planar {}
 impl LengthMetric for GeodesicMetric {}
 
 /// The length of `line`: fewer than two vertices have a length of `0.0`.
-/// With `IGNORE_NAN`, a vertex with a NaN is skipped, so the line runs on to the next one.
 #[inline(always)]
 fn line_length<const Z: bool, const IGNORE_NAN: bool, M: LengthMetric>(
     metric: &M,

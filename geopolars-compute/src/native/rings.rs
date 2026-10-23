@@ -3,6 +3,18 @@
 //! - its interior is the rest (its holes), as a multilinestring.
 //!
 //! A multipolygon gets a list of them, one per polygon.
+//!
+//! # Const generic flags
+//!
+//! ## `ALL_VALID`
+//!
+//! [kept_rings_of_polygons] is generic over `ALL_VALID`.
+//! If `ALL_VALID=true`, every row is there, so none is checked for being missing.
+//!
+//! ## `Z`
+//!
+//! [close_open_rings] is generic over `Z`.
+//! See [same_place] for `Z`.
 
 use std::ops::Range;
 
@@ -29,7 +41,6 @@ fn interior_of(rings: Range<usize>) -> Range<usize> {
 }
 
 /// The rings every row of `array` keeps, none for a missing row.
-/// If `ALL_VALID=true`, no row is checked for being missing.
 #[inline(always)]
 fn kept_rings_of_polygons<const ALL_VALID: bool>(
     array: &PolygonArray,
@@ -155,7 +166,6 @@ pub fn multi_polygon_interiors(array: &MultiPolygonArray) -> ListArray<i64> {
 /// Makes a series of coordinates a closed ring by repeating the last vertex.
 /// `None` if they are all closed already.
 /// An empty ring is left empty.
-/// See [same_place] for `Z`.
 pub fn close_open_rings<const Z: bool>(
     rings: &ValidList,
     coords: &ValidCoords,

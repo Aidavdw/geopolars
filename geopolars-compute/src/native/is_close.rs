@@ -3,6 +3,29 @@
 //!
 //! Every kernel takes `a`, and `b` of the same length (row by row) or of a single row (against every row of `a`).
 //! Every comparison stops at the first part length or value that does not match.
+//!
+//!
+//! # Const generic flags
+//!
+//! ## `Z`
+//!
+//! Every kernel is generic over `Z`, or takes it from the dimension of `a`.
+//! If `Z=true`, the z values are compared too.
+//!
+//! ## `M`
+//!
+//! Every kernel is generic over `M`, or takes it from the dimension of `a`.
+//! If `M=true` and `IGNORE_M=false`, the m values are compared too.
+//!
+//! ## `IGNORE_M`
+//!
+//! Every kernel is generic over `IGNORE_M`, or takes it as `ignore_m`.
+//! If `IGNORE_M=true`, the m values are not compared.
+//!
+//! ## `NANS_EQUAL`
+//!
+//! Every kernel is generic over `NANS_EQUAL`, or takes it as `nans_equal`.
+//! If `NANS_EQUAL=true`, two NaNs are close.
 
 // TODO: With current implementation, the order matters for MultiPoints, Multi*, and Linestring rings.
 // Maybe we should allow giving a bool to first sort?
@@ -22,7 +45,6 @@ use polars_arrow::datatypes::ArrowDataType;
 
 use crate::per_row::per_row_bool;
 
-/// If `NANS_EQUAL=true`, two NaNs are close too.
 #[inline(always)]
 fn values_are_close<const NANS_EQUAL: bool>(a: &[f64], b: &[f64], tolerance: Tolerance) -> bool {
     a.iter()
@@ -32,8 +54,6 @@ fn values_are_close<const NANS_EQUAL: bool>(a: &[f64], b: &[f64], tolerance: Tol
 
 /// Whether there are as many coordinates in `a_vertices` as in `b_vertices`,
 /// and every one of them is close to the one at the same position in the other.
-/// z is compared if `Z=true`. m is compared if `M=true` and `IGNORE_M=false`.
-/// See [values_are_close] for `NANS_EQUAL`.
 #[inline(always)]
 fn coordinates_are_close<
     const Z: bool,
@@ -98,7 +118,6 @@ fn per_compared_row(a: &List, b: &List, test: impl Fn(usize, usize) -> bool) -> 
     }
 }
 
-/// See [coordinates_are_close] for the flags.
 fn points_are_close_with<
     const Z: bool,
     const M: bool,
@@ -135,7 +154,6 @@ fn points_are_close_with<
     BooleanArray::new(ArrowDataType::Boolean, values, validity)
 }
 
-/// See [coordinates_are_close] for the flags.
 fn line_strings_are_close_with<
     const Z: bool,
     const M: bool,
@@ -157,7 +175,6 @@ fn line_strings_are_close_with<
     })
 }
 
-/// See [coordinates_are_close] for the flags.
 fn multi_points_are_close_with<
     const Z: bool,
     const M: bool,
@@ -179,7 +196,6 @@ fn multi_points_are_close_with<
     })
 }
 
-/// See [coordinates_are_close] for the flags.
 fn multi_line_strings_are_close_with<
     const Z: bool,
     const M: bool,
@@ -203,7 +219,6 @@ fn multi_line_strings_are_close_with<
     })
 }
 
-/// See [coordinates_are_close] for the flags.
 fn polygons_are_close_with<
     const Z: bool,
     const M: bool,
@@ -227,7 +242,6 @@ fn polygons_are_close_with<
     })
 }
 
-/// See [coordinates_are_close] for the flags.
 fn multi_polygons_are_close_with<
     const Z: bool,
     const M: bool,
@@ -271,8 +285,6 @@ macro_rules! are_close {
     }};
 }
 
-/// If `ignore_m=true`, m is not compared.
-/// If `nans_equal=true`, two NaNs are close.
 pub fn points_are_close(
     a: &PointArray,
     b: &PointArray,
@@ -283,7 +295,6 @@ pub fn points_are_close(
     are_close!(points_are_close_with, a, b, tolerance, ignore_m, nans_equal)
 }
 
-/// See [points_are_close].
 pub fn multi_points_are_close(
     a: &MultiPointArray,
     b: &MultiPointArray,
@@ -301,7 +312,6 @@ pub fn multi_points_are_close(
     )
 }
 
-/// See [points_are_close].
 pub fn line_strings_are_close(
     a: &LineStringArray,
     b: &LineStringArray,
@@ -319,7 +329,7 @@ pub fn line_strings_are_close(
     )
 }
 
-/// See [points_are_close]. The parts also have to be as many, and as long.
+/// The parts also have to be as many, and as long.
 pub fn multi_line_strings_are_close(
     a: &MultiLineStringArray,
     b: &MultiLineStringArray,
@@ -337,7 +347,7 @@ pub fn multi_line_strings_are_close(
     )
 }
 
-/// See [points_are_close]. The rings also have to be as many, and as long.
+/// The rings also have to be as many, and as long.
 pub fn polygons_are_close(
     a: &PolygonArray,
     b: &PolygonArray,
@@ -355,7 +365,7 @@ pub fn polygons_are_close(
     )
 }
 
-/// See [points_are_close]. The polygons, and their rings, also have to be as many, and as long.
+/// The polygons, and their rings, also have to be as many, and as long.
 pub fn multi_polygons_are_close(
     a: &MultiPolygonArray,
     b: &MultiPolygonArray,

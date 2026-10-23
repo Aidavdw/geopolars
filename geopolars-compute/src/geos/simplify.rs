@@ -1,7 +1,22 @@
-//! Simplification, forwarded to GEOS.
-//! Same thing as GeoPandas, where we switch algo based on `preserve_topology`:
-//! - if `preserve_topology=false`: Douglas-Peucker
-//! - if `preserve_topology=true`: GEOS's topology-preserving simplifier.
+//! Simplification, forwarded to GEOS
+//!
+//! # Const generic flags
+//!
+//! ## `PRESERVE_TOPOLOGY`
+//!
+//! Every function here is generic over `PRESERVE_TOPOLOGY`, or takes it as `preserve_topology`.
+//! If `PRESERVE_TOPOLOGY=false`, GEOS uses Douglas-Peucker.
+//! A polygon smaller than `tolerance` becomes empty.
+//! A part of a multipolygon, or a hole, smaller than `tolerance` is dropped.
+//! GEOS repairs a polygon that ends up crossing itself, which can split it into more parts.
+//! A polygon column can't hold those, so that row fails.
+//! If `PRESERVE_TOPOLOGY=true`, GEOS's topology-preserving simplifier is used.
+//! Then no linestring or ring crosses itself or another, and every part and ring is kept.
+//!
+//! ## `EARLY_FINITE_CHECK`
+//!
+//! The public functions take `early_finite_check`.
+//! See [super] for `EARLY_FINITE_CHECK`.
 
 use geopolars_core::{LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray};
 
@@ -11,10 +26,8 @@ use crate::GeoComputeResult;
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// The endpoints are always kept.
 /// GEOS keeps z, but drops m.
-/// If `preserve_topology=true`, the result never self-intersects.
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
 /// otherwise its error is returned.
-/// See [`ToGeosRows`] for `early_finite_check`.
 pub fn simplify_line_strings(
     array: &LineStringArray,
     tolerance: f64,
@@ -38,10 +51,8 @@ pub fn simplify_line_strings(
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// The endpoints of every part are always kept, but an empty part is dropped.
 /// GEOS keeps z, but drops m.
-/// If `preserve_topology=true`, the result never self-intersects.
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
 /// otherwise its error is returned.
-/// See [`ToGeosRows`] for `early_finite_check`.
 pub fn simplify_multi_line_strings(
     array: &MultiLineStringArray,
     tolerance: f64,
@@ -64,17 +75,8 @@ pub fn simplify_multi_line_strings(
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// GEOS keeps z, but drops m.
-///
-/// If `preserve_topology=false`, a polygon (or hole) smaller than `tolerance` collapses.
-/// Then the polygon becomes empty, and the hole is dropped.
-///
-/// GEOS repairs a result that crosses itself, which can split it into a multipolygon,
-/// which a polygon column can't hold: that row fails.
-/// If `preserve_topology=true`, every ring is kept and nothing crosses.
-///
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
 /// otherwise its error is returned.
-/// See [`ToGeosRows`] for `early_finite_check`.
 pub fn simplify_polygons(
     array: &PolygonArray,
     tolerance: f64,
@@ -93,14 +95,8 @@ pub fn simplify_polygons(
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// GEOS keeps z, but drops m.
-///
-/// If `preserve_topology=false`, a part (or hole) smaller than `tolerance` is dropped,
-/// and a part crossing itself is repaired, which can split it in more parts.
-/// If `preserve_topology=true`, every part and ring is kept and nothing crosses.
-///
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
 /// otherwise its error is returned.
-/// See [`ToGeosRows`] for `early_finite_check`.
 pub fn simplify_multi_polygons(
     array: &MultiPolygonArray,
     tolerance: f64,
@@ -141,8 +137,6 @@ fn simplify_via_geos(
 }
 
 /// See [`simplify_via_geos`].
-/// If `PRESERVE_TOPOLOGY=true`, GEOS's topology-preserving simplifier is used,
-/// otherwise Douglas-Peucker.
 /// Errors are the exception, so `ignore_per_row_errors` is checked per row rather than made const.
 fn simplify_via_geos_with<const PRESERVE_TOPOLOGY: bool>(
     geometries: &mut [GeosRow],

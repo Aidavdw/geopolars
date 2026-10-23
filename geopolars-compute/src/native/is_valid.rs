@@ -2,6 +2,12 @@
 //! See `is_valid` in Python for the rules.
 //!
 //! What a check reads for every vertex is a const flag.
+//!
+//! # `CHECK_FINITE_COORDINATES`, `CHECK_CRS_BOUNDS`, `Z` and `M`
+//!
+//! [coordinate_is_valid] is generic over all four.
+//! [polygon_shape_is_valid] is generic over `Z`.
+//! See [crate::validity] for them.
 
 use std::ops::Range;
 
@@ -17,8 +23,6 @@ pub(crate) fn is_empty_point(coords: &ValidCoords, i: usize) -> bool {
 }
 
 /// Whether coordinate `i` passes the coordinate checks, or is the empty point.
-/// If `CHECK_FINITE_COORDINATES=true`, every axis has to be finite, z only if `Z=true` and m only if `M=true`.
-/// If `CHECK_CRS_BOUNDS=true`, x and y have to lie inside `bounds`.
 #[inline(always)]
 pub(crate) fn coordinate_is_valid<
     const CHECK_FINITE_COORDINATES: bool,
@@ -48,7 +52,6 @@ pub(crate) fn line_string_shape_is_valid(vertices: Range<usize>) -> bool {
 }
 
 /// Whether `polygon` has a valid shape: all rings empty, or all of them rings.
-/// See [is_ring] for `Z`.
 #[inline(always)]
 pub(crate) fn polygon_shape_is_valid<const Z: bool>(polygon: &ScalarPolygon) -> bool {
     // An empty exterior makes the empty polygon, so every other ring has to be empty too.

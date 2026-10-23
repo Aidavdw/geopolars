@@ -88,48 +88,42 @@ fn reprojects_z(dtype: &DataType, kwargs: &ToCrsKwargs) -> PolarsResult<bool> {
 }
 
 /// One chunk of `kind` geometries, reprojected by `transformation`.
-/// See [`reproject_coords`] for `with_z`.
+/// See [`geopolars_compute::proj`] for `z`.
 fn chunk_reprojected(
     chunk: &dyn Array,
     kind: Kind,
     transformation: &Transformation,
-    with_z: bool,
+    z: bool,
 ) -> PolarsResult<Box<dyn Array>> {
     let err = |e: GeoComputeError| polars_err!(ComputeError: "{e}");
     Ok(match kind {
         Kind::Point => {
-            let coords =
-                reproject_coords(transformation, &Coords::new(chunk)?, with_z).map_err(err)?;
+            let coords = reproject_coords(transformation, &Coords::new(chunk)?, z).map_err(err)?;
             PointArray::new(coords).into_struct_array().boxed()
         }
         Kind::LineString => {
             let mut array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.coords =
-                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
+            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiPoint => {
             let mut array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.coords =
-                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
+            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::Polygon => {
             let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            array.coords =
-                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
+            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiLineString => {
             let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            array.coords =
-                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
+            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiPolygon => {
             let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            array.coords =
-                reproject_valid_coords(transformation, &array.coords, with_z).map_err(err)?;
+            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
     })
@@ -140,13 +134,13 @@ fn chunk_reprojected(
 fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
     let geo = describe(inputs[0].dtype())?;
     let transformation = transformation(inputs[0].dtype(), &kwargs.to)?;
-    let with_z = reprojects_z(inputs[0].dtype(), &kwargs)?;
+    let z = reprojects_z(inputs[0].dtype(), &kwargs)?;
 
     let storage = trimmed(inputs[0].ext()?.storage());
     let chunks = storage
         .chunks()
         .iter()
-        .map(|chunk| chunk_reprojected(chunk.as_ref(), geo.kind, &transformation, with_z))
+        .map(|chunk| chunk_reprojected(chunk.as_ref(), geo.kind, &transformation, z))
         .collect::<PolarsResult<_>>()?;
     // SAFETY: the geometries keep their kind and dimension, so this is still the storage.
     let out = unsafe {
