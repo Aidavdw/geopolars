@@ -33,6 +33,7 @@
 //! If `REVERSED=true`, its coordinates are copied in reverse order.
 //! For a polygon, this flips its orientation.
 
+mod buffer;
 mod convex_hull;
 mod linestrings;
 mod polygons;
@@ -41,6 +42,9 @@ mod self_intersects;
 mod simplify;
 mod topology;
 
+pub use buffer::{
+    buffer_into_multi_polygons, buffer_into_polygons, BufferStyle, CapStyle, JoinStyle,
+};
 pub use convex_hull::{
     line_string_convex_hulls, multi_line_string_convex_hulls, multi_point_convex_hulls,
     multi_polygon_convex_hulls, polygon_convex_hulls,
@@ -58,7 +62,9 @@ pub use topology::{meet_only_at_points_and_no_overlap, polygon_rings_fit};
 use std::ops::Range;
 
 use geopolars_core::output::SizeHint;
-use geopolars_core::{Coords, GeoDimension, List, PointArray, ScalarPoint, ValidCoords};
+use geopolars_core::{
+    Coords, GeoDimension, List, MultiPointArray, PointArray, ScalarPoint, ValidCoords,
+};
 use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
 use polars_arrow::offset::{Offsets, OffsetsBuffer};
@@ -145,6 +151,40 @@ fn points_to_geos<const EARLY_FINITE_CHECK: bool>(
         geometries.push(row_or_missing(point, ignore_per_row_errors)?.into());
     }
     Ok(geometries)
+}
+
+impl ToGeosRows for MultiPointArray {
+    fn to_geos_rows(
+        &self,
+        ignore_per_row_errors: bool,
+        early_finite_check: bool,
+    ) -> GeoComputeResult<GeosGeometries> {
+        let axes = axes(&self.coords);
+        let size_hint = SizeHint {
+            coords: self.coords.len(),
+            parts: [0, 0],
+        };
+        rows_to_geos(
+            &self.rows,
+            &axes,
+            size_hint,
+            ignore_per_row_errors,
+            early_finite_check,
+            |vertices| vertices,
+            |vertices| multi_point_to_geos(&axes, vertices),
+        )
+    }
+}
+
+/// No vertices gives an empty multipoint.
+#[inline(always)]
+fn multi_point_to_geos(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<Geometry> {
+    // GEOS takes ownership of the parts, so each point gets its own coordinates.
+    let mut points = Vec::with_capacity(vertices.len());
+    for j in vertices {
+        points.push(Geometry::create_point(coord_seq(axes, j..j + 1)?)?);
+    }
+    Ok(Geometry::create_multipoint(points)?)
 }
 
 /// Point `i` of `coords`, which carry `len` axes of `coord_type`.

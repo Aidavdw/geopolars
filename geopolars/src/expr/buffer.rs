@@ -1,0 +1,166 @@
+//! The buffer of any geometry, forwarded to GEOS.
+
+use geopolars_compute::geos::{
+    buffer_into_multi_polygons, buffer_into_polygons, BufferStyle, CapStyle, JoinStyle, ToGeosRows,
+};
+use geopolars_core::{
+    downcast, Coords, GeoDimension, LineStringArray, MultiLineStringArray, MultiPointArray,
+    MultiPolygonArray, PointArray, PolygonArray,
+};
+use polars::prelude::*;
+use polars_arrow::array::{Array, ListArray};
+use pyo3_polars::derive::polars_expr;
+use serde::Deserialize;
+
+use super::IntoPolarsResult;
+use crate::geoarrow::{describe, Geo, Kind};
+
+/// A multipolygon for a multi-kind, or when `allow_splitting` and `distance < 0`.
+/// Otherwise a polygon.
+/// It is XY, with the input's metadata.
+/// Also the kind of the input, and whether the output is a multipolygon.
+fn buffered_type(dtype: &DataType, kwargs: &BufferKwargs) -> PolarsResult<(DataType, Kind, bool)> {
+    let geo = describe(dtype)?;
+    let is_multi = match geo.kind {
+        Kind::Point | Kind::LineString | Kind::Polygon => false,
+        Kind::MultiPoint | Kind::MultiLineString | Kind::MultiPolygon => true,
+    };
+    let into_multi = is_multi || (kwargs.allow_splitting && kwargs.distance < 0.0);
+    let kind = if into_multi {
+        Kind::MultiPolygon
+    } else {
+        Kind::Polygon
+    };
+    let dtype = Geo::new(kind, GeoDimension::XY, geo.metadata.clone()).dtype();
+    Ok((dtype, geo.kind, into_multi))
+}
+
+/// For [`buffer`].
+fn kernel_output_type_buffer(input_fields: &[Field], kwargs: BufferKwargs) -> PolarsResult<Field> {
+    let (dtype, _, _) = buffered_type(input_fields[0].dtype(), &kwargs)?;
+    Ok(Field::new(input_fields[0].name().clone(), dtype))
+}
+
+#[derive(Deserialize)]
+#[serde(remote = "CapStyle", rename_all = "lowercase")]
+enum CapStyleDef {
+    Round,
+    Flat,
+    Square,
+}
+
+#[derive(Deserialize)]
+#[serde(remote = "JoinStyle", rename_all = "lowercase")]
+enum JoinStyleDef {
+    Round,
+    Mitre,
+    Bevel,
+}
+
+/// See python docs for details.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BufferKwargs {
+    distance: f64,
+    quadrant_segments: i32,
+    #[serde(with = "CapStyleDef")]
+    cap_style: CapStyle,
+    #[serde(with = "JoinStyleDef")]
+    join_style: JoinStyle,
+    mitre_limit: f64,
+    single_sided: bool,
+    allow_splitting: bool,
+    ccw_outer: bool,
+    ignore_per_row_errors: bool,
+    early_finite_check: bool,
+}
+
+/// One chunk of `kind` geometries, buffered.
+/// If `into_multi=true`, as multipolygons; otherwise as polygons.
+fn chunk_buffered(
+    chunk: &dyn Array,
+    kind: Kind,
+    into_multi: bool,
+    kwargs: &BufferKwargs,
+) -> PolarsResult<ListArray<i64>> {
+    match kind {
+        Kind::Point => {
+            let array = PointArray::new(Coords::new(chunk)?);
+            chunk_buffered_as(&array, into_multi, kwargs)
+        }
+        Kind::LineString => {
+            let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
+            chunk_buffered_as(&array, into_multi, kwargs)
+        }
+        Kind::Polygon => {
+            let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            chunk_buffered_as(&array, into_multi, kwargs)
+        }
+        Kind::MultiPoint => {
+            let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
+            chunk_buffered_as(&array, into_multi, kwargs)
+        }
+        Kind::MultiLineString => {
+            let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            chunk_buffered_as(&array, into_multi, kwargs)
+        }
+        Kind::MultiPolygon => {
+            let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            chunk_buffered_as(&array, into_multi, kwargs)
+        }
+    }
+}
+
+/// See [`chunk_buffered`].
+fn chunk_buffered_as(
+    array: &impl ToGeosRows,
+    into_multi: bool,
+    kwargs: &BufferKwargs,
+) -> PolarsResult<ListArray<i64>> {
+    let BufferKwargs {
+        distance,
+        quadrant_segments,
+        cap_style,
+        join_style,
+        mitre_limit,
+        single_sided,
+        allow_splitting: _,
+        ccw_outer,
+        ignore_per_row_errors,
+        early_finite_check,
+    } = *kwargs;
+    let style = &BufferStyle {
+        quadrant_segments,
+        cap_style,
+        join_style,
+        mitre_limit,
+        single_sided,
+    };
+    let (ignore, early) = (ignore_per_row_errors, early_finite_check);
+    if into_multi {
+        buffer_into_multi_polygons(array, distance, style, ccw_outer, ignore, early)
+            .map(MultiPolygonArray::into_list_array)
+    } else {
+        buffer_into_polygons(array, distance, style, ccw_outer, ignore, early)
+            .map(PolygonArray::into_list_array)
+    }
+    .into_polars()
+}
+
+/// See `buffer`.
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_buffer)]
+fn buffer(inputs: &[Series], kwargs: BufferKwargs) -> PolarsResult<Series> {
+    let (dtype, kind, into_multi) = buffered_type(inputs[0].dtype(), &kwargs)?;
+    let storage = inputs[0].ext()?.storage();
+    let chunks = storage
+        .chunks()
+        .iter()
+        .map(|rows| Ok(chunk_buffered(rows.as_ref(), kind, into_multi, &kwargs)?.boxed()))
+        .collect::<PolarsResult<_>>()?;
+    // SAFETY: the buffers are XY polygons or multipolygons, as `dtype` says.
+    Ok(
+        unsafe {
+            Series::from_chunks_and_dtype_unchecked(inputs[0].name().clone(), chunks, &dtype)
+        },
+    )
+}

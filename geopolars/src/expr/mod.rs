@@ -10,6 +10,7 @@
 
 pub mod affine;
 pub mod area;
+pub mod buffer;
 pub mod centroid;
 pub mod construct;
 pub mod convex_hull;

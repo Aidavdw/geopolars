@@ -104,17 +104,13 @@ pub fn simplify_multi_polygons(
     ignore_per_row_errors: bool,
     early_finite_check: bool,
 ) -> GeoComputeResult<MultiPolygonArray> {
-    let geos_geometries = simplify_via_geos(
+    simplify_via_geos(
         array.to_geos_rows(ignore_per_row_errors, early_finite_check)?,
         tolerance,
         preserve_topology,
         ignore_per_row_errors,
-    )?;
-    if array.coords.dim().has_z() {
-        geos_geometries.into_multi_polygon_array::<true>(ignore_per_row_errors)
-    } else {
-        geos_geometries.into_multi_polygon_array::<false>(ignore_per_row_errors)
-    }
+    )?
+    .into_multi_polygon_array(array.coords.dim().has_z(), ignore_per_row_errors, false)
 }
 
 /// Every geometry simplified to within `tolerance`, forwarded to GEOS.

@@ -158,50 +158,63 @@ impl GeosGeometries {
     /// GEOS gives a multipolygon of one part as a plain polygon.
     /// So a polygon is read as a single part, or as none if it is empty.
     /// A geometry that is not a polygon or multipolygon fails the same way.
-    pub fn into_multi_polygon_array<const Z: bool>(
+    pub fn into_multi_polygon_array(
         self,
+        z: bool,
         ignore_per_row_errors: bool,
+        reversed: bool,
     ) -> GeoComputeResult<MultiPolygonArray> {
-        let mut validity = ValidityBuilder::with_capacity(self.geometries.len());
-        let mut coords = CoordsBuilder::with_capacity(Z, self.size_hint.coords);
-        let mut rings = OffsetsBuilder::with_capacity(self.size_hint.parts[0]);
-        let mut polygons = OffsetsBuilder::with_capacity(self.size_hint.parts[1]);
-        let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
-        for geometry in self.geometries {
-            let is_valid = match geometry {
-                GeosRow::Missing => false,
-                GeosRow::Empty => true,
-                GeosRow::Geometry(geometry) => match geometry.geometry_type()? {
-                    GeometryTypes::Polygon if geometry.is_empty()? => true,
-                    GeometryTypes::Polygon => {
-                        push_rings::<Z, false>(&mut coords, &mut rings, &geometry)?;
-                        polygons.push(rings.len());
-                        true
-                    }
-                    GeometryTypes::MultiPolygon => {
-                        for n in 0..geometry.get_num_geometries()? {
-                            push_rings::<Z, false>(
-                                &mut coords,
-                                &mut rings,
-                                &geometry.get_geometry_n(n)?,
-                            )?;
-                            polygons.push(rings.len());
-                        }
-                        true
-                    }
-                    other => wrong_kind("multipolygon", other, ignore_per_row_errors)?,
-                },
-            };
-            validity.push(is_valid);
-            rows.push(polygons.len());
-        }
-        Ok(MultiPolygonArray {
-            rows: List::from_offsets(rows.finish(), validity.finish()),
-            polygons: ValidList::from_offsets(polygons.finish()),
-            rings: ValidList::from_offsets(rings.finish()),
-            coords: coords.finish(),
-        })
+        with_const_flags!(
+            into_multi_polygon_array_with(self, ignore_per_row_errors);
+            z, reversed
+        )
     }
+}
+
+/// See [`GeosGeometries::into_multi_polygon_array`].
+fn into_multi_polygon_array_with<const Z: bool, const REVERSED: bool>(
+    geometries: GeosGeometries,
+    ignore_per_row_errors: bool,
+) -> GeoComputeResult<MultiPolygonArray> {
+    let mut validity = ValidityBuilder::with_capacity(geometries.geometries.len());
+    let mut coords = CoordsBuilder::with_capacity(Z, geometries.size_hint.coords);
+    let mut rings = OffsetsBuilder::with_capacity(geometries.size_hint.parts[0]);
+    let mut polygons = OffsetsBuilder::with_capacity(geometries.size_hint.parts[1]);
+    let mut rows = OffsetsBuilder::with_capacity(geometries.geometries.len());
+    for geometry in geometries.geometries {
+        let is_valid = match geometry {
+            GeosRow::Missing => false,
+            GeosRow::Empty => true,
+            GeosRow::Geometry(geometry) => match geometry.geometry_type()? {
+                GeometryTypes::Polygon if geometry.is_empty()? => true,
+                GeometryTypes::Polygon => {
+                    push_rings::<Z, REVERSED>(&mut coords, &mut rings, &geometry)?;
+                    polygons.push(rings.len());
+                    true
+                }
+                GeometryTypes::MultiPolygon => {
+                    for n in 0..geometry.get_num_geometries()? {
+                        push_rings::<Z, REVERSED>(
+                            &mut coords,
+                            &mut rings,
+                            &geometry.get_geometry_n(n)?,
+                        )?;
+                        polygons.push(rings.len());
+                    }
+                    true
+                }
+                other => wrong_kind("multipolygon", other, ignore_per_row_errors)?,
+            },
+        };
+        validity.push(is_valid);
+        rows.push(polygons.len());
+    }
+    Ok(MultiPolygonArray {
+        rows: List::from_offsets(rows.finish(), validity.finish()),
+        polygons: ValidList::from_offsets(polygons.finish()),
+        rings: ValidList::from_offsets(rings.finish()),
+        coords: coords.finish(),
+    })
 }
 
 /// See [`GeosGeometries::into_polygon_array`].

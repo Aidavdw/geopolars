@@ -173,6 +173,36 @@ class ExprGeoNameSpace:
             early_finite_check=early_finite_check,
         )
 
+    def buffer(
+        self,
+        distance: float,
+        *,
+        quadrant_segments: int = 8,
+        cap_style: Literal["round", "flat", "square"] | None = None,
+        join_style: Literal["round", "mitre", "bevel"] = "round",
+        mitre_limit: float | None = None,
+        side: Literal["both", "left", "right"] = "both",
+        allow_splitting: bool = False,
+        ccw_outer: bool = False,
+        ignore_per_row_errors: bool = False,
+        early_finite_check: bool = False,
+    ) -> pl.Expr:
+        from geopolars.geo.buffer import buffer
+
+        return buffer(
+            self._expr,
+            distance,
+            quadrant_segments=quadrant_segments,
+            cap_style=cap_style,
+            join_style=join_style,
+            mitre_limit=mitre_limit,
+            side=side,
+            allow_splitting=allow_splitting,
+            ccw_outer=ccw_outer,
+            ignore_per_row_errors=ignore_per_row_errors,
+            early_finite_check=early_finite_check,
+        )
+
     def simplify(
         self,
         tolerance: float,
