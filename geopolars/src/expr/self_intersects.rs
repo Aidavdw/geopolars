@@ -1,9 +1,9 @@
 //! Whether a linestring or polygon crosses or touches itself, in x and y
-//! (see [`geopolars_compute::rsgeo::line_strings_self_intersect`]).
+//! (see [`geopolars_compute::geos::line_strings_self_intersect`]).
 //!
 //! A multi-geometry gets a list, one per part.
 
-use geopolars_compute::rsgeo::{
+use geopolars_compute::geos::{
     line_strings_self_intersect, multi_line_strings_self_intersect, multi_polygons_self_intersect,
     polygons_self_intersect,
 };
@@ -53,7 +53,7 @@ fn self_intersects(inputs: &[Series], kwargs: SelfIntersectsKwargs) -> PolarsRes
         Kind::LineString => {
             let chunks = chunks.map(|rows| {
                 let array = LineStringArray::new(rows)?;
-                PolarsResult::Ok(line_strings_self_intersect(&array))
+                line_strings_self_intersect(&array).map_err(compute_err)
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
@@ -67,7 +67,7 @@ fn self_intersects(inputs: &[Series], kwargs: SelfIntersectsKwargs) -> PolarsRes
         Kind::MultiLineString => {
             let chunks = chunks.map(|rows| {
                 let array = MultiLineStringArray::new(rows)?;
-                PolarsResult::Ok(multi_line_strings_self_intersect(&array))
+                multi_line_strings_self_intersect(&array).map_err(compute_err)
             });
             ListChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }

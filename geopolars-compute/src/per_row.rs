@@ -1,9 +1,10 @@
 //! Running a kernel over every row of a chunk.
 
-use geopolars_core::output::{bool_array, f64_array};
-use geopolars_core::List;
-use polars_arrow::array::{BooleanArray, PrimitiveArray};
+use geopolars_core::output::{bool_array, f64_array, list_array};
+use geopolars_core::{List, ValidList};
+use polars_arrow::array::{BooleanArray, ListArray, PrimitiveArray};
 use polars_arrow::bitmap::Bitmap;
+use polars_arrow::offset::Offsets;
 
 /// `measure` of every row of a chunk, with the rows' own validity.
 #[inline(always)]
@@ -78,4 +79,32 @@ fn per_row_values_with<const ALL_VALID: bool, T: Default, E>(
             }
         })
         .collect()
+}
+
+/// [per_row_optional_bool], as a list per row of a chunk, one per part.
+/// `parts` holds where the parts of each row sit, and `test` takes the index of a part.
+pub(crate) fn per_part_optional_bool<E>(
+    rows: &List,
+    parts: &ValidList,
+    test: impl Fn(usize) -> Result<Option<bool>, E>,
+) -> Result<ListArray<i64>, E> {
+    let mut tested = Vec::with_capacity(parts.len());
+    let mut offsets = Vec::with_capacity(rows.len() + 1);
+    offsets.push(0);
+    for i in 0..rows.len() {
+        // A missing row's offsets point anywhere, so it gets no parts.
+        if rows.is_valid(i) {
+            for part in rows.range(i) {
+                tested.push(test(part)?);
+            }
+        }
+        offsets.push(tested.len() as i64);
+    }
+    // SAFETY: they start at 0, and every end is the number of values so far, which only grows.
+    let offsets = unsafe { Offsets::new_unchecked(offsets) }.into();
+    Ok(list_array(
+        optional_bool_array(&tested).boxed(),
+        offsets,
+        rows.validity().cloned(),
+    ))
 }

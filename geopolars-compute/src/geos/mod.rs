@@ -8,6 +8,7 @@ mod convex_hull;
 mod linestrings;
 mod polygons;
 mod rings_overlap;
+mod self_intersects;
 mod simplify;
 mod topology;
 
@@ -16,6 +17,10 @@ pub use convex_hull::{
     multi_polygon_convex_hulls, polygon_convex_hulls,
 };
 pub use rings_overlap::{rings_overlap_against_one, rings_overlap_pairwise};
+pub use self_intersects::{
+    line_strings_self_intersect, multi_line_strings_self_intersect, multi_polygons_self_intersect,
+    polygons_self_intersect,
+};
 pub use simplify::{
     simplify_line_strings, simplify_multi_line_strings, simplify_multi_polygons, simplify_polygons,
 };
@@ -242,6 +247,19 @@ fn coord_seq(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<CoordSeq> 
         z.map(|z| &z[vertices.clone()]),
         m.map(|m| &m[vertices]),
     )?)
+}
+
+#[inline(always)]
+fn move_last_vertex_onto_first(
+    seq: &mut CoordSeq,
+    axes: &Axes,
+    vertices: Range<usize>,
+) -> GeoComputeResult<()> {
+    let (x, y, _, _) = axes;
+    let line = vertices.len() - 1;
+    seq.set_x(line, x[vertices.start])?;
+    seq.set_y(line, y[vertices.start])?;
+    Ok(())
 }
 
 /// GEOS geometries of any kind, one per row,

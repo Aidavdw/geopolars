@@ -9,8 +9,8 @@ use geopolars_core::{
 use geos::{Geom, Geometry, GeometryTypes};
 
 use super::{
-    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, GeosRow,
-    OffsetsBuilder, ToGeos, ToGeosRows, ValidityBuilder,
+    axes, coord_seq, move_last_vertex_onto_first, rows_to_geos, wrong_kind, Axes, CoordsBuilder,
+    GeosGeometries, GeosRow, OffsetsBuilder, ToGeos, ToGeosRows, ValidityBuilder,
 };
 use crate::GeoComputeResult;
 
@@ -122,9 +122,7 @@ fn linear_ring_to_geos(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<
     let (x, y, _, _) = axes;
     let (first, last) = (vertices.start, vertices.end.saturating_sub(1));
     if !vertices.is_empty() && (x[first] != x[last] || y[first] != y[last]) {
-        let line = vertices.len() - 1;
-        seq.set_x(line, x[first])?;
-        seq.set_y(line, y[first])?;
+        move_last_vertex_onto_first(&mut seq, axes, vertices)?;
     }
     Ok(Geometry::create_linear_ring(seq)?)
 }

@@ -6,7 +6,11 @@
 #[cfg(feature = "native")]
 #[allow(dead_code)]
 mod is_valid;
+// Unused: rings_overlap runs through GEOS.
+#[allow(dead_code)]
 mod rings_overlap;
+// Unused: self_intersects runs through GEOS.
+#[allow(dead_code)]
 mod self_intersects;
 
 #[cfg(feature = "native")]
@@ -21,12 +25,9 @@ pub use self_intersects::{
 };
 
 use ::rsgeo::{Coord, LineString, Polygon};
-use geopolars_core::output::list_array;
-use geopolars_core::{is_ring, List, ScalarLineString, ValidList};
-use polars_arrow::array::ListArray;
-use polars_arrow::offset::Offsets;
+use geopolars_core::{is_ring, ScalarLineString};
 
-use crate::per_row::{optional_bool_array, per_row_optional_bool};
+use crate::per_row::{per_part_optional_bool, per_row_optional_bool};
 use crate::{GeoComputeError, GeoComputeResult};
 
 /// Whether every vertex of `line` is finite in x and y.
@@ -60,32 +61,4 @@ fn to_rsgeo_ring(line: &ScalarLineString) -> Polygon<f64> {
         .map(|[x, y, _]| Coord { x, y })
         .collect();
     Polygon::new(LineString::new(vertices), vec![])
-}
-
-/// [per_row_optional_bool], as a list per row of a chunk, one per part.
-/// `parts` holds where the parts of each row sit, and `test` takes the index of a part.
-fn per_part_optional_bool<E>(
-    rows: &List,
-    parts: &ValidList,
-    test: impl Fn(usize) -> Result<Option<bool>, E>,
-) -> Result<ListArray<i64>, E> {
-    let mut tested = Vec::with_capacity(parts.len());
-    let mut offsets = Vec::with_capacity(rows.len() + 1);
-    offsets.push(0);
-    for i in 0..rows.len() {
-        // A missing row's offsets point anywhere, so it gets no parts.
-        if rows.is_valid(i) {
-            for part in rows.range(i) {
-                tested.push(test(part)?);
-            }
-        }
-        offsets.push(tested.len() as i64);
-    }
-    // SAFETY: they start at 0, and every end is the number of values so far, which only grows.
-    let offsets = unsafe { Offsets::new_unchecked(offsets) }.into();
-    Ok(list_array(
-        optional_bool_array(&tested).boxed(),
-        offsets,
-        rows.validity().cloned(),
-    ))
 }

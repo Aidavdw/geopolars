@@ -22,7 +22,7 @@ the comment says when one without a CRS takes a different tier.
 | `convex_hull` | - | | B | GEOS [^3], straight=null | B | GEOS [^3] [^1] | B | GEOS [^3] [^1] | B | GEOS [^3] [^1] | B | GEOS[^3] [^1] |
 | `simplify` | C | returns the point | B | GEOS; z kept, m dropped | B | split by `buffer(0)` is a per-row error | C | returns the multipoint | B | | B | |
 | `is_ring` | - | | A | ≥ 4 vertices, ends ≈  x/y/z | - | | - | | A | parts chained into one ring | - | |
-| `self_intersects` | - | | B | rsgeo sweep; x/y only | B | per ring; holes RGR | - | | B | LPP | B | LPP |
+| `self_intersects` | - | | B | GEOS `is_simple`; x/y only | B | per ring; holes as `rings_overlap` | - | | B | LPP | B | LPP |
 | `rings_overlap` | - | | B | hacked as polygon; GEOS | - | | - | | - | | - | |
 | `is_ccw` | - | | A | CCW | A | | - | | A | every part combined | A | every part combined |
 | `is_valid` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
@@ -66,7 +66,6 @@ In this table:
 - LPP = returns a list, one result per part (computed as for the single variant)
 - CAA = composed of `centroid` + `affine_about`
 - SCC = skips the closing coordinate of each ring
-- RGR = uses `rsgeo`'s `relate` to get an intersection matrix
 
 [^1]: GEOS does not support m values (for this operation),
       so its value is dropped, and an m-less variant is returned.

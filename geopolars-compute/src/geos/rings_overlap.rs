@@ -16,7 +16,7 @@ const INTERIORS_DISJOINT: &str = "F********";
 
 /// If `TOUCHING=true`, rings that only touch overlap too.
 #[inline(always)]
-fn enclosed_areas_overlap<const TOUCHING: bool>(
+pub(super) fn enclosed_areas_overlap<const TOUCHING: bool>(
     a: &PreparedGeometry,
     b: &Geometry,
 ) -> GeoComputeResult<bool> {
@@ -27,22 +27,31 @@ fn enclosed_areas_overlap<const TOUCHING: bool>(
     })
 }
 
-/// `None` if one of its vertices is not finite in x or y.
-/// Errors if it is not a ring.
+/// Whether `line` is finite in x and y.
+/// Errors if it is, but is not a ring.
 #[inline(always)]
-fn polygon_enclosed_by_finite_ring(line: &ScalarLineString) -> GeoComputeResult<Option<Geometry>> {
-    let axes = axes(line.coords);
-    let (x, y, _, _) = axes;
+pub(super) fn ring_is_finite(line: &ScalarLineString) -> GeoComputeResult<bool> {
+    let (x, y, _, _) = axes(line.coords);
     let vertices = line.vertices.clone();
     if xy_is_finite_or_error(&x[vertices.clone()], &y[vertices.clone()]).is_err() {
-        return Ok(None);
+        return Ok(false);
     }
     if !is_ring::<false>(line.coords, vertices.clone()) {
         return Err(GeoComputeError::NotARing {
             vertices: vertices.len(),
         });
     }
-    polygon_enclosed_by_ring_to_geos(&axes, vertices).map(Some)
+    Ok(true)
+}
+
+/// `None` if one of its vertices is not finite in x or y.
+/// Errors if it is not a ring.
+#[inline(always)]
+fn polygon_enclosed_by_finite_ring(line: &ScalarLineString) -> GeoComputeResult<Option<Geometry>> {
+    if !ring_is_finite(line)? {
+        return Ok(None);
+    }
+    polygon_enclosed_by_ring_to_geos(&axes(line.coords), line.vertices.clone()).map(Some)
 }
 
 /// Whether rings `a` and `b` overlap.
