@@ -4,14 +4,13 @@ use std::ops::Range;
 
 use geopolars_core::output::SizeHint;
 use geopolars_core::{
-    is_close, LineStringArray, List, MultiLineStringArray, ScalarLineString, ScalarMultiLineString,
-    ValidList,
+    LineStringArray, List, MultiLineStringArray, ScalarLineString, ScalarMultiLineString, ValidList,
 };
 use geos::{Geom, Geometry, GeometryTypes};
 
 use super::{
-    axes, coord_seq, move_last_vertex_onto_first, rows_to_geos, wrong_kind, Axes, CoordsBuilder,
-    GeosGeometries, GeosRow, OffsetsBuilder, ToGeos, ToGeosRows, ValidityBuilder,
+    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, GeosRow,
+    OffsetsBuilder, ToGeos, ToGeosRows, ValidityBuilder,
 };
 use crate::GeoComputeResult;
 
@@ -85,22 +84,6 @@ pub(super) fn line_string_to_geos(
     vertices: Range<usize>,
 ) -> GeoComputeResult<Geometry> {
     Ok(Geometry::create_line_string(coord_seq(axes, vertices)?)?)
-}
-
-/// A line whose ends lie at the same place in x and y ([`is_close`]) counts as closed, as a ring does.
-/// GEOS wants them equal, so the last vertex is then moved onto the first.
-#[inline(always)]
-pub(super) fn line_string_closed_within_is_close_to_geos(
-    axes: &Axes,
-    vertices: Range<usize>,
-) -> GeoComputeResult<Geometry> {
-    let mut seq = coord_seq(axes, vertices.clone())?;
-    let (x, y, _, _) = axes;
-    let (first, last) = (vertices.start, vertices.end.saturating_sub(1));
-    if !vertices.is_empty() && is_close(x[first], x[last]) && is_close(y[first], y[last]) {
-        move_last_vertex_onto_first(&mut seq, axes, vertices)?;
-    }
-    Ok(Geometry::create_line_string(seq)?)
 }
 
 /// No parts gives an empty multilinestring.

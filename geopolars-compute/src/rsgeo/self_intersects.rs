@@ -6,8 +6,8 @@ use std::convert::Infallible;
 use ::rsgeo::algorithm::sweep::Cross;
 use ::rsgeo::{Coord, Intersections, Line, LineIntersection, PreparedGeometry, Relate};
 use geopolars_core::{
-    is_close, LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray,
-    ScalarLineString, ScalarPolygon,
+    LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray, ScalarLineString,
+    ScalarPolygon,
 };
 use polars_arrow::array::{BooleanArray, ListArray};
 
@@ -32,10 +32,10 @@ impl Cross for Segment {
     }
 }
 
-/// Whether `a` and `b` lie at almost the same place in x and y ([`is_close`]).
+/// Whether `a` and `b` lie at exactly the same place in x and y.
 #[inline(always)]
 fn same_xy(a: Coord<f64>, b: Coord<f64>) -> bool {
-    is_close(a.x, b.x) && is_close(a.y, b.y)
+    a == b
 }
 
 /// Whether the line through the `n` vertices `vertex(0)` up to `vertex(n - 1)`

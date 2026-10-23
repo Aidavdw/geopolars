@@ -53,8 +53,7 @@ def self_intersects(
     so a line whose end lies on itself intersects itself.
     A closed line (its last vertex at its first) may meet itself there, so a simple ring does not.
     Repeated vertices do not count, as long as they are exactly equal.
-    A line is closed when its ends lie at the same place,
-    within the default margin of `pl.Expr.is_close`.
+    A line is closed when its ends lie at exactly the same place.
 
     An empty linestring, a single vertex or a single segment does not intersect itself.
     A missing linestring gives a missing result,

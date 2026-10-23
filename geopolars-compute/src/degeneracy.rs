@@ -10,8 +10,8 @@
 use std::ops::Range;
 
 use geopolars_core::{
-    same_place, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PointArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon, ValidCoords,
+    same_place, same_place_within, LineStringArray, MultiLineStringArray, MultiPointArray,
+    MultiPolygonArray, PointArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon, ValidCoords,
 };
 use geos::{Geom, Geometry};
 use polars_arrow::array::BooleanArray;
@@ -58,18 +58,42 @@ impl MultiPolygonTopologyChecks {
     }
 }
 
-/// Whether two vertices in a row of `vertices` lie at the [same place](same_place).
+/// If `TOLERANCE_COINCIDENCE=true`, [same_place_within] `tolerance`. Otherwise [same_place].
 #[inline(always)]
-fn has_repeated_vertices<const Z: bool>(coords: &ValidCoords, vertices: Range<usize>) -> bool {
-    (vertices.start + 1..vertices.end).any(|i| same_place::<Z>(coords, i - 1, i))
+fn coincide<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
+    coords: &ValidCoords,
+    i: usize,
+    j: usize,
+    tolerance: f64,
+) -> bool {
+    if TOLERANCE_COINCIDENCE {
+        same_place_within::<Z>(coords, i, j, tolerance)
+    } else {
+        same_place::<Z>(coords, i, j)
+    }
 }
 
-/// Whether any two of `points` lie at the [same place](same_place).
+/// Whether two vertices in a row of `vertices` [coincide].
 #[inline(always)]
-fn has_repeated_points<const Z: bool>(coords: &ValidCoords, points: Range<usize>) -> bool {
-    points
-        .clone()
-        .any(|i| (i + 1..points.end).any(|j| same_place::<Z>(coords, i, j)))
+fn has_repeated_vertices<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
+    coords: &ValidCoords,
+    vertices: Range<usize>,
+    tolerance: f64,
+) -> bool {
+    (vertices.start + 1..vertices.end)
+        .any(|i| coincide::<TOLERANCE_COINCIDENCE, Z>(coords, i - 1, i, tolerance))
+}
+
+/// Whether any two of `points` [coincide].
+#[inline(always)]
+fn has_repeated_points<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
+    coords: &ValidCoords,
+    points: Range<usize>,
+    tolerance: f64,
+) -> bool {
+    points.clone().any(|i| {
+        (i + 1..points.end).any(|j| coincide::<TOLERANCE_COINCIDENCE, Z>(coords, i, j, tolerance))
+    })
 }
 
 /// Whether every one of `vertices` is the empty point, which also holds when there are none.
@@ -189,19 +213,26 @@ pub fn points_are_degenerate(array: &PointArray, check_empty: bool) -> BooleanAr
     with_const_flags!(points_are_degenerate_with(array); check_empty)
 }
 
-/// If `CHECK_REPEATED_POINTS=true`, two points at the same place are degenerate.
+/// If `CHECK_REPEATED_POINTS=true`, two points that [coincide] are degenerate.
 /// If `CHECK_EMPTY=true`, so is a multipoint of only empty points, or none.
-/// See [same_place] for `Z`.
+/// See [coincide] for `TOLERANCE_COINCIDENCE` and `Z`.
 fn multi_points_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
+    const TOLERANCE_COINCIDENCE: bool,
     const Z: bool,
 >(
     array: &MultiPointArray,
+    tolerance: f64,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         let points = array.rows.range(i);
-        (CHECK_REPEATED_POINTS && has_repeated_points::<Z>(&array.coords, points.clone()))
+        (CHECK_REPEATED_POINTS
+            && has_repeated_points::<TOLERANCE_COINCIDENCE, Z>(
+                &array.coords,
+                points.clone(),
+                tolerance,
+            ))
             || (CHECK_EMPTY && only_empty_points(&array.coords, points))
     })
 }
@@ -210,24 +241,35 @@ pub fn multi_points_are_degenerate(
     array: &MultiPointArray,
     check_repeated_points: bool,
     check_empty: bool,
+    tolerance_coincidence: Option<f64>,
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
-    with_const_flags!(multi_points_are_degenerate_with(array); check_repeated_points, check_empty, z)
+    with_const_flags!(
+        multi_points_are_degenerate_with(array, tolerance_coincidence.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
+    )
 }
 
-/// If `CHECK_REPEATED_POINTS=true`, two vertices in a row at the same place are degenerate.
+/// If `CHECK_REPEATED_POINTS=true`, two vertices in a row that [coincide] are degenerate.
 /// If `CHECK_EMPTY=true`, so is a linestring of only empty points, or none.
-/// See [same_place] for `Z`.
+/// See [coincide] for `TOLERANCE_COINCIDENCE` and `Z`.
 fn line_strings_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
+    const TOLERANCE_COINCIDENCE: bool,
     const Z: bool,
 >(
     array: &LineStringArray,
+    tolerance: f64,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         let vertices = array.rows.range(i);
-        (CHECK_REPEATED_POINTS && has_repeated_vertices::<Z>(&array.coords, vertices.clone()))
+        (CHECK_REPEATED_POINTS
+            && has_repeated_vertices::<TOLERANCE_COINCIDENCE, Z>(
+                &array.coords,
+                vertices.clone(),
+                tolerance,
+            ))
             || (CHECK_EMPTY && only_empty_points(&array.coords, vertices))
     })
 }
@@ -236,9 +278,13 @@ pub fn line_strings_are_degenerate(
     array: &LineStringArray,
     check_repeated_points: bool,
     check_empty: bool,
+    tolerance_coincidence: Option<f64>,
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
-    with_const_flags!(line_strings_are_degenerate_with(array); check_repeated_points, check_empty, z)
+    with_const_flags!(
+        line_strings_are_degenerate_with(array, tolerance_coincidence.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
+    )
 }
 
 /// [line_strings_are_degenerate_with] for every part.
@@ -246,16 +292,22 @@ pub fn line_strings_are_degenerate(
 fn multi_line_strings_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
+    const TOLERANCE_COINCIDENCE: bool,
     const Z: bool,
 >(
     array: &MultiLineStringArray,
+    tolerance: f64,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         let parts = array.rows.range(i);
         (CHECK_REPEATED_POINTS
-            && parts
-                .clone()
-                .any(|line| has_repeated_vertices::<Z>(&array.coords, array.lines.range(line))))
+            && parts.clone().any(|line| {
+                has_repeated_vertices::<TOLERANCE_COINCIDENCE, Z>(
+                    &array.coords,
+                    array.lines.range(line),
+                    tolerance,
+                )
+            }))
             || (CHECK_EMPTY && only_empty_points(&array.coords, array.lines.span(parts)))
     })
 }
@@ -264,33 +316,40 @@ pub fn multi_line_strings_are_degenerate(
     array: &MultiLineStringArray,
     check_repeated_points: bool,
     check_empty: bool,
+    tolerance_coincidence: Option<f64>,
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        multi_line_strings_are_degenerate_with(array);
-        check_repeated_points, check_empty, z
+        multi_line_strings_are_degenerate_with(array, tolerance_coincidence.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
     )
 }
 
-/// If `CHECK_REPEATED_POINTS=true`, two vertices in a row of a ring at the same place are degenerate.
+/// If `CHECK_REPEATED_POINTS=true`, two vertices in a row of a ring that [coincide] are degenerate.
 /// If `CHECK_EMPTY=true`, so is a polygon of only empty rings, or none.
 /// So is a polygon that fails one of the `topology` checks, if there are any.
-/// See [same_place] for `Z`.
+/// See [coincide] for `TOLERANCE_COINCIDENCE` and `Z`.
 fn polygons_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
+    const TOLERANCE_COINCIDENCE: bool,
     const Z: bool,
 >(
     array: &PolygonArray,
     topology: Option<&PolygonTopologyChecks>,
+    tolerance: f64,
 ) -> GeoComputeResult<BooleanArray> {
     try_per_row_bool(&array.rows, |i| {
         let polygon = array.get(i);
         let vertices = array.rings.span(array.rows.range(i));
         Ok((CHECK_REPEATED_POINTS
-            && polygon
-                .rings()
-                .any(|ring| has_repeated_vertices::<Z>(ring.coords, ring.vertices)))
+            && polygon.rings().any(|ring| {
+                has_repeated_vertices::<TOLERANCE_COINCIDENCE, Z>(
+                    ring.coords,
+                    ring.vertices,
+                    tolerance,
+                )
+            }))
             || (CHECK_EMPTY && only_empty_points(&array.coords, vertices))
             || match topology {
                 Some(checks) => !polygon_topology_is_valid(&polygon, checks)?,
@@ -304,12 +363,13 @@ pub fn polygons_are_degenerate(
     check_repeated_points: bool,
     check_empty: bool,
     topology: &PolygonTopologyChecks,
+    tolerance_coincidence: Option<f64>,
 ) -> GeoComputeResult<BooleanArray> {
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        polygons_are_degenerate_with(array, topology);
-        check_repeated_points, check_empty, z
+        polygons_are_degenerate_with(array, topology, tolerance_coincidence.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
     )
 }
 
@@ -319,19 +379,25 @@ pub fn polygons_are_degenerate(
 fn multi_polygons_are_degenerate_with<
     const CHECK_REPEATED_POINTS: bool,
     const CHECK_EMPTY: bool,
+    const TOLERANCE_COINCIDENCE: bool,
     const Z: bool,
 >(
     array: &MultiPolygonArray,
     topology: Option<&MultiPolygonTopologyChecks>,
+    tolerance: f64,
 ) -> GeoComputeResult<BooleanArray> {
     try_per_row_bool(&array.rows, |i| {
         let multi = array.get(i);
         let vertices = array.rings.span(array.polygons.span(array.rows.range(i)));
         Ok((CHECK_REPEATED_POINTS
             && multi.polygons().any(|polygon| {
-                polygon
-                    .rings()
-                    .any(|ring| has_repeated_vertices::<Z>(ring.coords, ring.vertices))
+                polygon.rings().any(|ring| {
+                    has_repeated_vertices::<TOLERANCE_COINCIDENCE, Z>(
+                        ring.coords,
+                        ring.vertices,
+                        tolerance,
+                    )
+                })
             }))
             || (CHECK_EMPTY && only_empty_points(&array.coords, vertices))
             || match topology {
@@ -346,11 +412,12 @@ pub fn multi_polygons_are_degenerate(
     check_repeated_points: bool,
     check_empty: bool,
     topology: &MultiPolygonTopologyChecks,
+    tolerance_coincidence: Option<f64>,
 ) -> GeoComputeResult<BooleanArray> {
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        multi_polygons_are_degenerate_with(array, topology);
-        check_repeated_points, check_empty, z
+        multi_polygons_are_degenerate_with(array, topology, tolerance_coincidence.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
     )
 }

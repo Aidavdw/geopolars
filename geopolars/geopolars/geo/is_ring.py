@@ -36,7 +36,7 @@ def _is_ring(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 
 def is_ring(geometry: IntoExprColumn) -> pl.Expr:
     """Whether a linestring is a ring: it has at least 4 vertices,
-    and its last vertex lies coincides with its first (within margin default margin).
+    and its last vertex lies at exactly the same place as its first, in x, y and z.
     A multilinestring is a ring when its parts chain into one, in their order:
     each part ends where the next starts, and the last ends where the first starts.
     The joined line counts each joint once.

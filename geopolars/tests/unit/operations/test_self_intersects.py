@@ -88,13 +88,11 @@ def test_repeated_vertices_do_not_count() -> None:
     assert _self_intersects(open_line, ring) == [False, False]
 
 
-def test_the_ends_have_to_be_close_not_equal() -> None:
-    """As `pl.Expr.is_close`: within a relative 1e-9.
-    Here the last vertex lies on the first segment, which only a closed line allows.
-    """
+def test_the_ends_have_to_be_exactly_equal() -> None:
+    """Here the last vertex lies on the first segment, which only a closed line allows."""
+    exact = _line((1e6, 0), (2e6, 0), (2e6, 1), (1e6, 0))
     almost = _line((1e6, 0), (2e6, 0), (2e6, 1), (1e6 + 1e-4, 0))
-    off = _line((1e6, 0), (2e6, 0), (2e6, 1), (1e6 + 1e-2, 0))
-    assert _self_intersects(almost, off) == [False, True]
+    assert _self_intersects(exact, almost) == [False, True]
 
 
 def test_too_short_to_intersect() -> None:

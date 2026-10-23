@@ -132,16 +132,11 @@ def test_ignore_per_row_errors_on_a_single_ring(single_first: bool) -> None:
     assert overlap(bad) == [None, None]
 
 
-def test_the_ends_have_to_be_close_not_equal() -> None:
-    """As `pl.Expr.is_close`: within a relative 1e-9."""
+def test_the_ends_have_to_be_exactly_equal() -> None:
     almost = _square(1e6, 0)
     almost[-1] = {"x": 1e6 + 1e-4, "y": 0.0}
-    assert _overlap([almost], [_square(1e6, 0)]) == [True]
-
-    off = _square(1e6, 0)
-    off[-1] = {"x": 1e6 + 1e-2, "y": 0.0}
     with pytest.raises(ComputeError, match="rings_overlap expects rings"):
-        _overlap([off], [_square(1e6, 0)])
+        _overlap([almost], [_square(1e6, 0)])
 
 
 def test_z_does_not_count() -> None:

@@ -50,12 +50,11 @@ def test_an_empty_line_is_no_ring_and_missing_stays_missing() -> None:
     assert _is_ring([], None) == [False, None]
 
 
-def test_the_ends_have_to_be_close_not_equal() -> None:
-    """As `pl.Expr.is_close`: within a relative 1e-9."""
+def test_the_ends_have_to_be_exactly_equal() -> None:
+    exact = _line((1e6, 0), (2e6, 0), (2e6, 1), (1e6, 0))
     almost = _line((1e6, 0), (2e6, 0), (2e6, 1), (1e6 + 1e-4, 0))
-    off = _line((1e6, 0), (2e6, 0), (2e6, 1), (1e6 + 1e-2, 0))
 
-    assert _is_ring(almost, off) == [True, False]
+    assert _is_ring(exact, almost) == [True, False]
 
 
 def test_infinite_ends_are_close_only_to_the_same_infinity() -> None:

@@ -138,9 +138,9 @@ def test_a_closed_or_single_vertex_linestring_has_no_boundary() -> None:
 
 
 @pytest.mark.parametrize(
-    ("off", "closed"), [(1e-12, True), (1e-6, False)], ids=["within", "beyond"]
+    ("off", "closed"), [(0.0, True), (1e-12, False)], ids=["equal", "almost"]
 )
-def test_a_line_closes_within_a_relative_tolerance(off: float, closed: bool) -> None:
+def test_a_line_only_closes_when_its_ends_are_equal(off: float, closed: bool) -> None:
     line = _line((100, 100), (200, 100), (100 * (1 + off), 100))
 
     (got,) = _boundaries(_lines(line))

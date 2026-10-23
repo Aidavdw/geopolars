@@ -9,8 +9,8 @@ use geopolars_core::{
 use geos::{Geom, Geometry, GeometryTypes};
 
 use super::{
-    axes, coord_seq, move_last_vertex_onto_first, rows_to_geos, wrong_kind, Axes, CoordsBuilder,
-    GeosGeometries, GeosRow, OffsetsBuilder, ToGeos, ToGeosRows, ValidityBuilder,
+    axes, coord_seq, rows_to_geos, wrong_kind, Axes, CoordsBuilder, GeosGeometries, GeosRow,
+    OffsetsBuilder, ToGeos, ToGeosRows, ValidityBuilder,
 };
 use crate::GeoComputeResult;
 
@@ -111,20 +111,9 @@ pub(super) fn polygon_enclosed_by_ring_to_geos(
     )?)
 }
 
-// TODO: Do we keep using our 'almost exactly equal' for line closing, or do we start using exact
-// equality as well?
-
-/// Our ring's ends only have to lie at the same place (see `is_ring`), but GEOS wants them *exactly* equal.
-/// So the last vertex is moved onto the first, in x and y.
 #[inline(always)]
 fn linear_ring_to_geos(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<Geometry> {
-    let mut seq = coord_seq(axes, vertices.clone())?;
-    let (x, y, _, _) = axes;
-    let (first, last) = (vertices.start, vertices.end.saturating_sub(1));
-    if !vertices.is_empty() && (x[first] != x[last] || y[first] != y[last]) {
-        move_last_vertex_onto_first(&mut seq, axes, vertices)?;
-    }
-    Ok(Geometry::create_linear_ring(seq)?)
+    Ok(Geometry::create_linear_ring(coord_seq(axes, vertices)?)?)
 }
 
 /// The multipolygon of `polygons` `parts`.

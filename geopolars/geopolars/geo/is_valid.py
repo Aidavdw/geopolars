@@ -110,8 +110,8 @@ def is_valid(
 
     The GeoArrow spec only requires a ring to be closed.
     On top of that, a ring needs at least 4 vertices
-    (see `is_ring`), and the last has to lie at the same place as the first:
-    within the default margin of `pl.Expr.is_close`, in x, y and z.
+    (see `is_ring`), and the last has to lie at exactly the same place as the first,
+    in x, y and z.
     A linestring of 1 vertex, and a polygon with an empty exterior around a hole, are invalid too.
 
     `crs_bounds` says which bounds the coordinates have to lie in.

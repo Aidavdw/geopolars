@@ -17,8 +17,8 @@ use polars_arrow::array::Array;
 use polars_core::prelude::{polars_err, PolarsResult};
 
 pub use coords::{
-    is_close, is_ring, same_place, same_position, AxisArrays, Coords, ValidCoords, ABS_TOL,
-    MIN_RING_VERTICES, REL_TOL,
+    is_close, is_ring, same_place, same_place_within, same_position, AxisArrays, Coords,
+    ValidCoords, MIN_RING_VERTICES,
 };
 pub use dimension::GeoDimension;
 pub use geotraits::{Coord, Geometry};

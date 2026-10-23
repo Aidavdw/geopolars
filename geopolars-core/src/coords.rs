@@ -13,38 +13,48 @@ use crate::{downcast, GeoDimension};
 /// The fewest vertices a ring can have: a triangle, plus the vertex closing it.
 pub const MIN_RING_VERTICES: usize = 4;
 
-/// The relative tolerance of [`is_close`], as `pl.Expr.is_close`'s default.
-pub const REL_TOL: f64 = 1e-9;
-
-/// The absolute tolerance of [`is_close`], as `pl.Expr.is_close`'s default.
-pub const ABS_TOL: f64 = 0.0;
-
-/// Whether two coordinate values are almost the same, as `pl.Expr.is_close` with its defaults:
-/// `|a - b| <= max(REL_TOL * max(|a|, |b|), ABS_TOL)` (PEP 485).
+/// Whether two coordinate values are within a relative `tolerance` of each other:
+/// `|a - b| <= tolerance * max(|a|, |b|)`.
 /// Infinities are only close to themselves, and NaN is close to nothing.
-pub fn is_close(a: f64, b: f64) -> bool {
+pub fn is_close(a: f64, b: f64, tolerance: f64) -> bool {
     if a.is_infinite() || b.is_infinite() {
         return a == b;
     }
-    (a - b).abs() <= (REL_TOL * a.abs().max(b.abs())).max(ABS_TOL)
+    (a - b).abs() <= tolerance * a.abs().max(b.abs())
 }
 
-/// Whether two [positions](ValidCoords::position) are [`is_close`] on every axis.
+/// Whether two [positions](ValidCoords::position) are equal on every axis.
 #[inline(always)]
 pub fn same_position(a: [f64; 3], b: [f64; 3]) -> bool {
-    is_close(a[0], b[0]) && is_close(a[1], b[1]) && is_close(a[2], b[2])
+    a == b
 }
 
-/// Whether coordinates `i` and `j` of `coords` lie at almost the same place:
-/// [`is_close`] in x and y, and in z if `Z=true`.
+/// Whether coordinates `i` and `j` of `coords` lie at exactly the same place:
+/// equal in x and y, and in z if `Z=true`.
 /// m is a measure rather than a position, so it is not compared.
 #[inline(always)]
 pub fn same_place<const Z: bool>(coords: &ValidCoords, i: usize, j: usize) -> bool {
-    is_close(coords.x()[i], coords.x()[j])
-        && is_close(coords.y()[i], coords.y()[j])
+    coords.x()[i] == coords.x()[j]
+        && coords.y()[i] == coords.y()[j]
         && (!Z || {
             let z = coords.z().expect("a z, with `Z`");
-            is_close(z[i], z[j])
+            z[i] == z[j]
+        })
+}
+
+/// [same_place], but every axis only has to be [`is_close`] within `tolerance`.
+#[inline(always)]
+pub fn same_place_within<const Z: bool>(
+    coords: &ValidCoords,
+    i: usize,
+    j: usize,
+    tolerance: f64,
+) -> bool {
+    is_close(coords.x()[i], coords.x()[j], tolerance)
+        && is_close(coords.y()[i], coords.y()[j], tolerance)
+        && (!Z || {
+            let z = coords.z().expect("a z, with `Z`");
+            is_close(z[i], z[j], tolerance)
         })
 }
 

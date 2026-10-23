@@ -249,19 +249,6 @@ fn coord_seq(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<CoordSeq> 
     )?)
 }
 
-#[inline(always)]
-fn move_last_vertex_onto_first(
-    seq: &mut CoordSeq,
-    axes: &Axes,
-    vertices: Range<usize>,
-) -> GeoComputeResult<()> {
-    let (x, y, _, _) = axes;
-    let line = vertices.len() - 1;
-    seq.set_x(line, x[vertices.start])?;
-    seq.set_y(line, y[vertices.start])?;
-    Ok(())
-}
-
 /// GEOS geometries of any kind, one per row,
 /// to copy into one of our arrays with an `into_*_array` conversion.
 pub struct GeosGeometries {

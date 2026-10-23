@@ -64,7 +64,7 @@ def _frame(dtype: GeoArrowType, *rows: object) -> pl.DataFrame:
 
 
 def _is_degenerate(
-    dtype: GeoArrowType, *rows: object, **kwargs: bool
+    dtype: GeoArrowType, *rows: object, **kwargs: bool | float | None
 ) -> list[bool | None]:
     return _frame(dtype, *rows).select(geo.is_degenerate("g", **kwargs))["g"].to_list()
 
@@ -78,11 +78,16 @@ def test_two_vertices_in_a_row_at_the_same_place_are_degenerate() -> None:
     assert _is_degenerate(LineStringXY(), line) == [True]
 
 
-def test_vertices_in_a_row_that_are_almost_the_same_are_degenerate() -> None:
-    """Same place as `pl.Expr.is_close` with its defaults."""
+@pytest.mark.parametrize(
+    ("tolerance", "degenerate"), [(None, False), (1e-9, True)], ids=["exact", "1e-9"]
+)
+def test_vertices_in_a_row_that_are_almost_the_same_need_a_tolerance(
+    tolerance: float | None, degenerate: bool
+) -> None:
     line = _line((0, 0), (1, 1), (1 + 1e-12, 1), (2, 0))
 
-    assert _is_degenerate(LineStringXY(), line) == [True]
+    got = _is_degenerate(LineStringXY(), line, tolerance_coincidence=tolerance)
+    assert got == [degenerate]
 
 
 def test_vertices_in_a_row_that_differ_only_in_m_are_degenerate() -> None:

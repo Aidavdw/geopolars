@@ -1,5 +1,5 @@
 //! Whether a linestring is a ring: at least [MIN_RING_VERTICES] vertices,
-//! with its last at the same place as its first.
+//! with its last at exactly the same place as its first.
 //! A multilinestring is a ring when its parts chain into one (see [multi_line_strings_are_rings]).
 //! m is a measure rather than a position, so it is not compared.
 

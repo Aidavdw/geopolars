@@ -10,7 +10,7 @@ use geopolars_core::{
 use geos::{Geom, Geometry, PreparedGeometry};
 use polars_arrow::array::{BooleanArray, ListArray};
 
-use super::linestrings::line_string_closed_within_is_close_to_geos;
+use super::linestrings::line_string_to_geos;
 use super::polygons::{polygon_enclosed_by_ring_to_geos, polygon_to_geos};
 use super::rings_overlap::{enclosed_areas_overlap, ring_is_finite};
 use super::{axes, xy_is_finite_or_error};
@@ -29,7 +29,7 @@ fn line_self_intersects(line: &ScalarLineString) -> GeoComputeResult<Option<bool
     if vertices.len() < 3 {
         return Ok(Some(false));
     }
-    let line = line_string_closed_within_is_close_to_geos(&axes, vertices)?;
+    let line = line_string_to_geos(&axes, vertices)?;
     Ok(Some(!line.is_simple()?))
 }
 

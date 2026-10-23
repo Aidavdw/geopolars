@@ -347,10 +347,11 @@ def test_close_closes_the_open_rings() -> None:
     assert out.ext.storage().to_list() == [_TRIANGLE, [*_TRIANGLE, *_TRIANGLE]]
 
 
-def test_close_leaves_a_ring_that_is_almost_closed_alone() -> None:
+def test_close_closes_a_ring_that_is_almost_closed() -> None:
     almost = _ring_xy((1e6, 0), (2e6, 0), (2e6, 1), (1e6 + 1e-4, 0))
 
-    assert _from_rings([almost], close=True).ext.storage().to_list() == [[almost]]
+    closed = _from_rings([almost], close=True).ext.storage().to_list()
+    assert closed == [[[*almost, almost[0]]]]
 
 
 def test_close_cannot_save_a_ring_that_is_too_short() -> None:

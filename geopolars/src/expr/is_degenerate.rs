@@ -28,6 +28,7 @@ pub struct IsDegenerateKwargs {
     check_ring_self_intersect: bool,
     check_polygon_self_overlap: bool,
     check_multi_polygon_self_overlap: bool,
+    tolerance_coincidence: Option<f64>,
 }
 
 impl Default for IsDegenerateKwargs {
@@ -38,6 +39,7 @@ impl Default for IsDegenerateKwargs {
             check_ring_self_intersect: true,
             check_polygon_self_overlap: true,
             check_multi_polygon_self_overlap: true,
+            tolerance_coincidence: None,
         }
     }
 }
@@ -70,23 +72,29 @@ fn chunk_is_degenerate(
     kwargs: &IsDegenerateKwargs,
 ) -> PolarsResult<BooleanArray> {
     let rows = || downcast::<ListArray<i64>>(chunk, "a list of parts");
-    let (repeated, empty) = (kwargs.check_repeated_points, kwargs.check_empty);
+    let (repeated, empty, tolerance) = (
+        kwargs.check_repeated_points,
+        kwargs.check_empty,
+        kwargs.tolerance_coincidence,
+    );
     Ok(match kind {
         Kind::Point => points_are_degenerate(&PointArray::new(Coords::new(chunk)?), empty),
         Kind::LineString => {
-            line_strings_are_degenerate(&LineStringArray::new(rows()?)?, repeated, empty)
+            line_strings_are_degenerate(&LineStringArray::new(rows()?)?, repeated, empty, tolerance)
         }
         Kind::MultiPoint => {
-            multi_points_are_degenerate(&MultiPointArray::new(rows()?)?, repeated, empty)
+            multi_points_are_degenerate(&MultiPointArray::new(rows()?)?, repeated, empty, tolerance)
         }
         Kind::MultiLineString => {
-            multi_line_strings_are_degenerate(&MultiLineStringArray::new(rows()?)?, repeated, empty)
+            let array = MultiLineStringArray::new(rows()?)?;
+            multi_line_strings_are_degenerate(&array, repeated, empty, tolerance)
         }
         Kind::Polygon => polygons_are_degenerate(
             &PolygonArray::new(rows()?)?,
             repeated,
             empty,
             &kwargs.polygon_topology(),
+            tolerance,
         )
         .map_err(compute_err)?,
         Kind::MultiPolygon => multi_polygons_are_degenerate(
@@ -94,6 +102,7 @@ fn chunk_is_degenerate(
             repeated,
             empty,
             &kwargs.multi_polygon_topology(),
+            tolerance,
         )
         .map_err(compute_err)?,
     })

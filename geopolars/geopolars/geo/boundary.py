@@ -14,7 +14,6 @@ from geopolars.datatypes import (
     PolygonType,
 )
 from geopolars.geo._dispatch import on_geometry
-from geopolars.geo.is_close import _is_close
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -29,7 +28,7 @@ def _endpoints(
     line: pl.Expr, points_storage: PolarsDataType, axes: Sequence[str]
 ) -> pl.Expr:
     """The first and last vertex of one linestring's storage,
-    or none if the line is closed (they are close on `axes`)."""
+    or none if the line is closed (they are equal on `axes`)."""
     first, last = line.list.first(), line.list.last()
     no_points = pl.lit([], dtype=points_storage)
     # `concat_list` would turn a missing line into two missing points.
@@ -38,7 +37,11 @@ def _endpoints(
         .then(None)
         .when(line.list.len() == 0)
         .then(no_points)
-        .when(_is_close(first, last, axes))
+        .when(
+            pl.all_horizontal(
+                first.struct.field(axis) == last.struct.field(axis) for axis in axes
+            )
+        )
         .then(no_points)
         .otherwise(pl.concat_list(first, last))
     )
@@ -87,8 +90,8 @@ def boundary(geometry: IntoExprColumn) -> pl.Expr:
     | `MultiLineStringXYZM`   | `list[MultiPointXYZM]`       |
 
     The rings stay closed, as they are stored.
-    A linestring is closed when its first and last vertex lie at almost the same place
-    (as `pl.Expr.is_close` with its defaults) in x, y and z.
+    A linestring is closed when its first and last vertex lie at exactly the same place
+    in x, y and z.
     m is a measure along the line rather than a position, so it is not compared.
     A closed linestring, or one with a single vertex, has an empty boundary.
 
