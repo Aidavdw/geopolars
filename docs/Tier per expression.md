@@ -49,7 +49,7 @@ the comment says when one without a CRS takes a different tier.
 | `z` | C | like `x`; only with a `z` | C | | C | | C | | C | | C | |
 | `m` | C | like `x`; only with an `m` | C | | C | | C | | C | | C | |
 | `count_coordinates` | A | `0` if empty, unless `include_empty` | A | | A | SCC | A | | A | | A | SCC |
-| `is_empty` | C | NaN `x` and `y` | C | no verts or only empty | C | only empty rings | C | EP | C | EP | C | EP |
+| `is_empty` | A | NaN `x` and `y` | A | no verts, or only empty if `check_nested` | A | | A | | A | | A | |
 | `wrap_longitude` | C | needs geographic CRS | C | | C | | C | | C | | C | |
 | `to_wkb` | A | `wkb` crate | A | | A | | A | | A | | A | |
 | `from_wkb` | A | `wkb` crate | A | | A | | A | promotes a point | A | promotes a linestring | A | promotes a poly |

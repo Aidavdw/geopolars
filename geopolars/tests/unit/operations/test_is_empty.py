@@ -99,6 +99,7 @@ def test_a_nan_point_is_empty(dimension: Dimension) -> None:
     assert out["point"].to_list() == [True, False, False, None]
 
 
+@pytest.mark.parametrize("check_nested", [False, True])
 @pytest.mark.parametrize(
     ("geometry", "layers", "rows"),
     [
@@ -111,7 +112,11 @@ def test_a_nan_point_is_empty(dimension: Dimension) -> None:
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
 def test_no_coordinates_is_empty_and_missing_is_null(
-    geometry: type[GeoArrowType], layers: int, rows: list, dimension: Dimension
+    geometry: type[GeoArrowType],
+    layers: int,
+    rows: list,
+    check_nested: bool,
+    dimension: Dimension,
 ) -> None:
     # Relabelled rather than built: a constructor refuses a ring without vertices,
     # but one can still arrive around it (e.g. from a file).
@@ -120,7 +125,7 @@ def test_no_coordinates_is_empty_and_missing_is_null(
         {"storage": rows}, schema={"storage": _nested(dimension, layers)}
     ).select(pl.col("storage").ext.to(dtype).alias("geometry"))
 
-    out = df.select(geo.is_empty("geometry"))
+    out = df.select(geo.is_empty("geometry", check_nested=check_nested))
 
     assert out["geometry"].to_list() == [True] * (len(rows) - 1) + [None]
 
@@ -139,24 +144,34 @@ def test_one_part_with_coordinates_is_enough() -> None:
 
 
 @pytest.mark.parametrize(
-    ("constructor", "name"),
-    [(geo.line_string, "line"), (geo.multi_point, "multipoint")],
-    ids=["linestring", "multipoint"],
+    ("geometry", "layers"),
+    [
+        (LineStringType, 1),
+        (MultiPointType, 1),
+        (PolygonType, 2),
+        (MultiLineStringType, 2),
+        (MultiPolygonType, 3),
+    ],
+    ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
-def test_only_empty_points_is_empty(
-    constructor: object, name: str, dimension: Dimension
+def test_only_empty_points_is_empty_when_checking_nested(
+    geometry: type[GeoArrowType], layers: int, dimension: Dimension
 ) -> None:
     """One non-empty point is enough to make the whole non-empty."""
     empty = dict.fromkeys(dimension.coords, math.nan)
     point = dict.fromkeys(dimension.coords, 1.0)
+    rows: list = [[empty], [empty, empty], [empty, point], [point, empty]]
+    for _ in range(layers - 1):
+        rows = [[row] for row in rows]
     df = pl.DataFrame(
-        {"storage": [[empty], [empty, empty], [empty, point], [point, empty]]},
-        schema={"storage": _nested(dimension, 1)},
-    ).select(constructor("storage").alias(name))  # type: ignore[operator]
+        {"storage": rows}, schema={"storage": _nested(dimension, layers)}
+    ).select(pl.col("storage").ext.to(geometry.of_dimension(dimension.coords)()))
 
-    out = df.select(geo.is_empty(name))
+    nested = df.select(geo.is_empty("storage", check_nested=True))
+    unnested = df.select(geo.is_empty("storage"))
 
-    assert out[name].to_list() == [True, True, False, False]
+    assert nested["storage"].to_list() == [True, True, False, False]
+    assert unnested["storage"].to_list() == [False] * 4
 
 
 @pytest.mark.parametrize(
@@ -212,6 +227,6 @@ def test_the_namespace_matches_the_function(line_coords: pl.DataFrame) -> None:
     df = XY.lines(line_coords)
 
     assert_series_equal(
-        df.select(gpl.col("line").geo.is_empty()).to_series(),
-        df.select(geo.is_empty("line")).to_series(),
+        df.select(gpl.col("line").geo.is_empty(check_nested=True)).to_series(),
+        df.select(geo.is_empty("line", check_nested=True)).to_series(),
     )

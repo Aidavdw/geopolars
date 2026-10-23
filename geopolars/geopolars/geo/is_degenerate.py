@@ -52,15 +52,15 @@ def is_degenerate(
     The geometries have to be valid already (see `is_valid`): this trusts its input.
     On a geometry that is not, the result means nothing.
 
-    | check                              | geometry                       | degenerate when                                      |
-    |------------------------------------|--------------------------------|------------------------------------------------------|
-    | `check_repeated_points`            | linestring, every ring         | two vertices in a row lie at the same place          |
-    | `check_repeated_points`            | multipoint                     | any two points lie at the same place                 |
-    | `check_empty`                      | point                          | it is the empty point: NaN in x and y                |
-    | `check_empty`                      | any other                      | it has no points, or only empty ones (as `is_empty`) |
-    | `check_ring_self_intersect`        | polygon, multipolygon          | a ring crosses or touches itself                     |
-    | `check_polygon_self_overlap`       | polygon, multipolygon          | its rings do not fit together (see below)            |
-    | `check_multi_polygon_self_overlap` | multipolygon                   | its parts do not fit together (see below)            |
+    | check                              | geometry                       | degenerate when                                                               |
+    |------------------------------------|--------------------------------|-------------------------------------------------------------------------------|
+    | `check_repeated_points`            | linestring, every ring         | two vertices in a row lie at the same place                                   |
+    | `check_repeated_points`            | multipoint                     | any two points lie at the same place                                          |
+    | `check_empty`                      | point                          | it is the empty point: NaN in x and y                                         |
+    | `check_empty`                      | any other                      | it has no points, or only empty ones (as `is_empty` with `check_nested=True`) |
+    | `check_ring_self_intersect`        | polygon, multipolygon          | a ring crosses or touches itself                                              |
+    | `check_polygon_self_overlap`       | polygon, multipolygon          | its rings do not fit together (see below)                                     |
+    | `check_multi_polygon_self_overlap` | multipolygon                   | its parts do not fit together (see below)                                     |
 
     "At the same place" is compared in x, y and z.
     With `abs_tol=None` and `rel_tol=None`, the default, the coordinates have to be exactly equal.

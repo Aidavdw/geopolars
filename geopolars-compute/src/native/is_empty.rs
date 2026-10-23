@@ -1,0 +1,86 @@
+//! Whether a geometry is empty.
+//! See `is_empty` in Python for the rules.
+//!
+//! # Const generic flags
+//!
+//! ## `CHECK_NESTED`
+//!
+//! Every kernel but the one of points is generic over `CHECK_NESTED`.
+//! If `CHECK_NESTED=false`, a geometry is empty when it has no vertices.
+//! This only reads the offsets.
+//! If `CHECK_NESTED=true`, it is also empty when every vertex is the empty point (NaN in x and y).
+//! This reads every vertex, so it is much more expensive.
+
+use std::ops::Range;
+
+use geopolars_core::{
+    LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PointArray,
+    PolygonArray, ValidCoords,
+};
+use polars_arrow::array::BooleanArray;
+use polars_arrow::bitmap::Bitmap;
+use polars_arrow::datatypes::ArrowDataType;
+
+use super::is_valid::is_empty_point;
+use crate::per_row::per_row_bool;
+
+/// Whether every one of `vertices` is the empty point, which also holds when there are none.
+#[inline(always)]
+pub(crate) fn only_empty_points(coords: &ValidCoords, mut vertices: Range<usize>) -> bool {
+    vertices.all(|i| is_empty_point(coords, i))
+}
+
+#[inline(always)]
+fn has_no_points<const CHECK_NESTED: bool>(coords: &ValidCoords, vertices: Range<usize>) -> bool {
+    if CHECK_NESTED {
+        only_empty_points(coords, vertices)
+    } else {
+        vertices.is_empty()
+    }
+}
+
+pub fn points_are_empty(array: &PointArray) -> BooleanArray {
+    let coords = array.coords.ignoring_validity();
+    // A missing point is tested too: its value is masked by the validity.
+    let values = Bitmap::from_iter((0..coords.len()).map(|i| is_empty_point(coords, i)));
+    BooleanArray::new(
+        ArrowDataType::Boolean,
+        values,
+        array.coords.validity().cloned(),
+    )
+}
+
+pub fn line_strings_are_empty<const CHECK_NESTED: bool>(array: &LineStringArray) -> BooleanArray {
+    per_row_bool(&array.rows, |i| {
+        has_no_points::<CHECK_NESTED>(&array.coords, array.rows.range(i))
+    })
+}
+
+pub fn multi_points_are_empty<const CHECK_NESTED: bool>(array: &MultiPointArray) -> BooleanArray {
+    per_row_bool(&array.rows, |i| {
+        has_no_points::<CHECK_NESTED>(&array.coords, array.rows.range(i))
+    })
+}
+
+pub fn multi_line_strings_are_empty<const CHECK_NESTED: bool>(
+    array: &MultiLineStringArray,
+) -> BooleanArray {
+    per_row_bool(&array.rows, |i| {
+        has_no_points::<CHECK_NESTED>(&array.coords, array.lines.span(array.rows.range(i)))
+    })
+}
+
+pub fn polygons_are_empty<const CHECK_NESTED: bool>(array: &PolygonArray) -> BooleanArray {
+    per_row_bool(&array.rows, |i| {
+        has_no_points::<CHECK_NESTED>(&array.coords, array.rings.span(array.rows.range(i)))
+    })
+}
+
+pub fn multi_polygons_are_empty<const CHECK_NESTED: bool>(
+    array: &MultiPolygonArray,
+) -> BooleanArray {
+    per_row_bool(&array.rows, |i| {
+        let vertices = array.rings.span(array.polygons.span(array.rows.range(i)));
+        has_no_points::<CHECK_NESTED>(&array.coords, vertices)
+    })
+}

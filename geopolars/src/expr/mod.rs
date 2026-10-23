@@ -20,6 +20,7 @@ pub mod distance;
 pub mod is_ccw;
 pub mod is_close;
 pub mod is_degenerate;
+pub mod is_empty;
 pub mod is_ring;
 pub mod is_valid;
 pub mod length;

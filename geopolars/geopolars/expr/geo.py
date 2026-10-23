@@ -360,10 +360,10 @@ class ExprGeoNameSpace:
 
         return area_geodesic(self._expr, allow_non_polygons=allow_non_polygons)
 
-    def is_empty(self) -> pl.Expr:
+    def is_empty(self, *, check_nested: bool = False) -> pl.Expr:
         from geopolars.geo.is_empty import is_empty
 
-        return is_empty(self._expr)
+        return is_empty(self._expr, check_nested=check_nested)
 
     def count_coordinates(self, *, include_empty: bool = False) -> pl.Expr:
         from geopolars.geo.count_coordinates import count_coordinates

@@ -52,7 +52,7 @@ use polars_arrow::bitmap::Bitmap;
 use polars_arrow::datatypes::ArrowDataType;
 
 use crate::geos::{meet_only_at_points_and_no_overlap, polygon_rings_fit, ToGeos};
-use crate::native::is_empty_point;
+use crate::native::{is_empty_point, only_empty_points};
 use crate::per_row::{per_row_bool, try_per_row_bool};
 use crate::GeoComputeResult;
 
@@ -126,12 +126,6 @@ fn has_repeated_points<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
     points.clone().any(|i| {
         (i + 1..points.end).any(|j| coincide::<TOLERANCE_COINCIDENCE, Z>(coords, i, j, tolerance))
     })
-}
-
-/// Whether every one of `vertices` is the empty point, which also holds when there are none.
-#[inline(always)]
-fn only_empty_points(coords: &ValidCoords, mut vertices: Range<usize>) -> bool {
-    vertices.all(|i| is_empty_point(coords, i))
 }
 
 fn xy_is_finite(coords: &ValidCoords, vertices: Range<usize>) -> bool {
