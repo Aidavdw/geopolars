@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from geopolars._docs import doc
 from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.dimension import XY, XYM, XYZ, XYZM, Dimension
 
@@ -35,27 +36,21 @@ class LineStringXYZ(LineStringType):
     _dimension: ClassVar[Dimension] = XYZ
 
 
+@doc()
 class LineStringXYM(LineStringType):
     """A 2D linestring with a measure: `List<Struct<x, y, m: f64>>`.
 
-    `m` stands for 'measure', an arbitrary value carried per *vertex* rather
-    than per linestring. Typical uses:
-    - a timestamp, making the linestring a trajectory
-    - a distance along a route
-    - an airspeed measurement
+    {linestring_measure}
     """
 
     _dimension: ClassVar[Dimension] = XYM
 
 
+@doc()
 class LineStringXYZM(LineStringType):
     """A 3D linestring with a measure: `List<Struct<x, y, z, m: f64>>`.
 
-    `m` stands for 'measure', an arbitrary value carried per *vertex* rather
-    than per linestring. Typical uses:
-    - a timestamp, making the linestring a trajectory
-    - a distance along a route
-    - an airspeed measurement
+    {linestring_measure}
     """
 
     _dimension: ClassVar[Dimension] = XYZM

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo.construct import _decode_kwargs
 
@@ -28,6 +29,7 @@ def to_wkb(geometry: IntoExprColumn) -> pl.Expr:
     )
 
 
+@doc(encoding="WKB", encoding_dtype="Wkb")
 def from_wkb(
     wkb: IntoExprColumn,
     dtype: type[GeoArrowType],
@@ -36,14 +38,7 @@ def from_wkb(
 ) -> pl.Expr:
     """Decode a `Wkb` or plain binary column into `dtype`.
 
-    WKB can mix geometries row by row, but a Polars column has one dtype,
-    so `dtype` names the concrete type to decode into, e.g. `PolygonXY`.
-    A single geometry is promoted into its multi geometry
-    (e.g. a polygon into `MultiPolygonXY`).
-    Anything else that does not fit, including a different dimension, is an error.
-
-    The metadata of a `Wkb` column is carried over, and `crs` labels the result
-    the same way it does for the constructors.
+    {decode_into_dtype}
 
     ```python
     pl.read_parquet("parcels.parquet").select(

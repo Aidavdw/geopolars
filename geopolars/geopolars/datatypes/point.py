@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from geopolars._docs import doc
 from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.dimension import XY, XYM, XYZ, XYZM, Dimension
 
@@ -42,27 +43,21 @@ class PointXYZ(PointType):
     _dimension: ClassVar[Dimension] = XYZ
 
 
+@doc()
 class PointXYM(PointType):
     """A 2D point with a measure: `Struct<x: f64, y: f64, m: f64>`.
 
-    `m` stands for 'measure', an arbitrary per-vertex value.
-    Typical uses:
-    - a timestamp
-    - a distance along a route
-    - an airspeed measurement
+    {point_measure}
     """
 
     _dimension: ClassVar[Dimension] = XYM
 
 
+@doc()
 class PointXYZM(PointType):
     """A 3D point with a measure: `Struct<x: f64, y: f64, z: f64, m: f64>`.
 
-    `m` stands for 'measure', an arbitrary per-vertex value.
-    Typical uses:
-    - a timestamp
-    - a distance along a route
-    - an airspeed measurement
+    {point_measure}
     """
 
     _dimension: ClassVar[Dimension] = XYZM

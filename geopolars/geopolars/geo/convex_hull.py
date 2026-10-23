@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import (
     LineStringType,
@@ -34,6 +35,7 @@ _ACCEPTED = (
 )
 
 
+@doc(output="polygon")
 def convex_hull(
     geometry: IntoExprColumn,
     *,
@@ -62,9 +64,8 @@ def convex_hull(
     | `MultiPolygonXY[M]` | `PolygonXY` |
     | `MultiPolygonXYZ[M]` | `PolygonXYZ` |
 
-    Computed by GEOS.
-    This operation keeps z, but drops m.
-    An empty geometry gives an empty polygon, and a missing one a missing polygon.
+    {computed_by_geos_keeping_z}
+    {empty_and_missing}
     One that encloses nothing (all its vertices on one point or one line,
     such as a straight linestring, or a multipoint of one or two points)
     has a point or a line for a hull,
@@ -74,21 +75,14 @@ def convex_hull(
     for longitude/latitude the hull's edges are straight in degrees, not along the globe.
     A geometry crossing the antimeridian is hulled the long way round.
 
-    A geometry GEOS fails on raises GEOS's error, failing the query.
-    With `ignore_per_row_errors=True`, it gives a missing polygon instead.
+    {geos_errors}
 
-    GEOS supports neither empty points inside a geometry (a vertex with NaN x and y)
-    nor any other NaN or infinite x or y.
-    By default they go to GEOS as they are.
+    {geos_non_finite}
     Depending on where such a vertex sits, it is left out of the hull,
     the polygon is missing, or GEOS raises.
-    With `early_finite_check=True`, a geometry with such a vertex is caught before it reaches GEOS.
-    It then raises, or gives a missing polygon with `ignore_per_row_errors=True`.
-    This only adds a short path.
-    It pays off when you expect many non-finite coordinates in your data.
+    {early_finite_check}
 
-    The exterior runs as GEOS gives it, clockwise.
-    With `ccw_outer=True`, it runs counter-clockwise instead at a minimal performance cost.
+    {ccw_outer}
 
     ```python
     df.select(geo.convex_hull("parcel"))

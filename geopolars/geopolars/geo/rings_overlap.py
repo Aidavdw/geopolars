@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import LineStringType
 from geopolars.geo._dispatch import on_geometry_pair
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
+@doc(input="ring")
 def rings_overlap(
     a: IntoExprColumn,
     b: IntoExprColumn,
@@ -43,8 +45,7 @@ def rings_overlap(
     Rings that only touch, at a vertex or along an edge, do not overlap,
     unless `include_touching` is set.
 
-    This looks at a projected plane.
-    Only x and y are looked at. z and m are ignored.
+    {projected_plane_xy}
     Both have to declare the same CRS, or neither one.
     A side of a single ring is compared against every ring of the other.
 
@@ -53,8 +54,7 @@ def rings_overlap(
     Anything else, including an empty linestring, raises.
     With `ignore_per_row_errors=True`, it gives a missing result instead.
     A ring that crosses itself (see `self_intersects`) gives no meaningful answer.
-    A missing ring gives a missing result,
-    and so does one with a missing vertex, or one that is not finite in x or y.
+    {missing_ring_input}
 
     ```python
     df.filter(~geo.rings_overlap("hole", "other_hole", include_touching=True))

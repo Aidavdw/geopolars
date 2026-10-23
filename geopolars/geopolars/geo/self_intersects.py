@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import (
     LineStringType,
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 _ACCEPTED = (LineStringType, MultiLineStringType, PolygonType, MultiPolygonType)
 
 
+@doc(input="linestring")
 def self_intersects(
     geometry: IntoExprColumn, *, ignore_per_row_errors: bool = False
 ) -> pl.Expr:
@@ -48,8 +50,7 @@ def self_intersects(
     (a missing part, for a multipolygon).
     A polygon without rings does not intersect itself.
 
-    This looks at a projected plane.
-    Only x and y are looked at. z and m are ignored.
+    {projected_plane_xy}
     Going back and forth between two points is considered crossing.
     Any other two segments may not touch at all,
     so a line whose end lies on itself intersects itself.
@@ -58,8 +59,7 @@ def self_intersects(
     A line is closed when its ends lie at exactly the same place.
 
     An empty linestring, a single vertex or a single segment does not intersect itself.
-    A missing linestring gives a missing result,
-    and so does one with a missing vertex, or one that is not finite in x or y.
+    {missing_ring_input}
     The same goes for a polygon and its rings.
 
     ```python

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import polars as pl
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
 
@@ -15,11 +16,11 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
+@doc()
 def set_crs(geometry: IntoExprColumn, crs: str, *, force: bool = False) -> pl.Expr:
     """Declare the CRS the coordinates are in, without moving them.
 
-    `crs` is anything PROJ accepts:
-    e.g. PROJJSON, WKT or an `AUTH:CODE` format such as `"EPSG:4326"`.
+    {crs_forms}
     It is only a label: nothing is checked or reprojected (that is `to_crs`).
     A geometry that already declares a CRS is refused while the plan is built,
     unless `force` is set, in which case its label is overwritten.
@@ -68,6 +69,7 @@ def is_geographic(geometry: IntoExprColumn, *, ignore_errors: bool = False) -> p
     return on_geometry(geometry, build)
 
 
+@doc()
 def to_crs(
     geometry: IntoExprColumn,
     crs: str,
@@ -77,8 +79,7 @@ def to_crs(
 ) -> pl.Expr:
     """Reproject every coordinate from the column's CRS to `crs`.
 
-    `crs` is anything PROJ accepts:
-    e.g. PROJJSON, WKT or an `AUTH:CODE` format such as `"EPSG:4326"`.
+    {crs_forms}
     The source CRS is read from the column's metadata.
     `m` is carried through untouched.
 

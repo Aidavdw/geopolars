@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Literal
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import LineStringType, MultiLineStringType, PointType
 from geopolars.geo._dispatch import on_geometry
@@ -34,6 +35,7 @@ def _check_one_of(name: str, value: str, allowed: tuple[str, ...]) -> None:
         raise ValueError(msg)
 
 
+@doc(output="polygon")
 def buffer(
     geometry: IntoExprColumn,
     distance: float,
@@ -68,9 +70,8 @@ def buffer(
     | `MultiLineStringXY[Z][M]` | `MultiPolygonXY` | `MultiPolygonXY` |
     | `MultiPolygonXY[Z][M]` | `MultiPolygonXY` | `MultiPolygonXY` |
 
-    Computed by GEOS.
-    This operation drops z and m.
-    An empty geometry gives an empty polygon, and a missing one a missing polygon.
+    {computed_by_geos_dropping_z_and_m}
+    {empty_and_missing}
     A `distance` of at most 0 gives an empty polygon for a point or linestring.
 
     With `allow_splitting=True` and a negative `distance`, every kind gives a multipolygon.
@@ -104,20 +105,13 @@ def buffer(
       A point has no sides, so it gets its regular buffer.
       A polygon or multipoint is refused.
 
-    A geometry GEOS fails on (or a polygon it splits, without `allow_splitting`) raises GEOS's error,
-    failing the query.
-    With `ignore_per_row_errors=True`, it gives a missing polygon instead.
+    {geos_errors}
+    The same goes for a polygon it splits without `allow_splitting`.
 
-    GEOS supports neither empty points inside a geometry (a vertex with NaN x and y)
-    nor any other NaN or infinite x or y.
-    By default they go to GEOS as they are.
-    With `early_finite_check=True`, a geometry with such a vertex is caught before it reaches GEOS.
-    It then raises, or gives a missing polygon with `ignore_per_row_errors=True`.
-    This only adds a short path.
-    It pays off when you expect many non-finite coordinates in your data.
+    {geos_non_finite}
+    {early_finite_check}
 
-    The exterior runs as GEOS gives it, clockwise.
-    With `ccw_outer=True`, it runs counter-clockwise instead at a minimal performance cost.
+    {ccw_outer}
 
     ```python
     df.select(geo.buffer("parcel", 2.0))

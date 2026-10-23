@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import MultiPointType, PointType
 from geopolars.geo._dispatch import on_geometry
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
+@doc(output="geometry")
 def simplify(
     geometry: IntoExprColumn,
     tolerance: float,
@@ -51,8 +53,7 @@ def simplify(
     | `MultiPolygonXY[M]` | `MultiPolygonXY` |
     | `MultiPolygonXYZ[M]` | `MultiPolygonXYZ` |
 
-    Computed by GEOS.
-    This operation keeps z, but drops m.
+    {computed_by_geos_keeping_z}
     A point or multipoint has nothing to leave out,
     so it is returned as it is, m included.
     An empty geometry stays empty, and a missing one missing.
@@ -74,20 +75,14 @@ def simplify(
     With `preserve_topology=true`, GEOS's topology-preserving simplifier is used instead.
     This is slower, but never lets rings cross each other or polygons collapse.
 
-    A geometry GEOS fails on (or a polygon it splits) raises GEOS's error,
-    failing the query.
-    With `ignore_per_row_errors=True`, it gives a missing geometry instead.
+    {geos_errors}
+    The same goes for a polygon it splits.
 
-    GEOS supports neither empty points inside a geometry (a vertex with NaN x and y)
-    nor any other NaN or infinite x or y.
-    By default they go to GEOS as they are.
+    {geos_non_finite}
     With `preserve_topology=True`, GEOS then raises.
     With `preserve_topology=False`, such a vertex is silently left out,
     unless it starts a ring, where GEOS raises.
-    With `early_finite_check=True`, a geometry with such a vertex is caught before it reaches GEOS.
-    It then raises, or gives a missing geometry with `ignore_per_row_errors=True`.
-    This only adds a short path.
-    It pays off when you expect many non-finite coordinates in your data.
+    {early_finite_check}
 
     ```python
     df.select(geo.simplify("parcel", 0.5))

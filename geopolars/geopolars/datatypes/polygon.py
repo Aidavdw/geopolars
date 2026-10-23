@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from geopolars._docs import doc
 from geopolars.datatypes.base import GeoArrowType
 from geopolars.datatypes.dimension import XY, XYM, XYZ, XYZM, Dimension
 
@@ -45,27 +46,21 @@ class PolygonXYZ(PolygonType):
     _dimension: ClassVar[Dimension] = XYZ
 
 
+@doc()
 class PolygonXYM(PolygonType):
     """A 2D polygon with a measure: `List<List<Struct<x, y, m: f64>>>`.
 
-    `m` stands for 'measure', an arbitrary value carried per *vertex* rather
-    than per ring or per polygon. Typical uses:
-    - a timestamp
-    - a distance along the boundary
-    - a sensor reading taken at that vertex
+    {polygon_measure}
     """
 
     _dimension: ClassVar[Dimension] = XYM
 
 
+@doc()
 class PolygonXYZM(PolygonType):
     """A 3D polygon with a measure: `List<List<Struct<x, y, z, m: f64>>>`.
 
-    `m` stands for 'measure', an arbitrary value carried per *vertex* rather
-    than per ring or per polygon. Typical uses:
-    - a timestamp
-    - a distance along the boundary
-    - a sensor reading taken at that vertex
+    {polygon_measure}
     """
 
     _dimension: ClassVar[Dimension] = XYZM

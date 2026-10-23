@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 import polars as pl
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import LineStringType, PointType, PolygonType
 from geopolars.geo._dispatch import on_geometry, on_geometry_pair
@@ -333,6 +334,7 @@ def _rotate_about(
     return build
 
 
+@doc(verb="turn")
 def rotate(
     geometry: IntoExprColumn,
     amount: float,
@@ -353,11 +355,7 @@ def rotate(
     `m`, being a measure, is always carried through untouched.
 
     `origin` is the point the axis runs through, by default `(0, 0, 0)`. It is either
-    - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
-    - a `geoarrow.point` column (or a single point) with a point for every geometry,
-      such as `geo.mean_coordinate("shape")` to turn each geometry about its own middle.
-      A geometry whose origin is missing comes out missing.
-      An origin column that declares a CRS has to declare the geometry's.
+    {origin_per_column_or_row}
 
     A `z` left out is 0.
     Coordinates are turned as they are, in the units of their CRS:
@@ -372,6 +370,7 @@ def rotate(
     return on_geometry(geometry, _rotate(degrees, axis, _origin(origin)))
 
 
+@doc()
 def rotate_about_centroid(
     geometry: IntoExprColumn,
     amount: float,
@@ -384,11 +383,7 @@ def rotate_about_centroid(
     see `rotate` for `amount`, `unit` and `axis`,
     and `centroid` for where the centroid of a linestring or polygon is.
 
-    Only linestrings and polygons are accepted:
-    a multi-geometry has a centroid per part rather than one,
-    and a point would turn about itself.
-    A geometry without a centroid (missing, empty, a line without length,
-    or a polygon that encloses nothing) comes out missing.
+    {about_centroid_accepts}
 
 
     ```python
@@ -427,6 +422,7 @@ def _skew_about(
     return build
 
 
+@doc(verb="skew")
 def skew(
     geometry: IntoExprColumn,
     xs: float = 0.0,
@@ -455,11 +451,7 @@ def skew(
     and `m`, being a measure, is always carried through untouched.
 
     `origin` is the point that stays where it is, by default `(0, 0, 0)`. It is either
-    - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
-    - a `geoarrow.point` column (or a single point) with a point for every geometry,
-      such as `geo.mean_coordinate("shape")` to skew each geometry about its own middle.
-      A geometry whose origin is missing comes out missing.
-      An origin column that declares a CRS has to declare the geometry's.
+    {origin_per_column_or_row}
 
     Coordinates are sheared as they are, in the units of their CRS.
     """
@@ -471,6 +463,7 @@ def skew(
     return on_geometry(geometry, lambda column, _: _affine(column, matrix))
 
 
+@doc()
 def skew_about_centroid(
     geometry: IntoExprColumn,
     xs: float = 0.0,
@@ -483,11 +476,7 @@ def skew_about_centroid(
     see `skew` for `xs`, `ys` and `unit`,
     and `centroid` for where the centroid of a linestring or polygon is.
 
-    Only linestrings and polygons are accepted:
-    a multi-geometry has a centroid per part rather than one,
-    and a point would stay where it is.
-    A geometry without a centroid (missing, empty, a line without length,
-    or a polygon that encloses nothing) comes out missing.
+    {about_centroid_accepts}
 
     ```python
     df.select(geo.skew_about_centroid("parcel", xs=15))
@@ -550,6 +539,7 @@ def _scale_about(
     return build
 
 
+@doc(verb="scale")
 def scale(
     geometry: IntoExprColumn,
     xfact: float = 1.0,
@@ -573,11 +563,7 @@ def scale(
     `m`, being a measure, is always carried through untouched.
 
     `origin` is the point that stays where it is, by default `(0, 0, 0)`. It is either
-    - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
-    - a `geoarrow.point` column (or a single point) with a point for every geometry,
-      such as `geo.mean_coordinate("shape")` to scale each geometry about its own middle.
-      A geometry whose origin is missing comes out missing.
-      An origin column that declares a CRS has to declare the geometry's.
+    {origin_per_column_or_row}
 
     A `z` left out is 0.
     Coordinates are scaled as they are, in the units of their CRS.
@@ -589,6 +575,7 @@ def scale(
     return on_geometry(geometry, _scale(xfact, yfact, zfact, _origin(origin)))
 
 
+@doc()
 def scale_about_centroid(
     geometry: IntoExprColumn,
     xfact: float = 1.0,
@@ -601,11 +588,7 @@ def scale_about_centroid(
     see `scale` for the factors,
     and `centroid` for where the centroid of a linestring or polygon is.
 
-    Only linestrings and polygons are accepted:
-    a multi-geometry has a centroid per part rather than one,
-    and a point would stay where it is.
-    A geometry without a centroid (missing, empty, a line without length,
-    or a polygon that encloses nothing) comes out missing.
+    {about_centroid_accepts}
 
     ```python
     df.select(geo.scale_about_centroid("parcel", 2.0, 2.0))
@@ -649,6 +632,7 @@ def _affine_transform_about(
     return build
 
 
+@doc(verb="transform")
 def affine_transform(
     geometry: IntoExprColumn,
     matrix: Sequence[float],
@@ -687,11 +671,7 @@ def affine_transform(
     `x' = a·(x - origin_x) + b·(y - origin_y) + c·(z - origin_z) + xoff + origin_x`
     and likewise for `y` and `z`. The default leaves the matrix as shapely applies it.
     It is either
-    - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
-    - a `geoarrow.point` column (or a single point) with a point for every geometry,
-      such as `geo.mean_coordinate("shape")` to transform each geometry about its own middle.
-      A geometry whose origin is missing comes out missing.
-      An origin column that declares a CRS has to declare the geometry's.
+    {origin_per_column_or_row}
 
     A `z` left out is 0.
     `translate`, `rotate`, `skew` and `scale` are each one of these,
