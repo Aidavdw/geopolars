@@ -105,11 +105,14 @@ def mean_coordinate(geometry: IntoExprColumn) -> pl.Expr:
     For a linestring or a polygon those differ:
     this one moves with where the vertices are dense.
 
-    | in                     | out          |
-    |------------------------|--------------|
-    | `PointXY`              | `PointXY`    |
-    | `LineStringXYZ`        | `PointXYZ`   |
-    | `PolygonXYZM`          | `PointXYZM`  |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | `PointXY[ZM]` |
+    | `LineStringXY[ZM]` | `PointXY[ZM]` |
+    | `PolygonXY[ZM]` | `PointXY[ZM]` |
+    | `MultiPointXY[ZM]` | `PointXY[ZM]` |
+    | `MultiLineStringXY[ZM]` | `PointXY[ZM]` |
+    | `MultiPolygonXY[ZM]` | `PointXY[ZM]` |
 
     The measure `m` is also averaged.
     A null geometry, and a geometry with no coordinates at all,

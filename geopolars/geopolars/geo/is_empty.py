@@ -39,14 +39,14 @@ def _is_empty(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
 def is_empty(geometry: IntoExprColumn) -> pl.Expr:
     """Whether a geometry is empty: it has no coordinates, or only empty points.
 
-    | in                 | empty when                             |
-    |--------------------|----------------------------------------|
-    | `Point…`           | `x` and `y` are both NaN               |
-    | `LineString…`      | it has no vertices, or only empty ones |
-    | `Polygon…`         | it has no rings, or only empty ones    |
-    | `MultiPoint…`      | it has no points, or only empty ones   |
-    | `MultiLineString…` | it has no parts, or only empty ones    |
-    | `MultiPolygon…`    | it has no polygons, or only empty ones |
+    | in | empty when |
+    | - | - |
+    | `PointXY[ZM]` | `x` and `y` are both NaN |
+    | `LineStringXY[ZM]` | it has no vertices, or only empty ones |
+    | `PolygonXY[ZM]` | it has no rings, or only rings without vertices |
+    | `MultiPointXY[ZM]` | it has no points, or only empty ones |
+    | `MultiLineStringXY[ZM]` | it has no parts, or only parts without vertices |
+    | `MultiPolygonXY[ZM]` | it has no polygons, or only empty ones |
 
     A linestring or multipoint whose points are all empty is empty as well,
     but a single non-empty point makes it non-empty.

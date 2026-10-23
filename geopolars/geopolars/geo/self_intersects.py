@@ -31,12 +31,14 @@ def self_intersects(
     A multi-geometry gives a list instead, one per part.
     Parts crossing each other do not count.
 
-    | in                      | out          |
-    |-------------------------|--------------|
-    | `LineStringXY`          | `bool`       |
-    | `PolygonXY`             | `bool`       |
-    | `MultiLineStringXYZM`   | `list[bool]` |
-    | `MultiPolygonXYZM`      | `list[bool]` |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | refused |
+    | `LineStringXY[ZM]` | `bool` |
+    | `PolygonXY[ZM]` | `bool` |
+    | `MultiPointXY[ZM]` | refused |
+    | `MultiLineStringXY[ZM]` | `list[bool]` |
+    | `MultiPolygonXY[ZM]` | `list[bool]` |
 
     A polygon intersects itself when one of its rings does,
     or when two of its holes overlap (see `rings_overlap`; holes that only touch do not).

@@ -44,14 +44,14 @@ def x(geometry: IntoExprColumn) -> pl.Expr:
     The nesting of the output of this function depends on how nested the geometry is.
     A point will return a single value, while a linestring will return a list of values.
 
-    | in                  | out                     |
-    |---------------------|-------------------------|
-    | `Point`             | `f64`                   |
-    | `LineString`        | `list[f64]`             |
-    | `MultiPoint`        | `list[f64]`             |
-    | `Polygon`           | `list[list[f64]]`       |
-    | `MultiLineString`   | `list[list[f64]]`       |
-    | `MultiPolygon`      | `list[list[list[f64]]]` |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | `f64` |
+    | `LineStringXY[ZM]` | `list[f64]` |
+    | `PolygonXY[ZM]` | `list[list[f64]]` |
+    | `MultiPointXY[ZM]` | `list[f64]` |
+    | `MultiLineStringXY[ZM]` | `list[list[f64]]` |
+    | `MultiPolygonXY[ZM]` | `list[list[list[f64]]]` |
 
     The values are returned as they are stored, in the unit of the CRS.
     The CRS itself is not carried over: the result is a plain float column.

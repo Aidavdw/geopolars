@@ -30,14 +30,14 @@ def count_coordinates(geometry: IntoExprColumn) -> pl.Expr:
 
     This gives one count per geometry, however deeply it is nested.
 
-    | in                 | counts                                       |
-    |--------------------|----------------------------------------------|
-    | `Point…`           | `1`, or `0` when it is empty                 |
-    | `LineString…`      | its vertices                                 |
-    | `Polygon…`         | the vertices of every ring                   |
-    | `MultiPoint…`      | its points                                   |
-    | `MultiLineString…` | the vertices of every linestring             |
-    | `MultiPolygon…`    | the vertices of every ring of every polygon  |
+    | in | counts |
+    | - | - |
+    | `PointXY[ZM]` | `1`, or `0` when it is empty |
+    | `LineStringXY[ZM]` | its vertices |
+    | `PolygonXY[ZM]` | the vertices of every ring |
+    | `MultiPointXY[ZM]` | its points |
+    | `MultiLineStringXY[ZM]` | the vertices of every linestring |
+    | `MultiPolygonXY[ZM]` | the vertices of every ring of every polygon |
 
     This skips a ring's last coordinate, as this repeats its first.
     A geometry without coordinates counts `0`; a missing geometry gives null.

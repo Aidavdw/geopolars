@@ -77,18 +77,14 @@ def centroid(geometry: IntoExprColumn) -> pl.Expr:
     (see `mean_coordinate`).
     A null or empty multipoint has no centroid.
 
-    | in                     | out              |
-    |------------------------|------------------|
-    | `PointXYZ`             | `PointXYZ`       |
-    | `MultiPointXYZ`        | `PointXYZ`       |
-    | `LineStringXY`         | `PointXY`        |
-    | `LineStringXYZ`        | `PointXYZ`       |
-    | `LineStringXYM`        | `PointXYM`       |
-    | `LineStringXYZM`       | `PointXYZM`      |
-    | `PolygonXY`            | `PointXY`        |
-    | `PolygonXYZM`          | `PointXYZM`      |
-    | `MultiLineStringXYZ`   | `PointXYZ`       |
-    | `MultiPolygonXYZM`     | `PointXYZM`      |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | `PointXY[ZM]` |
+    | `LineStringXY[ZM]` | `PointXY[ZM]` |
+    | `PolygonXY[ZM]` | `PointXY[ZM]` |
+    | `MultiPointXY[ZM]` | `PointXY[ZM]` |
+    | `MultiLineStringXY[ZM]` | `PointXY[ZM]` |
+    | `MultiPolygonXY[ZM]` | `PointXY[ZM]` |
 
     ```python
     df.select(geo.centroid("parcel"), geo.centroid("road"))

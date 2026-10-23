@@ -82,12 +82,14 @@ def boundary(geometry: IntoExprColumn) -> pl.Expr:
     A linestring gives its first and last vertex, or none if it is closed.
     A multi-geometry gives a list, one boundary per part.
 
-    | in                      | out                          |
-    |-------------------------|------------------------------|
-    | `PolygonXY`             | `MultiLineStringXY`          |
-    | `MultiPolygonXYZ`       | `list[MultiLineStringXYZ]`   |
-    | `LineStringXYM`         | `MultiPointXYM`              |
-    | `MultiLineStringXYZM`   | `list[MultiPointXYZM]`       |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | refused |
+    | `LineStringXY[ZM]` | `MultiPointXY[ZM]` |
+    | `PolygonXY[ZM]` | `MultiLineStringXY[ZM]` |
+    | `MultiPointXY[ZM]` | refused |
+    | `MultiLineStringXY[ZM]` | `list[MultiPointXY[ZM]]` |
+    | `MultiPolygonXY[ZM]` | `list[MultiLineStringXY[ZM]]` |
 
     The rings stay closed, as they are stored.
     A linestring is closed when its first and last vertex lie at exactly the same place

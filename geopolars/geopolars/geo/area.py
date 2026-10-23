@@ -95,14 +95,14 @@ def area_planar(
     unless `allow_non_polygons` is set: then each of them gets `0.0`
     (and a null stays null).
 
-    | in                     | out          |
-    |------------------------|--------------|
-    | `PolygonXY`            | `0.0` and up |
-    | `PolygonXYM`           | `0.0` and up |
-    | `MultiPolygonXY`       | `0.0` and up |
-    | `PointXY`              | refused      |
-    | `LineStringXY`         | refused      |
-    | `MultiPointXYZM`       | refused      |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | refused |
+    | `LineStringXY[ZM]` | refused |
+    | `PolygonXY[ZM]` | `0.0` and up |
+    | `MultiPointXY[ZM]` | refused |
+    | `MultiLineStringXY[ZM]` | refused |
+    | `MultiPolygonXY[ZM]` | `0.0` and up |
 
     A self-intersecting ring is not a valid polygon, and the parts of it that
     wind the other way will cancel rather than add.

@@ -33,10 +33,14 @@ def is_close(
     This operation runs row by row, returning a `bool`.
     This is meant to complement pl.Expr.is_close` with `abs_tol`, `rel_tol` and `nans_equal`.
 
-    | `a` and `b`           | out    |
-    |-----------------------|--------|
-    | `PointXY`             | `bool` |
-    | `MultiPolygonXYZM`    | `bool` |
+    | `a` and `b` | out |
+    | - | - |
+    | `PointXY[ZM]` | `bool` |
+    | `LineStringXY[ZM]` | `bool` |
+    | `PolygonXY[ZM]` | `bool` |
+    | `MultiPointXY[ZM]` | `bool` |
+    | `MultiLineStringXY[ZM]` | `bool` |
+    | `MultiPolygonXY[ZM]` | `bool` |
 
     Comparisons between different types, different dimensions, or different CRSes raise at plan time.
     The coordinates are compared in the order they are stored,

@@ -123,13 +123,14 @@ def bounds(
     """The bounding box of a geometry, as a `geoarrow.box` with its dimension and CRS.
     A multi-geometry gives a list of boxes instead, one per part.
 
-    | in                  | out                   |
-    |---------------------|-----------------------|
-    | `PointXY`           | `BoxXY`               |
-    | `LineStringXYZ`     | `BoxXYZ`              |
-    | `PolygonXYM`        | `BoxXYM`              |
-    | `MultiPointXY`      | `list[BoxXY]`         |
-    | `MultiPolygonXYZM`  | `list[BoxXYZM]`       |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | `BoxXY[ZM]` |
+    | `LineStringXY[ZM]` | `BoxXY[ZM]` |
+    | `PolygonXY[ZM]` | `BoxXY[ZM]` |
+    | `MultiPointXY[ZM]` | `list[BoxXY[ZM]]` |
+    | `MultiLineStringXY[ZM]` | `list[BoxXY[ZM]]` |
+    | `MultiPolygonXY[ZM]` | `list[BoxXY[ZM]]` |
 
     A point's box repeats its own coordinates: `xmin == xmax`.
     z and m are bounded like x and y.

@@ -31,10 +31,14 @@ def rings_overlap(
     whether the areas they enclose share area.
     One ring inside the other, or two equal rings, overlap too.
 
-    | `a` and `b`        | out    |
-    |--------------------|--------|
-    | `LineStringXY`     | `bool` |
-    | `LineStringXYZM`   | `bool` |
+    | `a` and `b` | out |
+    | - | - |
+    | `PointXY[ZM]` | refused |
+    | `LineStringXY[ZM]` | `bool` |
+    | `PolygonXY[ZM]` | refused |
+    | `MultiPointXY[ZM]` | refused |
+    | `MultiLineStringXY[ZM]` | refused |
+    | `MultiPolygonXY[ZM]` | refused |
 
     Rings that only touch, at a vertex or along an edge, do not overlap,
     unless `include_touching` is set.

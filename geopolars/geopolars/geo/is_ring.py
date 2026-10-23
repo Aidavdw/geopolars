@@ -44,8 +44,12 @@ def is_ring(geometry: IntoExprColumn) -> pl.Expr:
 
     | in | out |
     | - | - |
-    | `LineStringXY` | `bool` |
-    | `MultiLineStringXYZM` | `bool` |
+    | `PointXY[ZM]` | refused |
+    | `LineStringXY[ZM]` | `bool` |
+    | `PolygonXY[ZM]` | refused |
+    | `MultiPointXY[ZM]` | refused |
+    | `MultiLineStringXY[ZM]` | `bool` |
+    | `MultiPolygonXY[ZM]` | refused |
 
     m is a measure along the line rather than a position, so it is not compared.
     4 vertices is a triangle plus the one closing it, so a closed line with fewer is no ring.

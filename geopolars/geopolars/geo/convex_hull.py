@@ -48,13 +48,19 @@ def convex_hull(
     Only the exterior of a polygon counts, so its holes are ignored.
     An XY or XYM geometry gives a `PolygonXY`, an XYZ or XYZM one a `PolygonXYZ`:
 
-    | in                     | out             |
-    |------------------------|-----------------|
-    | `LineStringXY`         | `PolygonXY`     |
-    | `MultiPointXYM`        | `PolygonXY`     |
-    | `MultiLineStringXYM`   | `PolygonXY`     |
-    | `PolygonXYZ`           | `PolygonXYZ`    |
-    | `MultiPolygonXYZM`     | `PolygonXYZ`    |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | refused |
+    | `LineStringXY[M]` | `PolygonXY` |
+    | `LineStringXYZ[M]` | `PolygonXYZ` |
+    | `PolygonXY[M]` | `PolygonXY` |
+    | `PolygonXYZ[M]` | `PolygonXYZ` |
+    | `MultiPointXY[M]` | `PolygonXY` |
+    | `MultiPointXYZ[M]` | `PolygonXYZ` |
+    | `MultiLineStringXY[M]` | `PolygonXY` |
+    | `MultiLineStringXYZ[M]` | `PolygonXYZ` |
+    | `MultiPolygonXY[M]` | `PolygonXY` |
+    | `MultiPolygonXYZ[M]` | `PolygonXYZ` |
 
     Computed by GEOS.
     This operation keeps z, but drops m.

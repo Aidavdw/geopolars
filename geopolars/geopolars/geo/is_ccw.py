@@ -51,12 +51,14 @@ def is_ccw(geometry: IntoExprColumn, *, holes_cw: bool = True) -> pl.Expr:
     The default is how GeoParquet and OGC wind a polygon.
     A multilinestring or multipolygon has to have every part run that way.
 
-    | in                      | out    |
-    |-------------------------|--------|
-    | `LineStringXY`          | `bool` |
-    | `PolygonXY`             | `bool` |
-    | `MultiLineStringXYZM`   | `bool` |
-    | `MultiPolygonXYZM`      | `bool` |
+    | in | out |
+    | - | - |
+    | `PointXY[ZM]` | refused |
+    | `LineStringXY[ZM]` | `bool` |
+    | `PolygonXY[ZM]` | `bool` |
+    | `MultiPointXY[ZM]` | refused |
+    | `MultiLineStringXY[ZM]` | `bool` |
+    | `MultiPolygonXY[ZM]` | `bool` |
 
     The orientation is the sign of the area the ring encloses in x and y; z and m are ignored.
     An empty linestring, ring, polygon or multi runs either way, so it gives `True`.

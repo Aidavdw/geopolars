@@ -40,12 +40,16 @@ def simplify(
 
     | in | out |
     | - | - |
-    | `LineStringXY` | `LineStringXY` |
-    | `MultiLineStringXYM` | `MultiLineStringXY` |
-    | `PolygonXYZ` | `PolygonXYZ` |
-    | `MultiPolygonXYZM` | `MultiPolygonXYZ` |
-    | `PointXYZM` | `PointXYZM` |
-    | `MultiPointXYM` | `MultiPointXYM` |
+    | `PointXY[ZM]` | `PointXY[ZM]` |
+    | `LineStringXY[M]` | `LineStringXY` |
+    | `LineStringXYZ[M]` | `LineStringXYZ` |
+    | `PolygonXY[M]` | `PolygonXY` |
+    | `PolygonXYZ[M]` | `PolygonXYZ` |
+    | `MultiPointXY[ZM]` | `MultiPointXY[ZM]` |
+    | `MultiLineStringXY[M]` | `MultiLineStringXY` |
+    | `MultiLineStringXYZ[M]` | `MultiLineStringXYZ` |
+    | `MultiPolygonXY[M]` | `MultiPolygonXY` |
+    | `MultiPolygonXYZ[M]` | `MultiPolygonXYZ` |
 
     Computed by GEOS.
     This operation keeps z, but drops m.
