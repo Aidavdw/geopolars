@@ -66,7 +66,7 @@ def is_ccw(geometry: IntoExprColumn, *, holes_cw: bool = True) -> pl.Expr:
     or with a NaN vertex) runs neither way, so it gives `False`.
 
     Whether a line is closed is not checked: an open line is taken as closed back to its start.
-    Combine with `is_ring` or `is_valid` to check that too.
+    Combine with `is_ring` or `is_valid_geoarrow` to check that too.
 
     ```python
     df.select(geo.is_ccw("parcel"))

@@ -42,17 +42,22 @@ from geopolars.geo.count_coordinates import count_coordinates
 from geopolars.geo.crs import is_geographic, set_crs, to_crs
 from geopolars.geo.distance import distance
 from geopolars.geo.exterior import exterior
+from geopolars.geo.has_repeated_points import has_repeated_points
 from geopolars.geo.interior import interior
 from geopolars.geo.is_ccw import is_ccw
 from geopolars.geo.is_close import is_close
 from geopolars.geo.is_empty import is_empty
-from geopolars.geo.is_malformed import is_malformed, null_out_malformed
 from geopolars.geo.is_ring import is_ring
-from geopolars.geo.is_valid import is_valid, null_out_invalid
+from geopolars.geo.is_simple import is_simple
+from geopolars.geo.is_valid import (
+    is_valid_geoarrow,
+    is_valid_ogc,
+    null_out_invalid_geoarrow,
+    null_out_invalid_ogc,
+)
 from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.rings_overlap import rings_overlap
-from geopolars.geo.self_intersects import self_intersects
 from geopolars.geo.simplify import simplify
 from geopolars.geo.to_polygon import to_polygon
 from geopolars.geo.wkb import from_wkb, to_wkb
@@ -75,14 +80,16 @@ __all__ = [
     "exterior",
     "from_wkb",
     "from_wkt",
+    "has_repeated_points",
     "interior",
     "is_ccw",
     "is_close",
     "is_empty",
     "is_geographic",
-    "is_malformed",
     "is_ring",
-    "is_valid",
+    "is_simple",
+    "is_valid_geoarrow",
+    "is_valid_ogc",
     "length",
     "line_string",
     "line_string_from_columns",
@@ -98,8 +105,8 @@ __all__ = [
     "multi_polygon",
     "multi_polygon_from_columns",
     "multi_polygon_from_polygons",
-    "null_out_invalid",
-    "null_out_malformed",
+    "null_out_invalid_geoarrow",
+    "null_out_invalid_ogc",
     "point",
     "polygon",
     "polygon_from_columns",
@@ -109,7 +116,6 @@ __all__ = [
     "rotate_about_centroid",
     "scale",
     "scale_about_centroid",
-    "self_intersects",
     "set_crs",
     "simplify",
     "skew",

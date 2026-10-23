@@ -104,7 +104,7 @@ def area_planar(
     | `MultiLineStringXY[ZM]` | refused |
     | `MultiPolygonXY[ZM]` | `0.0` and up |
 
-    A self-intersecting ring is not a valid polygon, and the parts of it that
+    A self-intersecting ring is not valid by OGC (see `is_valid_ogc`), and the parts of it that
     wind the other way will cancel rather than add.
 
     ```python

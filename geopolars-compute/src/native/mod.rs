@@ -5,11 +5,13 @@ mod area;
 mod centroid;
 mod count_coordinates;
 pub mod distance;
+mod has_repeated_points;
 mod is_ccw;
 mod is_close;
 mod is_empty;
 mod is_ring;
-// Only for `validity` and `malformation`.
+mod is_simple;
+// Only for `geoarrow_validity` and `ogc_validity`.
 mod is_valid;
 mod length;
 mod rings;
@@ -28,6 +30,11 @@ pub use count_coordinates::{
     polygon_coordinate_counts,
 };
 pub use distance::{against_one, pairwise, DistanceMetric};
+pub use has_repeated_points::{
+    line_strings_have_repeated_points, multi_line_strings_have_repeated_points,
+    multi_points_have_repeated_points, multi_polygons_have_repeated_points,
+    points_have_repeated_points, polygons_have_repeated_points,
+};
 pub use is_ccw::{
     line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,
 };
@@ -39,16 +46,16 @@ pub use is_empty::{
     line_strings_are_empty, multi_line_strings_are_empty, multi_points_are_empty,
     multi_polygons_are_empty, points_are_empty, polygons_are_empty,
 };
-pub use is_ring::{line_strings_are_rings, multi_line_strings_are_rings};
-pub use is_valid::Bounds;
-pub(crate) use is_valid::{
-    coordinate_is_valid, line_string_shape_is_valid, polygon_shape_is_valid,
+pub use is_ring::{
+    line_strings_are_rings, multi_line_strings_are_rings, multi_polygons_have_only_rings,
+    polygons_have_only_rings,
 };
-// Only for `malformation`.
+pub use is_simple::{multi_points_are_simple, points_are_simple};
+pub(crate) use is_valid::{all_coordinates_valid, coordinates_are_valid, polygon_rings_are_closed};
+pub use is_valid::{Bounds, CoordinateChecks};
+// Only for `ogc_validity`.
 #[cfg(feature = "geos")]
-pub(crate) use is_empty::only_empty_points;
-#[cfg(feature = "geos")]
-pub(crate) use is_valid::is_empty_point;
+pub(crate) use is_valid::{line_string_shape_is_valid, polygon_shape_is_valid};
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,

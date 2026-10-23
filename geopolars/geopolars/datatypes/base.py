@@ -96,7 +96,7 @@ class GeoArrowType(pl.datatypes.BaseExtension):
     ) -> tuple[float, float, float, float] | None:
         """Where `x` and `y` may lie in the CRS, as `(xmin, ymin, xmax, ymax)`.
         `None` without a CRS, or when there is nothing to bound them by.
-        See `is_valid`. Asked of PROJ, in Rust.
+        See `is_valid_geoarrow`. Asked of PROJ, in Rust.
         """
         return _rust.crs_bounds(
             self.ext_metadata(),

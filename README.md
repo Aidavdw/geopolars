@@ -2,6 +2,7 @@
 
 In this branch, we are rewriting large chunks of GeoPolars to work much more closely with the rest of Polars.
 This is all very much still work-in-progress, and as such this branch is HIGHLY unstable.
+Keep an eye on the tracking issues with the dev tag for where we are right now.
 We'll need a little bit more time to make things nice, but we're making a lot of progress very quickly,
 so stay tuned!
 
@@ -59,12 +60,66 @@ but a checker cannot see namespaces that `register_expr_namespace`
 patches onto `pl.Expr`.
 To avoid that, prefer `gpl.col` to keep static typing.
 
+For a list of all the geometry operations, look at the generated documentation!
+They are written under the *functional* API, but hold exactly the same for the namespace API.
+
 ## Conventions
 
 GeoPolars does not really care about winding order. It will take any,
 and keep them in their orientation if that means less copying around is required.
 This philosophy is extended to external tools.
 If we don't need to transform any data, we'll just keep it in the same order.
+
+## Validity
+
+Every operation expects a *valid* geometry as its input.
+If given one, they should (generally) not fail, and give sensible results.
+
+But what does *valid* mean? GeoPolars knows *two* levels, which nest.
+
+The first is validity according to the GeoArrow spec, checked by `geo.is_valid_geoarrow`.
+
+- Only a whole geometry can be null.
+  A part, a ring, or a coordinate nested in another geometry cannot be null.
+- Every *ring* is closed. Its last vertex is the same as its first.
+
+Checking GeoArrow validity is cheap. It looks at every coordinate once.
+It can also check, in that same pass, that every coordinate is finite,
+or that it lies inside the bounds of its CRS (`crs_bounds`).
+For example, a latitude has to be between -90° and 90°.
+PROJ cannot transform a place that does not exist.
+
+The second is the OGC Simple Features standard, checked by `geo.is_valid_ogc`.
+This is the same standard as followed by GEOS (and therefore shapely, and GeoPandas).
+In GeoPolars, a geometry valid by OGC has to be valid by GeoArrow as well.
+
+- Every coordinate is finite. A NaN or an infinity makes every area, length and distance NaN too.
+  It also makes it impossible to tell if two shapes cross.
+  The empty point is the exception, as a point or in a multipoint.
+  GeoArrow writes it as NaN in x and y.
+- A linestring has at least 2 different vertices (or none, making it empty).
+- A ring has at least 4 different vertices
+  (A ring with fewer vertices can only go back and forth, so it has no area).
+- The rings of a polygon do not cross themselves or each other, and its holes lie *inside* its exterior.
+- The parts of a multipolygon do not overlap.
+
+The OGC standard has one more idea.
+A geometry is **simple** when it does not cross or touch itself (`geo.is_simple`).
+A linestring may cross itself and still be valid by OGC, but just not *simple*.
+For example, a GPS track can pass the same crossing twice.
+
+Checking OGC validity is much more expensive, as it has to compare pairs of segments, and pairs of parts.
+
+OGC allows some geometries that might still surprise you!
+An empty geometry is valid by OGC (find them with `geo.is_empty`),
+and so is the same vertex twice in a row (`geo.has_repeated_points`).
+
+`geo.null_out_invalid_geoarrow` and `geo.null_out_invalid_ogc` replace invalid geometries with nulls.
+See `is_valid_geoarrow` and `is_valid_ogc` for all the rules.
+
+```python
+df.select(geo.null_out_invalid_ogc("parcel"))
+```
 
 ## CRS awareness
 
@@ -73,29 +128,3 @@ If we don't need to transform any data, we'll just keep it in the same order.
 Things that cross the antimeridian can be represented as having points >180° or <-180°.
 
 ## Geometry Operations
-
-All operations can be applied to all of the geometries.
-
-### Distance
-
-Does not need to reproject: Uses the CRS geodetic.
-
-### Area
-
-### Centroid
-
-Gets the centre of mass of the geometry.
-This operation takes the CRS into consideration.
-For MultiPoint, this is the same as its mean coordinate.
-
-### Mean Coordinate
-
-This takes the average of all the coordinates that show up in this geometry.
-It does not have to be CRS-aware.
-
-To look into:
-how does geopandas/shapely/ link to geos?
-
-- We can't ship GEOS as statci lib, can we do it as so/dll?
-- Show the metadata/crs in the long name
-- crs must be present in the python data type, not just in the metadata of a column

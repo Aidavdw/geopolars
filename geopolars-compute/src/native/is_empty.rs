@@ -26,7 +26,7 @@ use crate::per_row::per_row_bool;
 
 /// Whether every one of `vertices` is the empty point, which also holds when there are none.
 #[inline(always)]
-pub(crate) fn only_empty_points(coords: &ValidCoords, mut vertices: Range<usize>) -> bool {
+fn only_empty_points(coords: &ValidCoords, mut vertices: Range<usize>) -> bool {
     vertices.all(|i| is_empty_point(coords, i))
 }
 

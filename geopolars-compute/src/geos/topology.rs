@@ -1,4 +1,4 @@
-//! How the rings of a polygon, and the parts of a multipolygon, fit together in x and y.
+//! Topology checks used in `is_valid_ogc`, as predicates on one polygon or multipolygon.
 //! Each predicate stops at the first failure.
 //! Rings have to be finite in x and y to be related.
 

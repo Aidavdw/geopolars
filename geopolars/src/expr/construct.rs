@@ -15,8 +15,9 @@ use geopolars_compute::inner_nulls::{
     propagate_inner_nulls_of_multi_points, propagate_inner_nulls_of_multi_polygons,
     propagate_inner_nulls_of_polygons,
 };
-use geopolars_compute::native::close_open_rings;
-use geopolars_compute::validity::{multi_polygons_are_valid, polygons_are_valid, CoordinateChecks};
+use geopolars_compute::native::{
+    close_open_rings, multi_polygons_have_only_rings, polygons_have_only_rings,
+};
 use geopolars_compute::with_const_flags;
 use geopolars_core::{UncheckedStorage, ValidCoords, ValidList};
 
@@ -158,12 +159,6 @@ fn kernel_output_type_multipolygon(
     )
 }
 
-/// No coordinate checks, so that only the shape rules apply: all rings empty, or all of them rings.
-const SHAPE_ONLY: CoordinateChecks = CoordinateChecks {
-    bounds: None,
-    check_finite_coordinates: false,
-};
-
 /// See [`close_open_rings`].
 /// The rings and their coordinates, or `None` if every ring was closed already.
 fn close_rings(rings: &ValidList, coords: &ValidCoords) -> Option<(ValidList, ValidCoords)> {
@@ -173,7 +168,7 @@ fn close_rings(rings: &ValidList, coords: &ValidCoords) -> Option<(ValidList, Va
 }
 
 /// One chunk of the storage of a `kind`, with every missing value below a row moved out to it.
-/// A polygon is also missing where its shape is not valid (see [SHAPE_ONLY]).
+/// A polygon is also missing where it does not have only rings (see [polygons_have_only_rings]).
 /// If `close=true`, the open rings of a polygon are closed first.
 fn validated_chunk(chunk: &dyn Array, kind: Kind, close: bool) -> PolarsResult<Box<dyn Array>> {
     let storage = UncheckedStorage::new(chunk)?;
@@ -197,7 +192,10 @@ fn validated_chunk(chunk: &dyn Array, kind: Kind, close: bool) -> PolarsResult<B
                 (array.rings, array.coords) = (rings, coords);
             }
             // A missing row is `false` in the values too.
-            let valid = polygons_are_valid(&array, &SHAPE_ONLY).values().clone();
+            let z = array.coords.dim().has_z();
+            let valid = with_const_flags!(polygons_have_only_rings(&array); z)
+                .values()
+                .clone();
             array.rows = array.rows.with_validity(Some(valid));
             array.into_list_array().boxed()
         }
@@ -210,7 +208,8 @@ fn validated_chunk(chunk: &dyn Array, kind: Kind, close: bool) -> PolarsResult<B
                 (array.rings, array.coords) = (rings, coords);
             }
             // A missing row is `false` in the values too.
-            let valid = multi_polygons_are_valid(&array, &SHAPE_ONLY)
+            let z = array.coords.dim().has_z();
+            let valid = with_const_flags!(multi_polygons_have_only_rings(&array); z)
                 .values()
                 .clone();
             array.rows = array.rows.with_validity(Some(valid));

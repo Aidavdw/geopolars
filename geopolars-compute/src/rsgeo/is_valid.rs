@@ -1,9 +1,9 @@
-//! Topology checks used in `is_malformed`, as predicates on one polygon or multipolygon.
+//! Topology checks used in `is_valid_ogc`, as predicates on one polygon or multipolygon.
 //! Answers how the rings of a polygon, and the parts of a multipolygon, fit together in x and y.
-//! See `is_malformed` in Python for the rules.
+//! See `is_valid_ogc` in Python for the rules.
 //!
 //! Every polygon is assumed to have a valid shape already (all rings empty, or all of them rings).
-//! The typed views of [crate::malformation] stand for that.
+//! The typed views of [crate::ogc_validity] stand for that.
 //! Rings have to be finite in x and y to be related, so that is checked here first.
 
 use ::rsgeo::coordinate_position::CoordPos;
@@ -52,7 +52,7 @@ fn parts_do_not_overlap(parts: &[Polygon<f64>]) -> bool {
     })
 }
 
-/// The topology checks to run on a polygon. See `is_malformed` in Python.
+/// The topology checks to run on a polygon. See `is_valid_ogc` in Python.
 #[derive(Debug, Clone, Copy)]
 pub struct PolygonTopologyChecks {
     pub check_ring_self_intersect: bool,
@@ -65,7 +65,7 @@ impl PolygonTopologyChecks {
     }
 }
 
-/// The topology checks to run on a multipolygon. See `is_malformed` in Python.
+/// The topology checks to run on a multipolygon. See `is_valid_ogc` in Python.
 #[derive(Debug, Clone, Copy)]
 pub struct MultiPolygonTopologyChecks {
     /// What every part is checked for.

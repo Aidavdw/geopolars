@@ -23,14 +23,15 @@ the comment says when one without a CRS takes a different tier.
 | `buffer` | B | GEOS; z and m dropped [^1] | B | | B | | B | | B | | B | |
 | `simplify` | C | returns the point | B | GEOS; z kept, m dropped | B | split by `buffer(0)` is a per-row error | C | returns the multipoint | B | | B | |
 | `is_ring` | - | | A | ≥ 4 vertices, ends = x/y/z | - | | - | | A | parts chained into one ring | - | |
-| `self_intersects` | - | | B | GEOS `is_simple`; x/y only | B | per ring; holes as `rings_overlap` | - | | B | LPP | B | LPP |
+| `is_simple` | A | always `True` | B | GEOS; x/y only | B | every ring as a line; GEOS | A | no two points equal in x/y | B | GEOS, as a whole | B | every ring as a line; GEOS |
 | `rings_overlap` | - | | B | hacked as polygon; GEOS | - | | - | | - | | - | |
 | `is_ccw` | - | | A | CCW | A | | - | | A | every part combined | A | every part combined |
 | `is_close` | A | pairwise or against one | A | same coordinates in order | A | same rings | A | | A | same parts | A | same polygons and rings |
-| `is_valid` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
-| `null_out_invalid` | A | nulls what `is_valid` rejects | A | | A | | A | | A | | A | |
-| `is_malformed` | A | | A | | A/B | GEOS | A | | A | EP | A/B | EP and GEOS |
-| `null_out_malformed` | A | nulls what `is_malformed` finds | A | | A/B | | A | | A | | A/B | |
+| `is_valid_geoarrow` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
+| `null_out_invalid_geoarrow` | A | nulls what `is_valid_geoarrow` rejects | A | | A | | A | | A | | A | |
+| `is_valid_ogc` | A | bounds from PROJ (plan-time) | A | | A/B | topology through GEOS | A | EP | A | EP | A/B | EP and GEOS |
+| `null_out_invalid_ogc` | A | nulls what `is_valid_ogc` rejects | A | | A/B | | A | | A | | A/B | |
+| `has_repeated_points` | A | always `False` | A | | A | | A | | A | EP | A | EP |
 | `distance` | A/B | [^2] | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |

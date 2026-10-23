@@ -1,4 +1,4 @@
-"""Testing `null_out_invalid`:
+"""Testing `null_out_invalid_geoarrow`:
 GeoArrow allows nulls only at the outermost level.
 <https://geoarrow.org/format.html#missing-values-null>
 """
@@ -33,7 +33,7 @@ def test_a_missing_vertex_nulls_the_linestring_around_it() -> None:
         schema={"line": _XY_VERTICES},
     ).select(pl.col("line").ext.to(LineStringXY()))
 
-    out = df.select(geo.null_out_invalid("line"))
+    out = df.select(geo.null_out_invalid_geoarrow("line"))
 
     assert out["line"].is_null().to_list() == [True, False]
 
@@ -46,7 +46,7 @@ def test_a_missing_coordinate_nulls_the_linestring_around_it() -> None:
         schema={"line": _XY_VERTICES},
     ).select(pl.col("line").ext.to(LineStringXY()))
 
-    out = df.select(geo.null_out_invalid("line"))
+    out = df.select(geo.null_out_invalid_geoarrow("line"))
 
     assert out["line"].is_null().to_list() == [True]
 
@@ -58,7 +58,7 @@ def test_a_missing_ring_nulls_the_polygon_around_it() -> None:
         {"polygon": [[_SQUARE, None], [_SQUARE]]}, schema={"polygon": _XY_RINGS}
     ).select(pl.col("polygon").ext.to(PolygonXY()))
 
-    out = df.select(geo.null_out_invalid("polygon"))
+    out = df.select(geo.null_out_invalid_geoarrow("polygon"))
 
     assert out["polygon"].is_null().to_list() == [True, False]
 
@@ -68,7 +68,7 @@ def test_a_missing_coordinate_inside_a_ring_nulls_the_polygon() -> None:
         {"polygon": [[[{"x": 0.0, "y": None}]]]}, schema={"polygon": _XY_RINGS}
     ).select(pl.col("polygon").ext.to(PolygonXY()))
 
-    out = df.select(geo.null_out_invalid("polygon"))
+    out = df.select(geo.null_out_invalid_geoarrow("polygon"))
 
     assert out["polygon"].is_null().to_list() == [True]
 
@@ -79,7 +79,7 @@ def test_a_missing_coordinate_nulls_the_point() -> None:
         schema={"point": _XY},
     ).select(pl.col("point").ext.to(PointXY()))
 
-    out = df.select(geo.null_out_invalid("point"))
+    out = df.select(geo.null_out_invalid_geoarrow("point"))
 
     assert out["point"].is_null().to_list() == [True, False]
 
@@ -90,7 +90,9 @@ def test_a_nan_coordinate_nulls_the_linestring_around_it() -> None:
         schema={"line": _XY_VERTICES},
     ).select(pl.col("line").ext.to(LineStringXY()))
 
-    out = df.select(geo.null_out_invalid("line"))
+    out = df.select(
+        geo.null_out_invalid_geoarrow("line", check_finite_coordinates=True)
+    )
 
     assert out["line"].is_null().to_list() == [True, False]
 
@@ -100,7 +102,7 @@ def test_an_open_ring_nulls_the_polygon() -> None:
         {"polygon": [[_SQUARE[:-1]], [_SQUARE]]}, schema={"polygon": _XY_RINGS}
     ).select(pl.col("polygon").ext.to(PolygonXY()))
 
-    out = df.select(geo.null_out_invalid("polygon"))
+    out = df.select(geo.null_out_invalid_geoarrow("polygon"))
 
     assert out["polygon"].is_null().to_list() == [True, False]
 
@@ -111,7 +113,7 @@ def test_a_point_outside_its_crs_is_nulled_and_the_crs_kept() -> None:
         schema={"point": _XY},
     ).select(pl.col("point").ext.to(PointXY(crs="EPSG:4326")))
 
-    out = df.select(geo.null_out_invalid("point", crs_bounds="crs"))
+    out = df.select(geo.null_out_invalid_geoarrow("point", crs_bounds="crs"))
 
     assert out["point"].is_null().to_list() == [True, True]
     assert out.schema == df.schema
@@ -124,19 +126,19 @@ def test_every_chunk_is_checked() -> None:
     ).select(pl.col("line").ext.to(LineStringXY()))
     df = pl.concat([chunk, chunk], rechunk=False)
 
-    out = df.select(geo.null_out_invalid("line"))
+    out = df.select(geo.null_out_invalid_geoarrow("line"))
 
     assert out["line"].is_null().to_list() == [True, False, True, False]
 
 
 def test_an_empty_geometry_is_whole() -> None:
     """A geometry with no coordinates is not a geometry with missing ones. It
-    has no mean coordinate, but it is there, and `null_out_invalid` leaves it alone."""
+    has no mean coordinate, but it is there, and `null_out_invalid_geoarrow` leaves it alone."""
     df = pl.DataFrame({"line": [[], _SQUARE]}, schema={"line": _XY_VERTICES}).select(
         pl.col("line").ext.to(LineStringXY())
     )
 
-    out = df.select(geo.null_out_invalid("line"))
+    out = df.select(geo.null_out_invalid_geoarrow("line"))
 
     assert out["line"].is_null().to_list() == [False, False]
 
@@ -146,7 +148,7 @@ def test_a_null_geometry_stays_null() -> None:
         pl.col("line").ext.to(LineStringXY())
     )
 
-    out = df.select(geo.null_out_invalid("line"))
+    out = df.select(geo.null_out_invalid_geoarrow("line"))
 
     assert out["line"].is_null().to_list() == [True, False]
 
@@ -156,7 +158,7 @@ def test_it_leaves_a_whole_column_exactly_as_it_was() -> None:
         geo.line_string("line")
     )
 
-    assert_frame_equal(df.select(geo.null_out_invalid("line")), df)
+    assert_frame_equal(df.select(geo.null_out_invalid_geoarrow("line")), df)
 
 
 def test_it_is_idempotent() -> None:
@@ -164,9 +166,9 @@ def test_it_is_idempotent() -> None:
         {"line": [[{"x": 0.0, "y": 0.0}, None], _SQUARE]},
         schema={"line": _XY_VERTICES},
     ).select(pl.col("line").ext.to(LineStringXY()))
-    once = df.select(geo.null_out_invalid("line"))
+    once = df.select(geo.null_out_invalid_geoarrow("line"))
 
-    assert_frame_equal(once.select(geo.null_out_invalid("line")), once)
+    assert_frame_equal(once.select(geo.null_out_invalid_geoarrow("line")), once)
 
 
 def test_namespace_matches_the_functional_api() -> None:
@@ -175,8 +177,8 @@ def test_namespace_matches_the_functional_api() -> None:
     ).select(pl.col("line").ext.to(LineStringXY()))
 
     assert_frame_equal(
-        df.select(gpl.col("line").geo.null_out_invalid()),
-        df.select(geo.null_out_invalid("line")),
+        df.select(gpl.col("line").geo.null_out_invalid_geoarrow()),
+        df.select(geo.null_out_invalid_geoarrow("line")),
     )
 
 
@@ -186,7 +188,7 @@ def test_it_runs_on_the_streaming_engine() -> None:
             {"line": [[{"x": 0.0, "y": 0.0}, None]]}, schema={"line": _XY_VERTICES}
         )
         .select(pl.col("line").ext.to(LineStringXY()))
-        .select(geo.null_out_invalid("line"))
+        .select(geo.null_out_invalid_geoarrow("line"))
     )
 
     assert_frame_equal(lf.collect(engine="streaming"), lf.collect())
@@ -196,13 +198,13 @@ def test_rejects_a_column_that_is_not_a_geometry() -> None:
     df = pl.DataFrame({"line": [1.0]})
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
-        df.select(geo.null_out_invalid("line"))
+        df.select(geo.null_out_invalid_geoarrow("line"))
 
 
 def test_rejects_a_non_geometry_while_resolving_the_schema() -> None:
     """The dtype is checked while the plan is built,
     not when the data is there."""
-    lf = pl.LazyFrame({"line": [1.0]}).select(geo.null_out_invalid("line"))
+    lf = pl.LazyFrame({"line": [1.0]}).select(geo.null_out_invalid_geoarrow("line"))
 
     with pytest.raises(TypeError, match="expected a `geoarrow.point`"):
         lf.collect_schema()

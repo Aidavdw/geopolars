@@ -97,7 +97,7 @@ def buffer(
     That shape can only be represented as a multipolygon.
     With `allow_splitting=True` and a negative `distance`, every row is a multipolygon,
     which holds both squares.
-    At a `distance` of exactly 0, only a malformed polygon splits (see `is_malformed`),
+    At a `distance` of exactly 0, only a polygon that is invalid by OGC splits (see `is_valid_ogc`),
     such as one whose exterior touches itself at a point.
     GEOS separates the pieces that only touch.
     A `distance` column has its sign only known per row,

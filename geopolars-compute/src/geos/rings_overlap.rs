@@ -23,7 +23,7 @@ use crate::{row_or_missing, GeoComputeError, GeoComputeResult};
 const INTERIORS_DISJOINT: &str = "F********";
 
 #[inline(always)]
-pub(super) fn enclosed_areas_overlap<const TOUCHING: bool>(
+fn enclosed_areas_overlap<const TOUCHING: bool>(
     a: &PreparedGeometry,
     b: &Geometry,
 ) -> GeoComputeResult<bool> {
@@ -37,7 +37,7 @@ pub(super) fn enclosed_areas_overlap<const TOUCHING: bool>(
 /// Whether `line` is finite in x and y.
 /// Errors if it is, but is not a ring.
 #[inline(always)]
-pub(super) fn ring_is_finite(line: &ScalarLineString) -> GeoComputeResult<bool> {
+fn ring_is_finite(line: &ScalarLineString) -> GeoComputeResult<bool> {
     let (x, y, _, _) = axes(line.coords);
     let vertices = line.vertices.clone();
     if xy_is_finite_or_error(&x[vertices.clone()], &y[vertices.clone()]).is_err() {

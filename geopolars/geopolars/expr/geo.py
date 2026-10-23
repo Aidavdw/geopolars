@@ -231,10 +231,10 @@ class ExprGeoNameSpace:
 
         return is_ring(self._expr)
 
-    def self_intersects(self, *, ignore_per_row_errors: bool = False) -> pl.Expr:
-        from geopolars.geo.self_intersects import self_intersects
+    def is_simple(self) -> pl.Expr:
+        from geopolars.geo.is_simple import is_simple
 
-        return self_intersects(self._expr, ignore_per_row_errors=ignore_per_row_errors)
+        return is_simple(self._expr)
 
     def rings_overlap(
         self,
@@ -277,77 +277,84 @@ class ExprGeoNameSpace:
 
         return is_ccw(self._expr, holes_cw=holes_cw)
 
-    def is_valid(
+    def is_valid_geoarrow(
         self,
         *,
-        crs_bounds: CrsBounds = "crs_wrapped_longitude",
+        crs_bounds: CrsBounds = "off",
         check_missing_coordinates: bool = True,
-        check_finite_coordinates: bool = True,
+        check_finite_coordinates: bool = False,
     ) -> pl.Expr:
-        from geopolars.geo.is_valid import is_valid
+        from geopolars.geo.is_valid import is_valid_geoarrow
 
-        return is_valid(
+        return is_valid_geoarrow(
             self._expr,
             crs_bounds=crs_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_finite_coordinates=check_finite_coordinates,
         )
 
-    def null_out_invalid(
+    def null_out_invalid_geoarrow(
         self,
         *,
-        crs_bounds: CrsBounds = "crs_wrapped_longitude",
+        crs_bounds: CrsBounds = "off",
         check_missing_coordinates: bool = True,
-        check_finite_coordinates: bool = True,
+        check_finite_coordinates: bool = False,
     ) -> pl.Expr:
-        from geopolars.geo.is_valid import null_out_invalid
+        from geopolars.geo.is_valid import null_out_invalid_geoarrow
 
-        return null_out_invalid(
+        return null_out_invalid_geoarrow(
             self._expr,
             crs_bounds=crs_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_finite_coordinates=check_finite_coordinates,
         )
 
-    def is_malformed(
+    def is_valid_ogc(
         self,
         *,
-        check_repeated_points: bool = True,
-        check_empty: bool = True,
+        crs_bounds: CrsBounds = "off",
+        check_missing_coordinates: bool = True,
         check_ring_self_intersect: bool = True,
         check_polygon_self_overlap: bool = True,
         check_multi_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
-        from geopolars.geo.is_malformed import is_malformed
+        from geopolars.geo.is_valid import is_valid_ogc
 
-        return is_malformed(
+        return is_valid_ogc(
             self._expr,
-            check_repeated_points=check_repeated_points,
-            check_empty=check_empty,
+            crs_bounds=crs_bounds,
+            check_missing_coordinates=check_missing_coordinates,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         )
 
-    def null_out_malformed(
+    def null_out_invalid_ogc(
         self,
         *,
-        check_repeated_points: bool = True,
-        check_empty: bool = True,
+        crs_bounds: CrsBounds = "off",
+        check_missing_coordinates: bool = True,
         check_ring_self_intersect: bool = True,
         check_polygon_self_overlap: bool = True,
         check_multi_polygon_self_overlap: bool = True,
     ) -> pl.Expr:
-        from geopolars.geo.is_malformed import null_out_malformed
+        from geopolars.geo.is_valid import null_out_invalid_ogc
 
-        return null_out_malformed(
+        return null_out_invalid_ogc(
             self._expr,
-            check_repeated_points=check_repeated_points,
-            check_empty=check_empty,
+            crs_bounds=crs_bounds,
+            check_missing_coordinates=check_missing_coordinates,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         )
+
+    def has_repeated_points(
+        self, *, abs_tol: float | None = None, rel_tol: float | None = None
+    ) -> pl.Expr:
+        from geopolars.geo.has_repeated_points import has_repeated_points
+
+        return has_repeated_points(self._expr, abs_tol=abs_tol, rel_tol=rel_tol)
 
     def distance(
         self,

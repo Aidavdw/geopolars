@@ -11,9 +11,9 @@ The crate holds:
 - kernels forwarding to GEOS in `geos`, behind the `geos` feature.
 - kernels forwarding to rsgeo (the Rust `geo` crate) in `rsgeo`, behind the `rsgeo` feature.
 - kernels forwarding to PROJ in `proj`.
-- `is_valid`'s kernels in `validity`, which check the coordinates, then the shape of every row.
+- `is_valid_geoarrow`'s kernels in `geoarrow_validity`, which check the coordinates, then the rings of every row.
   These need the `native` feature.
-- `is_malformed`'s kernels in `malformation`, which run the checks of `native` and `geos` in one pass per row.
+- `is_valid_ogc`'s kernels in `ogc_validity`, which run the checks of `native` and `geos` in one pass per row.
   These need both features.
 - the pass that moves every missing value below a row out to the row in `inner_nulls`.
 

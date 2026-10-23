@@ -53,7 +53,7 @@ def rings_overlap(
     at least four vertices, the last exactly at the first.
     Anything else, including an empty linestring, raises.
     With `ignore_per_row_errors=True`, it gives a missing result instead.
-    A ring that crosses itself (see `self_intersects`) gives no meaningful answer.
+    A ring that is not simple (see `is_simple`) gives no meaningful answer.
     {missing_ring_input}
 
     ```python

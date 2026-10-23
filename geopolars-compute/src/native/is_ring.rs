@@ -1,6 +1,7 @@
 //! Whether a linestring is a ring: at least [MIN_RING_VERTICES] vertices,
 //! with its last at exactly the same place as its first.
 //! A multilinestring is a ring when its parts chain into one (see [multi_line_strings_are_rings]).
+//! A polygon has only rings when every ring is one, or every ring is empty.
 //! m is a measure rather than a position, so it is not compared.
 //!
 //! # Const generic flags
@@ -8,8 +9,8 @@
 //! See [same_place] for `Z`.
 
 use geopolars_core::{
-    is_ring, same_place, LineStringArray, MultiLineStringArray, ScalarMultiLineString,
-    MIN_RING_VERTICES,
+    is_ring, same_place, LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray,
+    ScalarMultiLineString, ScalarPolygon, MIN_RING_VERTICES,
 };
 use polars_arrow::array::BooleanArray;
 
@@ -49,4 +50,34 @@ fn parts_form_ring<const Z: bool>(multi: &ScalarMultiLineString) -> bool {
 /// See [parts_form_ring] for what makes a ring.
 pub fn multi_line_strings_are_rings<const Z: bool>(array: &MultiLineStringArray) -> BooleanArray {
     per_row_bool(&array.rows, |i| parts_form_ring::<Z>(&array.get(i)))
+}
+
+/// Whether every ring of `polygon` is a ring, or every one is empty (the empty polygon).
+#[inline(always)]
+fn has_only_rings<const Z: bool>(polygon: &ScalarPolygon) -> bool {
+    if polygon
+        .rings()
+        .next()
+        .is_some_and(|exterior| exterior.vertices.is_empty())
+    {
+        return polygon.rings().all(|ring| ring.vertices.is_empty());
+    }
+    polygon
+        .rings()
+        .all(|ring| is_ring::<Z>(ring.coords, ring.vertices))
+}
+
+/// See [has_only_rings].
+pub fn polygons_have_only_rings<const Z: bool>(array: &PolygonArray) -> BooleanArray {
+    per_row_bool(&array.rows, |i| has_only_rings::<Z>(&array.get(i)))
+}
+
+/// Whether every polygon [has only rings](has_only_rings).
+pub fn multi_polygons_have_only_rings<const Z: bool>(array: &MultiPolygonArray) -> BooleanArray {
+    per_row_bool(&array.rows, |i| {
+        array
+            .get(i)
+            .polygons()
+            .all(|polygon| has_only_rings::<Z>(&polygon))
+    })
 }
