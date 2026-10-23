@@ -1,7 +1,8 @@
 //! The buffer of any geometry, forwarded to GEOS.
 
 use geopolars_compute::geos::{
-    buffer_into_multi_polygons, buffer_into_polygons, BufferStyle, CapStyle, JoinStyle, ToGeosRows,
+    buffer_into_multi_polygons, buffer_into_polygons, BufferDistance, BufferStyle, CapStyle,
+    JoinStyle, Side, ToGeosRows,
 };
 use geopolars_core::{
     downcast, Coords, GeoDimension, LineStringArray, MultiLineStringArray, MultiPointArray,
@@ -15,7 +16,8 @@ use serde::Deserialize;
 use super::IntoPolarsResult;
 use crate::geoarrow::{describe, Geo, Kind};
 
-/// A multipolygon for a multi-kind, or when `allow_splitting` and `distance < 0`.
+/// A multipolygon for a multi-kind, or with `allow_splitting`,
+/// when `distance` is a column or at most 0.
 /// Otherwise a polygon.
 /// It is XY, with the input's metadata.
 /// Also the kind of the input, and whether the output is a multipolygon.
@@ -25,7 +27,8 @@ fn buffered_type(dtype: &DataType, kwargs: &BufferKwargs) -> PolarsResult<(DataT
         Kind::Point | Kind::LineString | Kind::Polygon => false,
         Kind::MultiPoint | Kind::MultiLineString | Kind::MultiPolygon => true,
     };
-    let into_multi = is_multi || (kwargs.allow_splitting && kwargs.distance < 0.0);
+    let into_multi =
+        is_multi || (kwargs.allow_splitting && kwargs.distance.is_none_or(|d| d <= 0.0));
     let kind = if into_multi {
         Kind::MultiPolygon
     } else {
@@ -57,18 +60,28 @@ enum JoinStyleDef {
     Bevel,
 }
 
+#[derive(Deserialize)]
+#[serde(remote = "Side", rename_all = "lowercase")]
+enum SideDef {
+    Both,
+    Left,
+    Right,
+}
+
 /// See python docs for details.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BufferKwargs {
-    distance: f64,
+    /// `None` when the distances are a column, the second input.
+    distance: Option<f64>,
     quadrant_segments: i32,
     #[serde(with = "CapStyleDef")]
     cap_style: CapStyle,
     #[serde(with = "JoinStyleDef")]
     join_style: JoinStyle,
     mitre_limit: f64,
-    single_sided: bool,
+    #[serde(with = "SideDef")]
+    side: Side,
     allow_splitting: bool,
     ccw_outer: bool,
     ignore_per_row_errors: bool,
@@ -81,32 +94,33 @@ fn chunk_buffered(
     chunk: &dyn Array,
     kind: Kind,
     into_multi: bool,
+    distance: BufferDistance,
     kwargs: &BufferKwargs,
 ) -> PolarsResult<ListArray<i64>> {
     match kind {
         Kind::Point => {
             let array = PointArray::new(Coords::new(chunk)?);
-            chunk_buffered_as(&array, into_multi, kwargs)
+            chunk_buffered_as(&array, into_multi, distance, kwargs)
         }
         Kind::LineString => {
             let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            chunk_buffered_as(&array, into_multi, kwargs)
+            chunk_buffered_as(&array, into_multi, distance, kwargs)
         }
         Kind::Polygon => {
             let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            chunk_buffered_as(&array, into_multi, kwargs)
+            chunk_buffered_as(&array, into_multi, distance, kwargs)
         }
         Kind::MultiPoint => {
             let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
-            chunk_buffered_as(&array, into_multi, kwargs)
+            chunk_buffered_as(&array, into_multi, distance, kwargs)
         }
         Kind::MultiLineString => {
             let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            chunk_buffered_as(&array, into_multi, kwargs)
+            chunk_buffered_as(&array, into_multi, distance, kwargs)
         }
         Kind::MultiPolygon => {
             let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            chunk_buffered_as(&array, into_multi, kwargs)
+            chunk_buffered_as(&array, into_multi, distance, kwargs)
         }
     }
 }
@@ -115,15 +129,16 @@ fn chunk_buffered(
 fn chunk_buffered_as(
     array: &impl ToGeosRows,
     into_multi: bool,
+    distance: BufferDistance,
     kwargs: &BufferKwargs,
 ) -> PolarsResult<ListArray<i64>> {
     let BufferKwargs {
-        distance,
+        distance: _,
         quadrant_segments,
         cap_style,
         join_style,
         mitre_limit,
-        single_sided,
+        side,
         allow_splitting: _,
         ccw_outer,
         ignore_per_row_errors,
@@ -134,7 +149,7 @@ fn chunk_buffered_as(
         cap_style,
         join_style,
         mitre_limit,
-        single_sided,
+        side,
     };
     let (ignore, early) = (ignore_per_row_errors, early_finite_check);
     if into_multi {
@@ -152,11 +167,29 @@ fn chunk_buffered_as(
 fn buffer(inputs: &[Series], kwargs: BufferKwargs) -> PolarsResult<Series> {
     let (dtype, kind, into_multi) = buffered_type(inputs[0].dtype(), &kwargs)?;
     let storage = inputs[0].ext()?.storage();
-    let chunks = storage
-        .chunks()
-        .iter()
-        .map(|rows| Ok(chunk_buffered(rows.as_ref(), kind, into_multi, &kwargs)?.boxed()))
-        .collect::<PolarsResult<_>>()?;
+    let chunks = match kwargs.distance {
+        Some(distance) => storage
+            .chunks()
+            .iter()
+            .map(|rows| {
+                let distance = BufferDistance::Constant(distance);
+                Ok(chunk_buffered(rows.as_ref(), kind, into_multi, distance, &kwargs)?.boxed())
+            })
+            .collect::<PolarsResult<_>>()?,
+        None => {
+            let storage = storage.rechunk();
+            let distances = match (storage.len(), inputs[1].len()) {
+                (n, m) if n == m => inputs[1].rechunk(),
+                (n, 1) => inputs[1].new_from_index(0, n).rechunk(),
+                (n, m) => {
+                    polars_bail!(ShapeMismatch: "cannot buffer {n} geometries by {m} distances")
+                }
+            };
+            let distance = BufferDistance::PerRow(distances.f64()?.downcast_as_array());
+            let rows = storage.chunks()[0].as_ref();
+            vec![chunk_buffered(rows, kind, into_multi, distance, &kwargs)?.boxed()]
+        }
+    };
     // SAFETY: the buffers are XY polygons or multipolygons, as `dtype` says.
     Ok(
         unsafe {

@@ -21,6 +21,10 @@ pub enum GeoComputeError {
     NotARing { vertices: usize },
     /// A coordinate with a NaN or infinite x or y, which GEOS cannot take.
     NotFinite { position: (f64, f64) },
+    /// A NaN or infinite buffer distance.
+    NotFiniteDistance { distance: f64 },
+    /// A negative distance for a buffer of one side, whose side is not given by the sign.
+    NegativeOneSidedDistance { distance: f64 },
     #[cfg(feature = "geos")]
     Geos(geos::Error),
 }
@@ -60,6 +64,13 @@ impl fmt::Display for GeoComputeError {
                 "GEOS expects finite x and y, got ({x}, {y}). \
                 GEOS does not support empty points inside a geometry"
             ),
+            Self::NotFiniteDistance { distance } => {
+                write!(f, "a buffer expects a finite distance, got: {distance}")
+            }
+            Self::NegativeOneSidedDistance { distance } => write!(
+                f,
+                "a buffer of one side expects a distance of at least 0, got: {distance}"
+            ),
             #[cfg(feature = "geos")]
             Self::Geos(source) => write!(f, "{source}"),
         }
@@ -70,7 +81,11 @@ impl std::error::Error for GeoComputeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Reproject { source, .. } => Some(source),
-            Self::Transformation { .. } | Self::NotARing { .. } | Self::NotFinite { .. } => None,
+            Self::Transformation { .. }
+            | Self::NotARing { .. }
+            | Self::NotFinite { .. }
+            | Self::NotFiniteDistance { .. }
+            | Self::NegativeOneSidedDistance { .. } => None,
             #[cfg(feature = "geos")]
             Self::Geos(source) => Some(source),
         }

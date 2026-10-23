@@ -8,16 +8,15 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Literal
 
+import polars as pl
 from polars.plugins import register_plugin_function
 
 from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import LineStringType, MultiLineStringType, PointType
-from geopolars.geo._dispatch import on_geometry
+from geopolars.geo._dispatch import _to_expr, on_geometry
 
 if TYPE_CHECKING:
-    import polars as pl
-
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
 
@@ -38,7 +37,7 @@ def _check_one_of(name: str, value: str, allowed: tuple[str, ...]) -> None:
 @doc(output="polygon")
 def buffer(
     geometry: IntoExprColumn,
-    distance: float,
+    distance: float | IntoExprColumn,
     *,
     quadrant_segments: int = 8,
     cap_style: Literal["round", "flat", "square"] | None = None,
@@ -55,13 +54,18 @@ def buffer(
     Every point of this buffer is a polygon with points is within `distance` of the original.
     `distance` is in the units of the coordinates
     (degrees for longitude/latitude).
+    It is one number for every geometry,
+    or a column (or expression) with one distance per geometry.
+    A missing distance gives a missing polygon.
+    A NaN or infinite distance in a column raises, as does a negative one with `side`.
+    With `ignore_per_row_errors=True`, such a row gives a missing polygon instead.
 
     A point, linestring or polygon gives a polygon.
     Their multi-variants give a multipolygon,
     in which parts whose buffers overlap are merged into one.
     The output is always XY:
 
-    | in | out | with `allow_splitting` and `distance < 0` |
+    | in | out | with `allow_splitting`, and `distance` a column or at most 0 |
     | - | - | - |
     | `PointXY[Z][M]` | `PolygonXY` | `MultiPolygonXY` |
     | `LineStringXY[Z][M]` | `PolygonXY` | `MultiPolygonXY` |
@@ -74,15 +78,21 @@ def buffer(
     {empty_and_missing}
     A `distance` of at most 0 gives an empty polygon for a point or linestring.
 
-    With `allow_splitting=True` and a negative `distance`, every kind gives a multipolygon.
+    With `allow_splitting=True` and a `distance` column, or one of at most 0,
+    every kind gives a multipolygon.
     A negative `distance` shrinks a polygon, which can split it into several polygons.
-    Splitting can only happen when `distance` is negative:
+    Splitting can only happen when `distance` is at most 0:
     a positive buffer of a geometry in one piece stays in one piece.
     Take for example a dumbbell-like shape: two 4 by 4 squares, joined by a neck 0.4 wide.
     Shrunk by 0.5, the section in the neck vanishes, and two 3 by 3 squares are left.
     That shape can only be represented as a multipolygon.
     With `allow_splitting=True` and a negative `distance`, every row is a multipolygon,
     which holds both squares.
+    At a `distance` of exactly 0, only a degenerate polygon splits (see `is_degenerate`),
+    such as one whose exterior touches itself at a point.
+    GEOS separates the pieces that only touch.
+    A `distance` column has its sign only known per row,
+    so with `allow_splitting=True` it always gives a multipolygon.
 
     With `distance>0`, splitting cannot occur, because the outset will always expand outwards.
     This means you can never end up with 'islands', so it is not necessary to output multipolygons.
@@ -124,7 +134,8 @@ def buffer(
     # - a normal inset
     # - a dumbbell shape inset that causes splitting
 
-    if not math.isfinite(distance):
+    constant = isinstance(distance, int | float)
+    if constant and not math.isfinite(distance):
         msg = f"buffer expects a finite distance, got: {distance!r}"
         raise ValueError(msg)
     if quadrant_segments < 1:
@@ -141,7 +152,7 @@ def buffer(
     if single_sided and cap_style is not None:
         msg = f"buffer has flat ends with side={side!r}, so it takes no `cap_style`"
         raise ValueError(msg)
-    if single_sided and distance < 0:
+    if constant and single_sided and distance < 0:
         msg = f"buffer expects a distance of at least 0 with side={side!r}, got: {distance!r}"
         raise ValueError(msg)
 
@@ -152,20 +163,21 @@ def buffer(
                 f" got: {dtype!r}"
             )
             raise TypeError(msg)
+        args = [column] if constant else [column, _to_expr(distance).cast(pl.Float64)]
         return register_plugin_function(
             plugin_path=LIB,
-            args=[column],
+            args=args,
             function_name="buffer",
             kwargs={
-                # GEOS buffers the right side for a negative distance.
-                "distance": -float(distance) if side == "right" else float(distance),
+                # `None` when the distances are the second argument.
+                "distance": float(distance) if constant else None,
                 "quadrant_segments": int(quadrant_segments),
                 "cap_style": cap_style or "round",
                 "join_style": join_style,
                 "mitre_limit": _MITRE_LIMIT
                 if mitre_limit is None
                 else float(mitre_limit),
-                "single_sided": single_sided,
+                "side": side,
                 "allow_splitting": allow_splitting,
                 "ccw_outer": ccw_outer,
                 "ignore_per_row_errors": ignore_per_row_errors,

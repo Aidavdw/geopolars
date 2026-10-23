@@ -43,7 +43,8 @@ mod simplify;
 mod topology;
 
 pub use buffer::{
-    buffer_into_multi_polygons, buffer_into_polygons, BufferStyle, CapStyle, JoinStyle,
+    buffer_into_multi_polygons, buffer_into_polygons, BufferDistance, BufferStyle, CapStyle,
+    JoinStyle, Side,
 };
 pub use convex_hull::{
     line_string_convex_hulls, multi_line_string_convex_hulls, multi_point_convex_hulls,

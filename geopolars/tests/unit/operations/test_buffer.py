@@ -55,6 +55,8 @@ _ORIGIN = {"x": 0.0, "y": 0.0}
 _EMPTY_POINT = {"x": math.nan, "y": math.nan}
 _SQUARE = _ring((0, 0), (4, 0), (4, 4), (0, 4))
 _SEGMENT = _line((0, 0), (4, 0))
+# A ring that touches itself at (2, 0): two triangles meeting at a point.
+_TOUCHING_ITSELF = _ring((0, 0), (4, 0), (4, 4), (2, 0), (0, 4))
 # Two 4 by 4 squares, joined by a neck 0.4 wide.
 _DUMBBELL = _ring(
     (0, 0), (4, 0), (4, 1.8), (6, 1.8), (6, 0), (10, 0),
@@ -89,7 +91,8 @@ def test_the_output_is_xy_polygons_or_multipolygons(
 
 
 @pytest.mark.parametrize(
-    ("distance", "single"), [(-1.0, MultiPolygonXY()), (1.0, PolygonXY())]
+    ("distance", "single"),
+    [(-1.0, MultiPolygonXY()), (0.0, MultiPolygonXY()), (1.0, PolygonXY())],
 )
 def test_allow_splitting_gives_multipolygons_for_a_negative_distance(
     distance: float,
@@ -324,3 +327,105 @@ def test_one_side_is_refused_without_lines(
 ) -> None:
     with pytest.raises(TypeError, match="one side"):
         _buffered(_column(dtype, geometry), 1.0, side="left")
+
+
+def test_a_ring_touching_itself_splits_at_zero_with_allow_splitting() -> None:
+    df = _column(PolygonXY, [_TOUCHING_ITSELF])
+
+    [parts] = _buffered(df, 0.0, allow_splitting=True)
+
+    assert len(parts) == 2
+
+
+def _points_with_distances(*distances: float | None) -> pl.DataFrame:
+    points = _column(PointXY, *[_ORIGIN] * len(distances))
+    return points.with_columns(pl.Series("d", distances, dtype=pl.Float64))
+
+
+def test_a_distance_column_gives_every_row_its_own_distance() -> None:
+    df = _points_with_distances(1.0, 2.0, None)
+
+    out = df.select(geo.buffer("geom", "d").geo.area_planar())
+
+    [one, two, missing] = out.to_series().to_list()
+    assert one == pytest.approx(_inscribed_area(8))
+    assert two == pytest.approx(4 * _inscribed_area(8))
+    assert missing is None
+
+
+def test_a_distance_series_of_one_value_is_broadcast() -> None:
+    df = _column(PointXY, _ORIGIN, _ORIGIN)
+
+    out = df.select(geo.buffer("geom", pl.Series([2.0])).geo.area_planar())
+
+    assert out.to_series().to_list() == pytest.approx([4 * _inscribed_area(8)] * 2)
+
+
+def test_a_distance_column_of_another_length_raises() -> None:
+    df = _column(PointXY, _ORIGIN, _ORIGIN, _ORIGIN)
+
+    with pytest.raises(ComputeError, match="3 geometries by 2 distances"):
+        df.select(geo.buffer("geom", pl.Series([1.0, 2.0])))
+
+
+def test_an_integer_distance_works() -> None:
+    df = _column(PointXY, _ORIGIN).with_columns(d=pl.lit(1))
+
+    assert (
+        _buffered(df, 1)
+        == df.select(geo.buffer("geom", "d")).to_series().ext.storage().to_list()
+    )
+
+
+def test_a_distance_column_with_allow_splitting_always_gives_multipolygons() -> None:
+    df = _points_with_distances(1.0, 2.0)
+
+    out = df.select(geo.buffer("geom", "d", allow_splitting=True))
+
+    assert out.schema["geom"] == MultiPolygonXY()
+    assert [len(parts) for parts in out.to_series().ext.storage().to_list()] == [1, 1]
+
+
+def test_a_distance_column_splits_a_polygon_with_allow_splitting() -> None:
+    df = _column(PolygonXY, [_DUMBBELL], [_SQUARE]).with_columns(
+        d=pl.Series([-0.5, 1.0])
+    )
+
+    out = df.select(geo.buffer("geom", "d", allow_splitting=True))
+
+    assert [len(parts) for parts in out.to_series().ext.storage().to_list()] == [2, 1]
+
+
+@pytest.mark.parametrize(
+    ("distance", "kwargs", "match"),
+    [
+        (math.nan, {}, "finite"),
+        (math.inf, {}, "finite"),
+        (-1.0, {"side": "left"}, "at least 0"),
+    ],
+)
+def test_an_invalid_row_distance_raises_or_is_missing(
+    distance: float, kwargs: dict[str, object], match: str
+) -> None:
+    df = _column(LineStringXY, _SEGMENT, _SEGMENT).with_columns(
+        d=pl.Series([distance, 1.0])
+    )
+
+    with pytest.raises(ComputeError, match=match):
+        df.select(geo.buffer("geom", "d", **kwargs))  # type: ignore[arg-type]
+
+    out = df.select(geo.buffer("geom", "d", ignore_per_row_errors=True, **kwargs))  # type: ignore[arg-type]
+    [invalid, valid] = out.to_series().ext.storage().to_list()
+    assert invalid is None
+    assert valid is not None
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_one_side_by_column_matches_one_side_by_constant(side: str) -> None:
+    df = _column(LineStringXY, _SEGMENT).with_columns(d=pl.lit(1.0))
+
+    by_column = df.select(geo.buffer("geom", "d", side=side))  # type: ignore[arg-type]
+
+    assert by_column.to_series().ext.storage().to_list() == _buffered(
+        df, 1.0, side=side
+    )

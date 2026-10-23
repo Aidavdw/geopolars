@@ -175,7 +175,7 @@ class ExprGeoNameSpace:
 
     def buffer(
         self,
-        distance: float,
+        distance: float | IntoExprColumn,
         *,
         quadrant_segments: int = 8,
         cap_style: Literal["round", "flat", "square"] | None = None,
