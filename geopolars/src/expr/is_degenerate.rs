@@ -8,7 +8,7 @@ use geopolars_compute::degeneracy::{
 };
 use geopolars_core::{
     downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PointArray, PolygonArray,
+    PointArray, PolygonArray, Tolerance,
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};
@@ -28,7 +28,8 @@ pub struct IsDegenerateKwargs {
     check_ring_self_intersect: bool,
     check_polygon_self_overlap: bool,
     check_multi_polygon_self_overlap: bool,
-    tolerance_coincidence: Option<f64>,
+    abs_tol: Option<f64>,
+    rel_tol: Option<f64>,
 }
 
 impl Default for IsDegenerateKwargs {
@@ -39,12 +40,21 @@ impl Default for IsDegenerateKwargs {
             check_ring_self_intersect: true,
             check_polygon_self_overlap: true,
             check_multi_polygon_self_overlap: true,
-            tolerance_coincidence: None,
+            abs_tol: None,
+            rel_tol: None,
         }
     }
 }
 
 impl IsDegenerateKwargs {
+    /// `None` when neither tolerance is given; otherwise the missing one is `0.0`.
+    fn tolerance(&self) -> Option<Tolerance> {
+        (self.abs_tol.is_some() || self.rel_tol.is_some()).then(|| Tolerance {
+            abs_tol: self.abs_tol.unwrap_or(0.0),
+            rel_tol: self.rel_tol.unwrap_or(0.0),
+        })
+    }
+
     fn polygon_topology(&self) -> PolygonTopologyChecks {
         PolygonTopologyChecks {
             check_ring_self_intersect: self.check_ring_self_intersect,
@@ -75,7 +85,7 @@ fn chunk_is_degenerate(
     let (repeated, empty, tolerance) = (
         kwargs.check_repeated_points,
         kwargs.check_empty,
-        kwargs.tolerance_coincidence,
+        kwargs.tolerance(),
     );
     Ok(match kind {
         Kind::Point => points_are_degenerate(&PointArray::new(Coords::new(chunk)?), empty),

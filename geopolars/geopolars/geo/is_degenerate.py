@@ -43,7 +43,8 @@ def is_degenerate(
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
     check_multi_polygon_self_overlap: bool = True,
-    tolerance_coincidence: float | None = None,
+    abs_tol: float | None = None,
+    rel_tol: float | None = None,
 ) -> pl.Expr:
     """Whether each geometry is degenerate: technically valid, but practically not of much use.
     One `bool` per row, `True` where a check fails. A missing geometry gives a missing result.
@@ -62,9 +63,9 @@ def is_degenerate(
     | `check_multi_polygon_self_overlap` | multipolygon                   | its parts do not fit together (see below)            |
 
     "At the same place" is compared in x, y and z.
-    With `tolerance_coincidence=None`, the default, the coordinates have to be exactly equal.
-    With a number, they only have to lie within that relative tolerance of each other on every axis:
-    `|a - b| <= tolerance_coincidence * max(|a|, |b|)`.
+    With `abs_tol=None` and `rel_tol=None`, the default, the coordinates have to be exactly equal.
+    Otherwise they only have to be close on every axis, as in `pl.Expr.is_close` (see `geo.is_close`).
+    A tolerance that is not given then counts as `0.0`.
     The topology checks always compare exactly.
     A linestring may still cross itself.
 
@@ -101,7 +102,8 @@ def is_degenerate(
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
-            tolerance_coincidence=tolerance_coincidence,
+            abs_tol=abs_tol,
+            rel_tol=rel_tol,
         ),
     )
 
@@ -114,7 +116,8 @@ def null_out_degenerate(
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
     check_multi_polygon_self_overlap: bool = True,
-    tolerance_coincidence: float | None = None,
+    abs_tol: float | None = None,
+    rel_tol: float | None = None,
 ) -> pl.Expr:
     """Null out every geometry that `is_degenerate` finds, keeping the rest as they are.
     The arguments are those of `is_degenerate`, and so is the need for valid input.
@@ -134,6 +137,7 @@ def null_out_degenerate(
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
-            tolerance_coincidence=tolerance_coincidence,
+            abs_tol=abs_tol,
+            rel_tol=rel_tol,
         ),
     )

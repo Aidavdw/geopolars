@@ -79,14 +79,16 @@ def test_two_vertices_in_a_row_at_the_same_place_are_degenerate() -> None:
 
 
 @pytest.mark.parametrize(
-    ("tolerance", "degenerate"), [(None, False), (1e-9, True)], ids=["exact", "1e-9"]
+    ("tolerance", "degenerate"),
+    [({}, False), ({"rel_tol": 1e-9}, True), ({"abs_tol": 1e-9}, True)],
+    ids=["exact", "rel_tol", "abs_tol"],
 )
 def test_vertices_in_a_row_that_are_almost_the_same_need_a_tolerance(
-    tolerance: float | None, degenerate: bool
+    tolerance: dict[str, float], degenerate: bool
 ) -> None:
     line = _line((0, 0), (1, 1), (1 + 1e-12, 1), (2, 0))
 
-    got = _is_degenerate(LineStringXY(), line, tolerance_coincidence=tolerance)
+    got = _is_degenerate(LineStringXY(), line, **tolerance)
     assert got == [degenerate]
 
 

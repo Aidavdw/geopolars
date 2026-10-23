@@ -26,7 +26,7 @@ pub use is_ccw::{
 };
 pub use is_close::{
     line_strings_are_close, multi_line_strings_are_close, multi_points_are_close,
-    multi_polygons_are_close, points_are_close, polygons_are_close, Tolerance,
+    multi_polygons_are_close, points_are_close, polygons_are_close,
 };
 pub use is_ring::{line_strings_are_rings, multi_line_strings_are_rings};
 pub use is_valid::Bounds;

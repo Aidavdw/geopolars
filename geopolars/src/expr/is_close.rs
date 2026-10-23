@@ -3,11 +3,11 @@
 
 use geopolars_compute::native::{
     line_strings_are_close, multi_line_strings_are_close, multi_points_are_close,
-    multi_polygons_are_close, points_are_close, polygons_are_close, Tolerance,
+    multi_polygons_are_close, points_are_close, polygons_are_close,
 };
 use geopolars_core::{
     downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PointArray, PolygonArray,
+    PointArray, PolygonArray, Tolerance,
 };
 use polars::prelude::*;
 use polars_arrow::array::{Array, BooleanArray, ListArray};

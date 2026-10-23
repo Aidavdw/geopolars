@@ -11,7 +11,8 @@ use std::ops::Range;
 
 use geopolars_core::{
     same_place, same_place_within, LineStringArray, MultiLineStringArray, MultiPointArray,
-    MultiPolygonArray, PointArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon, ValidCoords,
+    MultiPolygonArray, PointArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon, Tolerance,
+    ValidCoords,
 };
 use geos::{Geom, Geometry};
 use polars_arrow::array::BooleanArray;
@@ -64,7 +65,7 @@ fn coincide<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
     coords: &ValidCoords,
     i: usize,
     j: usize,
-    tolerance: f64,
+    tolerance: Tolerance,
 ) -> bool {
     if TOLERANCE_COINCIDENCE {
         same_place_within::<Z>(coords, i, j, tolerance)
@@ -78,7 +79,7 @@ fn coincide<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
 fn has_repeated_vertices<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
     coords: &ValidCoords,
     vertices: Range<usize>,
-    tolerance: f64,
+    tolerance: Tolerance,
 ) -> bool {
     (vertices.start + 1..vertices.end)
         .any(|i| coincide::<TOLERANCE_COINCIDENCE, Z>(coords, i - 1, i, tolerance))
@@ -89,7 +90,7 @@ fn has_repeated_vertices<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
 fn has_repeated_points<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
     coords: &ValidCoords,
     points: Range<usize>,
-    tolerance: f64,
+    tolerance: Tolerance,
 ) -> bool {
     points.clone().any(|i| {
         (i + 1..points.end).any(|j| coincide::<TOLERANCE_COINCIDENCE, Z>(coords, i, j, tolerance))
@@ -223,7 +224,7 @@ fn multi_points_are_degenerate_with<
     const Z: bool,
 >(
     array: &MultiPointArray,
-    tolerance: f64,
+    tolerance: Tolerance,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         let points = array.rows.range(i);
@@ -241,12 +242,12 @@ pub fn multi_points_are_degenerate(
     array: &MultiPointArray,
     check_repeated_points: bool,
     check_empty: bool,
-    tolerance_coincidence: Option<f64>,
+    tolerance: Option<Tolerance>,
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        multi_points_are_degenerate_with(array, tolerance_coincidence.unwrap_or_default());
-        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
+        multi_points_are_degenerate_with(array, tolerance.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }
 
@@ -260,7 +261,7 @@ fn line_strings_are_degenerate_with<
     const Z: bool,
 >(
     array: &LineStringArray,
-    tolerance: f64,
+    tolerance: Tolerance,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         let vertices = array.rows.range(i);
@@ -278,12 +279,12 @@ pub fn line_strings_are_degenerate(
     array: &LineStringArray,
     check_repeated_points: bool,
     check_empty: bool,
-    tolerance_coincidence: Option<f64>,
+    tolerance: Option<Tolerance>,
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        line_strings_are_degenerate_with(array, tolerance_coincidence.unwrap_or_default());
-        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
+        line_strings_are_degenerate_with(array, tolerance.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }
 
@@ -296,7 +297,7 @@ fn multi_line_strings_are_degenerate_with<
     const Z: bool,
 >(
     array: &MultiLineStringArray,
-    tolerance: f64,
+    tolerance: Tolerance,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         let parts = array.rows.range(i);
@@ -316,12 +317,12 @@ pub fn multi_line_strings_are_degenerate(
     array: &MultiLineStringArray,
     check_repeated_points: bool,
     check_empty: bool,
-    tolerance_coincidence: Option<f64>,
+    tolerance: Option<Tolerance>,
 ) -> BooleanArray {
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        multi_line_strings_are_degenerate_with(array, tolerance_coincidence.unwrap_or_default());
-        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
+        multi_line_strings_are_degenerate_with(array, tolerance.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }
 
@@ -337,7 +338,7 @@ fn polygons_are_degenerate_with<
 >(
     array: &PolygonArray,
     topology: Option<&PolygonTopologyChecks>,
-    tolerance: f64,
+    tolerance: Tolerance,
 ) -> GeoComputeResult<BooleanArray> {
     try_per_row_bool(&array.rows, |i| {
         let polygon = array.get(i);
@@ -363,13 +364,13 @@ pub fn polygons_are_degenerate(
     check_repeated_points: bool,
     check_empty: bool,
     topology: &PolygonTopologyChecks,
-    tolerance_coincidence: Option<f64>,
+    tolerance: Option<Tolerance>,
 ) -> GeoComputeResult<BooleanArray> {
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        polygons_are_degenerate_with(array, topology, tolerance_coincidence.unwrap_or_default());
-        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
+        polygons_are_degenerate_with(array, topology, tolerance.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }
 
@@ -384,7 +385,7 @@ fn multi_polygons_are_degenerate_with<
 >(
     array: &MultiPolygonArray,
     topology: Option<&MultiPolygonTopologyChecks>,
-    tolerance: f64,
+    tolerance: Tolerance,
 ) -> GeoComputeResult<BooleanArray> {
     try_per_row_bool(&array.rows, |i| {
         let multi = array.get(i);
@@ -412,12 +413,12 @@ pub fn multi_polygons_are_degenerate(
     check_repeated_points: bool,
     check_empty: bool,
     topology: &MultiPolygonTopologyChecks,
-    tolerance_coincidence: Option<f64>,
+    tolerance: Option<Tolerance>,
 ) -> GeoComputeResult<BooleanArray> {
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
     with_const_flags!(
-        multi_polygons_are_degenerate_with(array, topology, tolerance_coincidence.unwrap_or_default());
-        check_repeated_points, check_empty, tolerance_coincidence.is_some(), z
+        multi_polygons_are_degenerate_with(array, topology, tolerance.unwrap_or_default());
+        check_repeated_points, check_empty, tolerance.is_some(), z
     )
 }

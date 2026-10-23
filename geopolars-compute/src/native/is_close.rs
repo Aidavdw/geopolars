@@ -13,7 +13,7 @@ use std::ops::Range;
 
 use geopolars_core::{
     is_close, LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PointArray, PolygonArray, ValidCoords, ValidList,
+    PointArray, PolygonArray, Tolerance, ValidCoords, ValidList,
 };
 use polars_arrow::array::BooleanArray;
 use polars_arrow::bitmap::Bitmap;
@@ -22,20 +22,12 @@ use polars_arrow::datatypes::ArrowDataType;
 
 use crate::per_row::per_row_bool;
 
-/// As `pl.Expr.is_close`'s `abs_tol` and `rel_tol`.
-#[derive(Debug, Clone, Copy)]
-pub struct Tolerance {
-    pub abs_tol: f64,
-    pub rel_tol: f64,
-}
-
 /// If `NANS_EQUAL=true`, two NaNs are close too.
 #[inline(always)]
 fn values_are_close<const NANS_EQUAL: bool>(a: &[f64], b: &[f64], tolerance: Tolerance) -> bool {
-    a.iter().zip(b).all(|(&a, &b)| {
-        is_close(a, b, tolerance.abs_tol, tolerance.rel_tol)
-            || (NANS_EQUAL && a.is_nan() && b.is_nan())
-    })
+    a.iter()
+        .zip(b)
+        .all(|(&a, &b)| is_close(a, b, tolerance) || (NANS_EQUAL && a.is_nan() && b.is_nan()))
 }
 
 /// Whether there are as many coordinates in `a_vertices` as in `b_vertices`,
