@@ -29,6 +29,14 @@ def _nested(dimension: Dimension, layers: int) -> pl.DataType:
     return dtype
 
 
+def _spelled(parts: list | str, dimension: Dimension) -> list | dict[str, float]:
+    """`parts` with every name of a coordinate swapped for that coordinate."""
+    if isinstance(parts, list):
+        return [_spelled(part, dimension) for part in parts]
+    value = {"empty": math.nan, "a": 0.0, "b": 1.0, "c": 2.0}[parts]
+    return {"x": value, "y": value} | dict.fromkeys(dimension.coords[2:], 0.0)
+
+
 def test_a_point_counts_one(coords: pl.DataFrame, dimension: Dimension) -> None:
     out = coords.select(dimension.point()).select(geo.count_coordinates("point"))
 
@@ -47,6 +55,52 @@ def test_an_empty_point_counts_zero_and_a_missing_one_null(
     out = df.select(geo.count_coordinates("point"))
 
     assert out["point"].to_list() == [0, 1, None]
+
+
+def test_an_empty_point_counts_one_with_include_empty(dimension: Dimension) -> None:
+    nan = math.nan
+    df = pl.DataFrame({axis: [nan, 1.0, None] for axis in dimension.coords}).select(
+        dimension.point()
+    )
+
+    out = df.select(geo.count_coordinates("point", include_empty=True))
+
+    assert out["point"].to_list() == [1, 1, None]
+
+
+@pytest.mark.parametrize(
+    ("geometry", "layers", "row", "without", "with_"),
+    [
+        (LineStringType, 1, ["empty", "a", "empty"], 1, 3),
+        (MultiPointType, 1, ["empty", "a", "b"], 2, 3),
+        # The closing coordinate is skipped either way.
+        (PolygonType, 2, [["a", "empty", "b", "c", "a"]], 3, 4),
+        (MultiLineStringType, 2, [["empty"], ["a", "empty", "b"]], 2, 4),
+        (MultiPolygonType, 3, [[["a", "empty", "b", "c", "a"]]], 3, 4),
+    ],
+    ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
+)
+def test_include_empty_counts_the_empty_points(
+    geometry: type[GeoArrowType],
+    layers: int,
+    row: list,
+    without: int,
+    with_: int,
+    dimension: Dimension,
+) -> None:
+    # Relabelled rather than built: a constructor pushes an empty part to the row.
+    dtype = geometry.of_dimension(dimension.coords)()
+    df = pl.DataFrame(
+        {"storage": [_spelled(row, dimension)]},
+        schema={"storage": _nested(dimension, layers)},
+    ).select(pl.col("storage").ext.to(dtype).alias("geometry"))
+
+    out = df.select(
+        geo.count_coordinates("geometry").alias("without"),
+        geo.count_coordinates("geometry", include_empty=True).alias("with"),
+    )
+
+    assert out.row(0) == (without, with_)
 
 
 def test_a_linestring_counts_its_vertices(
@@ -143,10 +197,17 @@ def test_refuses_a_non_geometry_while_resolving_the_schema() -> None:
         lf.collect_schema()
 
 
-def test_the_namespace_matches_the_function(ring_coords: pl.DataFrame) -> None:
+@pytest.mark.parametrize("include_empty", [False, True])
+def test_the_namespace_matches_the_function(
+    ring_coords: pl.DataFrame, include_empty: bool
+) -> None:
     df = XY.polygons(ring_coords)
 
     assert_series_equal(
-        df.select(gpl.col("polygon").geo.count_coordinates()).to_series(),
-        df.select(geo.count_coordinates("polygon")).to_series(),
+        df.select(
+            gpl.col("polygon").geo.count_coordinates(include_empty=include_empty)
+        ).to_series(),
+        df.select(
+            geo.count_coordinates("polygon", include_empty=include_empty)
+        ).to_series(),
     )

@@ -2,43 +2,50 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING
 
-import polars as pl
+from polars.plugins import register_plugin_function
 
+from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
-from geopolars.geo.is_empty import _empty_point
-from geopolars.geo.mean_coordinate import _coordinates
 
 if TYPE_CHECKING:
+    import polars as pl
+
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
 
 
-def _count_coordinates(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
-    if geometry._nesting == 0:
-        # A null point stays null: `is_nan` of null is null.
-        count = ~_empty_point(column.ext.storage())
-    else:
-        count = _coordinates(geometry, column)
-    # The same dtype whatever the nesting, the one Polars counts lengths in.
-    return count.cast(pl.UInt32)
+def _count_coordinates(
+    column: pl.Expr, geometry: GeoArrowType, *, include_empty: bool
+) -> pl.Expr:
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[column],
+        function_name="count_coordinates",
+        kwargs={"include_empty": include_empty},
+        is_elementwise=True,
+    )
 
 
-def count_coordinates(geometry: IntoExprColumn) -> pl.Expr:
+def count_coordinates(
+    geometry: IntoExprColumn, *, include_empty: bool = False
+) -> pl.Expr:
     """How many coordinates a geometry is made of, over all of its parts.
 
-    This gives one count per geometry, however deeply it is nested.
+    This gives one `UInt32` count per geometry, however deeply it is nested.
 
     | in | counts |
     | - | - |
     | `PointXY[ZM]` | `1`, or `0` when it is empty |
-    | `LineStringXY[ZM]` | its vertices |
-    | `PolygonXY[ZM]` | the vertices of every ring |
-    | `MultiPointXY[ZM]` | its points |
-    | `MultiLineStringXY[ZM]` | the vertices of every linestring |
-    | `MultiPolygonXY[ZM]` | the vertices of every ring of every polygon |
+    | `LineStringXY[ZM]` | its non-empty vertices |
+    | `PolygonXY[ZM]` | the non-empty vertices of every ring |
+    | `MultiPointXY[ZM]` | its non-empty points |
+    | `MultiLineStringXY[ZM]` | the non-empty vertices of every linestring |
+    | `MultiPolygonXY[ZM]` | the non-empty vertices of every ring of every polygon |
 
+    With `include_empty=True`, an empty point (NaN `x` and `y`) counts like any other.
     This skips a ring's last coordinate, as this repeats its first.
     A geometry without coordinates counts `0`; a missing geometry gives null.
 
@@ -46,4 +53,6 @@ def count_coordinates(geometry: IntoExprColumn) -> pl.Expr:
     df.select(geo.count_coordinates("parcel"))
     ```
     """
-    return on_geometry(geometry, _count_coordinates)
+    return on_geometry(
+        geometry, partial(_count_coordinates, include_empty=include_empty)
+    )

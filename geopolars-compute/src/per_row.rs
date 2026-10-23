@@ -30,6 +30,13 @@ pub(crate) fn per_row_bool(rows: &List, test: impl Fn(usize) -> bool) -> Boolean
     tested
 }
 
+/// [per_row], for a count per row.
+#[inline(always)]
+pub(crate) fn per_row_count(rows: &List, count: impl Fn(usize) -> u32) -> PrimitiveArray<u32> {
+    let Ok(counts) = per_row_values(rows, |i| Ok::<_, std::convert::Infallible>(count(i)));
+    PrimitiveArray::from_vec(counts).with_validity(rows.validity().cloned())
+}
+
 /// A `bool` per item, missing where it is `None`.
 pub(crate) fn optional_bool_array(tested: &[Option<bool>]) -> BooleanArray {
     let values = tested

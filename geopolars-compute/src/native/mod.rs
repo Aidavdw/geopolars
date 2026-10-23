@@ -3,6 +3,7 @@
 mod affine;
 mod area;
 mod centroid;
+mod count_coordinates;
 pub mod distance;
 mod is_ccw;
 mod is_close;
@@ -19,6 +20,11 @@ pub use affine::{
 pub use area::{multi_polygon_areas, polygon_areas, AreaMetric};
 pub use centroid::{
     line_string_centroids, multi_line_string_centroids, multi_polygon_centroids, polygon_centroids,
+};
+pub use count_coordinates::{
+    line_string_coordinate_counts, multi_line_string_coordinate_counts,
+    multi_point_coordinate_counts, multi_polygon_coordinate_counts, point_coordinate_counts,
+    polygon_coordinate_counts,
 };
 pub use distance::{against_one, pairwise, DistanceMetric};
 pub use is_ccw::{

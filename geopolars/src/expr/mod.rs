@@ -14,6 +14,7 @@ pub mod centroid;
 pub mod construct;
 pub mod convex_hull;
 pub mod coords;
+pub mod count_coordinates;
 pub mod crs;
 pub mod distance;
 pub mod is_ccw;
