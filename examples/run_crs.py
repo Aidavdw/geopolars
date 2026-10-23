@@ -76,12 +76,12 @@ print("Reprojecting needs to know where you start from.")
 print("(PROJ also reports the unknown code on stderr itself.)")
 try:
     df.select(geo.to_crs(geo.point("lon", "lat"), "EPSG:28992"))
-except Exception as e:
+except pl.exceptions.ComputeError as e:
     detail = next(l for l in str(e).splitlines() if "CRS" in l)
     print(f"  no CRS -> {type(e).__name__}: {detail.strip()}")
 try:
     points.select(geo.to_crs("xy", "EPSG:not-a-code"))
-except Exception as e:
+except pl.exceptions.ComputeError as e:
     detail = next(l for l in str(e).splitlines() if "cannot reproject" in l)
     print(f"  unknown CRS -> {type(e).__name__}: {detail.strip()}")
 
@@ -125,7 +125,7 @@ try:
         )
     )
     lines_lf.collect_schema()
-except Exception as e:
+except pl.exceptions.ComputeError as e:
     detail = next(l for l in str(e).splitlines() if "already declare" in l)
     print(f"  {type(e).__name__}: {detail.strip()}")
 print()

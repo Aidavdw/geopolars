@@ -2,7 +2,6 @@ import tempfile
 from pathlib import Path
 
 import polars as pl
-from geopolars.datatypes import LineStringType, PointType
 
 import geopolars as gpl
 from geopolars import (
@@ -13,6 +12,7 @@ from geopolars import (
     PolygonXY,
     geo,
 )
+from geopolars.datatypes import LineStringType, PointType
 
 df = pl.DataFrame(
     {
@@ -78,7 +78,7 @@ print("The coordinate columns have to nest the same way, or there are no")
 print("vertices to be had.")
 try:
     grouped.select(geo.line_string_from_columns("lon", pl.col("lat").list.head(1)))
-except Exception as e:
+except pl.exceptions.ComputeError as e:
     detail = next(l for l in str(e).splitlines() if "nest the same way" in l)
     print(f"  {type(e).__name__}: {detail.strip()}")
 print()
@@ -149,7 +149,7 @@ print("Wrong input is reported while building the expression, before collecting.
 for column in ("route", "xy"):
     try:
         lines.lazy().select(geo.line_string_from_vertices(column)).collect_schema()
-    except Exception as e:
+    except pl.exceptions.ComputeError as e:
         detail = next(l for l in str(e).splitlines() if "expected" in l)
         print(f"  {column:>5} -> {type(e).__name__}: {detail.strip()}")
 

@@ -2,10 +2,10 @@ import tempfile
 from pathlib import Path
 
 import polars as pl
-from geopolars.datatypes import PointType
 
 import geopolars as gpl
 from geopolars import PointXY, PointXYM, PointXYZ, PointXYZM, geo
+from geopolars.datatypes import PointType
 
 df = pl.DataFrame(
     {
@@ -54,7 +54,7 @@ print("  PointXYM() == PointXYZ() ->", PointXYM() == PointXYZ(), "\n")
 print("You deliberately can't access the underlying data directly.")
 try:
     points.select(pl.col("xyz").struct.field("z"))
-except Exception as e:
+except pl.exceptions.StructFieldNotFoundError as e:
     print(f"struct.field through the type -> {type(e).__name__}: {e}")
 print("You can still do it through `col().ext.storage()`: ")
 print(
@@ -87,7 +87,7 @@ print("A dz that could not do anything is an error, not a silent no-op.")
 for name in ("xy", "xym"):
     try:
         points.select(gpl.col(name).geo.translate((0.0, 0.0, 1.0)))
-    except Exception as e:
+    except TypeError as e:
         detail = next(l for l in str(e).splitlines() if "no z coordinate" in l)
         print(f"  {name:>5} -> {type(e).__name__}: {detail.strip()}")
 
@@ -111,7 +111,7 @@ print(
 )
 try:
     df.lazy().select(gpl.col("lon").geo.translate((1.0, 1.0))).collect_schema()
-except Exception as e:
+except TypeError as e:
     detail = next(l for l in str(e).splitlines() if "geoarrow.point" in l)
     print(f"non-point input -> {type(e).__name__}: {detail.strip()}")
 

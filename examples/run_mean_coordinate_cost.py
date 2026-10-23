@@ -21,10 +21,10 @@ import operator
 import time
 
 import polars as pl
-from geopolars.datatypes import LineStringType
 
 import geopolars as gpl
 from geopolars import geo
+from geopolars.datatypes import LineStringType
 
 # Not `from geopolars.geo import ...`: that name is the function, not the module.
 impl = importlib.import_module("geopolars.geo.mean_coordinate")

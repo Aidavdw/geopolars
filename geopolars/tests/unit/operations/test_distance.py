@@ -8,12 +8,12 @@ from typing import Literal
 
 import polars as pl
 import pytest
-from geopolars.datatypes import PointType, PointXY
 from polars.exceptions import ComputeError
 from polars.testing import assert_series_equal
 
 import geopolars as gpl
 from geopolars import geo
+from geopolars.datatypes import PointType, PointXY
 from tests.unit.conftest import XY, Dimension
 
 WGS84 = "EPSG:4326"

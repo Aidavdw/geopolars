@@ -16,7 +16,7 @@ from geopolars.datatypes import (
     PolygonXYZ,
     PolygonXYZM,
 )
-from tests.unit.conftest import XY, Dimension
+from tests.unit.conftest import Dimension
 
 _XY_RINGS = pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})))
 

@@ -32,6 +32,10 @@ geopolars = { workspace = true }
 polars = { path = ".polars/py-polars" }
 polars-runtime-32 = { path = ".polars/py-polars/runtime/polars-runtime-32" }
 
+[tool.ruff]
+# resolve first-party imports (`geopolars`, `tests`) from here
+src = ["geopolars"]
+
 [dependency-groups]
 dev = [
     # Pinned: https://github.com/PyO3/maturin/issues/3106

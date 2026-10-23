@@ -10,10 +10,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import polars as pl
-from geopolars.datatypes import BoxXY, PointType, PointXY
 from polars.testing import assert_frame_equal
 
 from geopolars import geo
+from geopolars.datatypes import BoxXY, PointType, PointXY
 from tests.unit.conftest import Dimension
 
 if TYPE_CHECKING:

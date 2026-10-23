@@ -6,6 +6,9 @@ import math
 
 import polars as pl
 import pytest
+from polars.exceptions import ComputeError, ShapeError
+
+from geopolars import geo
 from geopolars.datatypes import (
     GeoArrowType,
     LineStringXY,
@@ -17,9 +20,6 @@ from geopolars.datatypes import (
     PointXYZ,
     PolygonXY,
 )
-from polars.exceptions import ComputeError, ShapeError
-
-from geopolars import geo
 
 _XY = pl.Struct({"x": pl.Float64, "y": pl.Float64})
 _XYM = pl.Struct({"x": pl.Float64, "y": pl.Float64, "m": pl.Float64})

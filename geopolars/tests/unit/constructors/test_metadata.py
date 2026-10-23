@@ -7,6 +7,10 @@ from collections.abc import Callable
 
 import polars as pl
 import pytest
+from polars.exceptions import ComputeError
+
+import geopolars as gpl
+from geopolars import geo
 from geopolars.datatypes import (
     GeoArrowType,
     LineStringXY,
@@ -17,10 +21,6 @@ from geopolars.datatypes import (
     PointXY,
     PolygonXY,
 )
-from polars.exceptions import ComputeError
-
-import geopolars as gpl
-from geopolars import geo
 from tests.unit.conftest import Dimension
 
 WGS84 = "EPSG:4326"
