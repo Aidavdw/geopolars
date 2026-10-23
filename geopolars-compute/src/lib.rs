@@ -37,8 +37,11 @@ mod metric;
 #[cfg(feature = "native")]
 pub mod native;
 #[cfg(any(feature = "native", feature = "rsgeo", feature = "geos"))]
-// Some helpers are only for the `native` kernels.
-#[cfg_attr(not(feature = "native"), allow(dead_code))]
+// Some helpers are only for `native`, others only for `geos` and `rsgeo`.
+#[cfg_attr(
+    not(all(feature = "native", any(feature = "geos", feature = "rsgeo"))),
+    allow(dead_code)
+)]
 mod per_row;
 pub mod proj;
 #[cfg(feature = "rsgeo")]
@@ -46,6 +49,7 @@ pub mod rsgeo;
 #[cfg(feature = "native")]
 pub mod validity;
 
+#[cfg(any(feature = "geos", feature = "rsgeo"))]
 use error::row_or_missing;
 pub use error::{GeoComputeError, GeoComputeResult};
 pub use metric::{BaseMetric, GeodesicMetric, Planar, WithHeight};

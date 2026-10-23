@@ -29,7 +29,7 @@ pub(crate) use is_valid::{
     coordinate_is_valid, line_string_shape_is_valid, polygon_shape_is_valid,
 };
 // Only for `degeneracy`.
-#[cfg(feature = "rsgeo")]
+#[cfg(feature = "geos")]
 pub(crate) use is_valid::is_empty_point;
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use rings::{
