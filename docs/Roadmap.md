@@ -56,7 +56,7 @@ geometry editing
 - [ ] Linestring joining
 - [ ] polygon construction from linestrings
 - [ ] Adding additional holes to polygons from linestrings
-- [ ] reverse lines
+- [x] reverse lines
 - [ ] make lines cw/ccw
 - [ ] drop_dims(z: bool, m: bool)
 - [ ] to_linestring() takes list of points, multipoint, linestring

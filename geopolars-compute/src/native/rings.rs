@@ -71,7 +71,7 @@ fn kept_rings_of_multi_polygons(
 }
 
 /// Offsets of lists of lengths `lengths`.
-fn offsets_of(lengths: impl Iterator<Item = usize>) -> OffsetsBuffer<i64> {
+pub(super) fn offsets_of(lengths: impl Iterator<Item = usize>) -> OffsetsBuffer<i64> {
     Offsets::try_from_lengths(lengths)
         .expect("no more items than the input")
         .into()

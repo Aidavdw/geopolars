@@ -15,6 +15,7 @@ mod is_simple;
 // Only for `geoarrow_validity` and `ogc_validity`.
 mod is_valid;
 mod length;
+mod reverse;
 mod rings;
 
 pub use affine::{
@@ -65,6 +66,10 @@ pub use is_valid::{Bounds, CoordinateChecks};
 #[cfg(feature = "geos")]
 pub(crate) use is_valid::{line_string_shape_is_valid, polygon_shape_is_valid};
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
+pub use reverse::{
+    reverse_line_strings, reverse_multi_line_strings, reverse_multi_points,
+    reverse_multi_polygons, reverse_polygons,
+};
 pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,
     polygon_interiors,

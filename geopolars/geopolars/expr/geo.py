@@ -164,6 +164,11 @@ class ExprGeoNameSpace:
 
         return interior(self._expr)
 
+    def reverse(self, *, reverse_holes: bool = False, nested: bool = True) -> pl.Expr:
+        from geopolars.geo.reverse import reverse
+
+        return reverse(self._expr, reverse_holes=reverse_holes, nested=nested)
+
     def convex_hull(
         self,
         *,

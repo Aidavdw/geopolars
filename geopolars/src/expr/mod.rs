@@ -28,6 +28,7 @@ pub mod is_simple;
 pub mod is_valid;
 pub mod length;
 pub mod offset_curve;
+pub mod reverse;
 pub mod rings;
 pub mod rings_overlap;
 pub mod simplify;
