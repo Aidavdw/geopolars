@@ -313,6 +313,16 @@ class ExprGeoNameSpace:
 
         return is_ccw(self._expr, holes_cw=holes_cw)
 
+    def to_ccw(self, *, holes_cw: bool = True) -> pl.Expr:
+        from geopolars.geo.to_ccw import to_ccw
+
+        return to_ccw(self._expr, holes_cw=holes_cw)
+
+    def to_cw(self, *, holes_ccw: bool = True) -> pl.Expr:
+        from geopolars.geo.to_ccw import to_cw
+
+        return to_cw(self._expr, holes_ccw=holes_ccw)
+
     def is_valid_geoarrow(
         self,
         *,

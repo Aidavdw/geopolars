@@ -62,6 +62,7 @@ from geopolars.geo.offset_curve import offset_curve
 from geopolars.geo.reverse import reverse
 from geopolars.geo.rings_overlap import rings_overlap
 from geopolars.geo.simplify import simplify
+from geopolars.geo.to_ccw import to_ccw, to_cw
 from geopolars.geo.to_polygon import to_polygon
 from geopolars.geo.wkb import from_wkb, to_wkb
 from geopolars.geo.wkt import from_wkt, to_wkt
@@ -128,7 +129,9 @@ __all__ = [
     "simplify",
     "skew",
     "skew_about_centroid",
+    "to_ccw",
     "to_crs",
+    "to_cw",
     "to_polygon",
     "to_wkb",
     "to_wkt",

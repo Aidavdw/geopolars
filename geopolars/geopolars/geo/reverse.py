@@ -56,7 +56,6 @@ def reverse(
     With `nested=False`, every part keeps its place.
     For a multilinestring, this reverses it as a whole, which is the cheaper option.
     For a multipolygon, it is the more expensive one.
-    A multipoint always has the order of its points reversed.
 
     A missing geometry stays missing, and an empty one stays empty.
 

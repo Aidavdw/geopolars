@@ -2,8 +2,8 @@
 //! See `reverse` in Python for the rules.
 
 use geopolars_compute::native::{
-    reverse_line_strings, reverse_multi_line_strings, reverse_multi_points,
-    reverse_multi_polygons, reverse_polygons,
+    reverse_line_strings, reverse_multi_line_strings, reverse_multi_points, reverse_multi_polygons,
+    reverse_polygons,
 };
 use geopolars_compute::with_const_flags;
 use geopolars_core::{

@@ -1,4 +1,4 @@
-//! Whether a geometry runs counter-clockwise in x and y.
+//! Whether a geometry runs counter-clockwise in x and y, and making it so.
 //! m and z don't really matter here.
 //!
 //! # Const generic flags
@@ -14,13 +14,16 @@
 //! If `HOLES_CW=true`, the holes have to run clockwise.
 //! If `HOLES_CW=false`, the holes have to run counter-clockwise, like the exterior.
 
+use std::ops::Range;
+
 use geopolars_core::{
     LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray, ScalarLineString,
-    ScalarPolygon,
+    ScalarPolygon, ValidCoords, ValidList,
 };
 use polars_arrow::array::BooleanArray;
 
 use super::area::twice_signed_area;
+use super::reverse::{ranges_of_lists, with_ranges_reversed};
 use crate::per_row::per_row_bool;
 
 /// Whether `ring` runs counter-clockwise.
@@ -78,4 +81,88 @@ pub fn multi_polygons_are_ccw<const HOLES_CW: bool>(array: &MultiPolygonArray) -
             .polygons()
             .all(|polygon| polygon_is_ccw::<HOLES_CW>(&polygon))
     })
+}
+
+/// Which of `lines` run clockwise, so have to be reversed to run counter-clockwise.
+/// Collected, as [with_ranges_reversed] goes over them once per axis.
+fn lines_to_flip(
+    lines: impl Iterator<Item = Range<usize>>,
+    coords: &ValidCoords,
+) -> Vec<Range<usize>> {
+    lines
+        .filter(|vertices| {
+            ring_runs::<true>(&ScalarLineString {
+                coords,
+                vertices: vertices.clone(),
+            })
+        })
+        .collect()
+}
+
+/// Which rings of `polygons` have to be reversed to [run counter-clockwise](polygon_is_ccw).
+/// Each item of `polygons` is the range of that polygon's rings in `rings`.
+/// Collected, as [with_ranges_reversed] goes over them once per axis.
+fn rings_to_flip<const HOLES_CW: bool>(
+    polygons: impl Iterator<Item = Range<usize>>,
+    rings: &ValidList,
+    coords: &ValidCoords,
+) -> Vec<Range<usize>> {
+    polygons
+        .flat_map(|polygon| {
+            let exterior = polygon.start;
+            polygon.map(move |ring| (ring == exterior, rings.range(ring)))
+        })
+        .filter(|(is_exterior, vertices)| {
+            let ring = ScalarLineString {
+                coords,
+                vertices: vertices.clone(),
+            };
+            // A ring that runs the way it should not has to be flipped.
+            if *is_exterior || !HOLES_CW {
+                ring_runs::<true>(&ring)
+            } else {
+                ring_runs::<false>(&ring)
+            }
+        })
+        .map(|(_, vertices)| vertices)
+        .collect()
+}
+
+pub fn line_strings_to_ccw(array: &LineStringArray) -> LineStringArray {
+    let rows = ranges_of_lists(array.rows.ignoring_validity());
+    let flipped = lines_to_flip(rows, &array.coords);
+    LineStringArray {
+        rows: array.rows.clone(),
+        coords: with_ranges_reversed(&array.coords, flipped.into_iter()),
+    }
+}
+
+pub fn polygons_to_ccw<const HOLES_CW: bool>(array: &PolygonArray) -> PolygonArray {
+    let rows = ranges_of_lists(array.rows.ignoring_validity());
+    let flipped = rings_to_flip::<HOLES_CW>(rows, &array.rings, &array.coords);
+    PolygonArray {
+        rows: array.rows.clone(),
+        rings: array.rings.clone(),
+        coords: with_ranges_reversed(&array.coords, flipped.into_iter()),
+    }
+}
+
+pub fn multi_line_strings_to_ccw(array: &MultiLineStringArray) -> MultiLineStringArray {
+    let flipped = lines_to_flip(ranges_of_lists(&array.lines), &array.coords);
+    MultiLineStringArray {
+        rows: array.rows.clone(),
+        lines: array.lines.clone(),
+        coords: with_ranges_reversed(&array.coords, flipped.into_iter()),
+    }
+}
+
+pub fn multi_polygons_to_ccw<const HOLES_CW: bool>(array: &MultiPolygonArray) -> MultiPolygonArray {
+    let polygons = ranges_of_lists(&array.polygons);
+    let flipped = rings_to_flip::<HOLES_CW>(polygons, &array.rings, &array.coords);
+    MultiPolygonArray {
+        rows: array.rows.clone(),
+        polygons: array.polygons.clone(),
+        rings: array.rings.clone(),
+        coords: with_ranges_reversed(&array.coords, flipped.into_iter()),
+    }
 }

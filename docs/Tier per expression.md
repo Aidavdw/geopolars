@@ -28,6 +28,8 @@ the comment says when one without a CRS takes a different tier.
 | `is_simple` | A | always `True` | B | GEOS; x/y only | B | every ring as a line; GEOS | A | no two points equal in x/y | B | GEOS, as a whole | B | every ring as a line; GEOS |
 | `rings_overlap` | - | | B | hacked as polygon; GEOS | - | | - | | - | | - | |
 | `is_ccw` | - | | A | CCW | A | | - | | A | every part combined | A | every part combined |
+| `to_ccw` | - | | A | | A | `holes_cw` | - | | A | every part | A | every part |
+| `to_cw` | - | | C | `to_ccw` + `reverse` | C | | - | | C | | C | |
 | `is_close` | A | pairwise or against one | A | same coordinates in order | A | same rings | A | | A | same parts | A | same polygons and rings |
 | `is_valid_geoarrow` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
 | `null_out_invalid_geoarrow` | A | nulls what `is_valid_geoarrow` rejects | A | | A | | A | | A | | A | |

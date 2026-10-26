@@ -45,7 +45,9 @@ pub use has_repeated_points::{
     points_have_repeated_points, polygons_have_repeated_points,
 };
 pub use is_ccw::{
-    line_strings_are_ccw, multi_line_strings_are_ccw, multi_polygons_are_ccw, polygons_are_ccw,
+    line_strings_are_ccw, line_strings_to_ccw, multi_line_strings_are_ccw,
+    multi_line_strings_to_ccw, multi_polygons_are_ccw, multi_polygons_to_ccw, polygons_are_ccw,
+    polygons_to_ccw,
 };
 pub use is_close::{
     line_strings_are_close, multi_line_strings_are_close, multi_points_are_close,
@@ -67,8 +69,8 @@ pub use is_valid::{Bounds, CoordinateChecks};
 pub(crate) use is_valid::{line_string_shape_is_valid, polygon_shape_is_valid};
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use reverse::{
-    reverse_line_strings, reverse_multi_line_strings, reverse_multi_points,
-    reverse_multi_polygons, reverse_polygons,
+    reverse_line_strings, reverse_multi_line_strings, reverse_multi_points, reverse_multi_polygons,
+    reverse_polygons,
 };
 pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,

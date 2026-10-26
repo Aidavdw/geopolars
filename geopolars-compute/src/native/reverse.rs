@@ -30,12 +30,14 @@ use polars_arrow::offset::Offsets;
 use super::rings::offsets_of;
 
 #[inline(always)]
-fn ranges_of_lists(lists: &ValidList) -> impl Iterator<Item = Range<usize>> + Clone + '_ {
+pub(super) fn ranges_of_lists(
+    lists: &ValidList,
+) -> impl Iterator<Item = Range<usize>> + Clone + '_ {
     (0..lists.len()).map(move |i| lists.range(i))
 }
 
 /// `coords` copied, with each of `ranges` reversed.
-fn with_ranges_reversed(
+pub(super) fn with_ranges_reversed(
     coords: &ValidCoords,
     ranges: impl Iterator<Item = Range<usize>> + Clone,
 ) -> ValidCoords {
