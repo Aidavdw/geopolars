@@ -59,6 +59,7 @@ from geopolars.geo.is_valid import (
 from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.offset_curve import offset_curve
+from geopolars.geo.remove_repeated_points import remove_repeated_points
 from geopolars.geo.reverse import reverse
 from geopolars.geo.rings_overlap import rings_overlap
 from geopolars.geo.simplify import simplify
@@ -119,6 +120,7 @@ __all__ = [
     "polygon",
     "polygon_from_columns",
     "polygon_from_rings",
+    "remove_repeated_points",
     "reverse",
     "rings_overlap",
     "rotate",

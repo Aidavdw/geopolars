@@ -402,6 +402,28 @@ class ExprGeoNameSpace:
 
         return has_repeated_points(self._expr, abs_tol=abs_tol, rel_tol=rel_tol)
 
+    def remove_repeated_points(
+        self,
+        *,
+        abs_tol: float | None = None,
+        rel_tol: float | None = None,
+        unique_z: bool = True,
+        unique_m: bool = False,
+        collapsed_lines: Literal["keep_ends", "single_vertex"] = "keep_ends",
+        drop_short_lines: bool = False,
+    ) -> pl.Expr:
+        from geopolars.geo.remove_repeated_points import remove_repeated_points
+
+        return remove_repeated_points(
+            self._expr,
+            abs_tol=abs_tol,
+            rel_tol=rel_tol,
+            unique_z=unique_z,
+            unique_m=unique_m,
+            collapsed_lines=collapsed_lines,
+            drop_short_lines=drop_short_lines,
+        )
+
     def distance(
         self,
         other: IntoExprColumn,

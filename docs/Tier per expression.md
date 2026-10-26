@@ -36,6 +36,7 @@ the comment says when one without a CRS takes a different tier.
 | `is_valid_ogc` | A | bounds from PROJ (plan-time) | A | | A/B | topology through GEOS | A | EP | A | EP | A/B | EP and GEOS |
 | `null_out_invalid_ogc` | A | nulls what `is_valid_ogc` rejects | A | | A/B | | A | | A | | A/B | |
 | `has_repeated_points` | A | always `False` | A | | A | | A | | A | EP | A | EP |
+| `remove_repeated_points` | A | returns the input | A | | A | | A | | A | | A | |
 | `distance` | A/B | [^2] | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |

@@ -15,6 +15,7 @@ mod is_simple;
 // Only for `geoarrow_validity` and `ogc_validity`.
 mod is_valid;
 mod length;
+mod remove_repeated_points;
 mod reverse;
 mod rings;
 
@@ -68,6 +69,11 @@ pub use is_valid::{Bounds, CoordinateChecks};
 #[cfg(feature = "geos")]
 pub(crate) use is_valid::{line_string_shape_is_valid, polygon_shape_is_valid};
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
+pub use remove_repeated_points::{
+    line_strings_without_repeated_points, multi_line_strings_without_repeated_points,
+    multi_points_without_repeated_points, multi_polygons_without_repeated_points,
+    polygons_without_repeated_points, CollapsedLines, LineOptions,
+};
 pub use reverse::{
     reverse_line_strings, reverse_multi_line_strings, reverse_multi_points, reverse_multi_polygons,
     reverse_polygons,

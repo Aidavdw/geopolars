@@ -1,0 +1,123 @@
+//! Removing the points that coincide with the one before them,
+//! through `geopolars_compute::native::*_without_repeated_points`.
+//! See `remove_repeated_points` in Python for the rules.
+
+use geopolars_compute::native::{
+    line_strings_without_repeated_points, multi_line_strings_without_repeated_points,
+    multi_points_without_repeated_points, multi_polygons_without_repeated_points,
+    polygons_without_repeated_points, CollapsedLines, LineOptions,
+};
+use geopolars_core::{
+    downcast, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
+    PolygonArray,
+};
+use polars::prelude::*;
+use polars_arrow::array::{Array, ListArray};
+use pyo3_polars::derive::polars_expr;
+use serde::Deserialize;
+
+use super::coords::{kernel_output_type_same_geometry, trimmed};
+use super::has_repeated_points::tolerance;
+use crate::geoarrow::{describe, Kind};
+
+#[derive(Deserialize)]
+#[serde(remote = "CollapsedLines", rename_all = "snake_case")]
+enum CollapsedLinesDef {
+    KeepEnds,
+    SingleVertex,
+}
+
+/// See python
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoveRepeatedPointsKwargs {
+    abs_tol: Option<f64>,
+    rel_tol: Option<f64>,
+    unique_z: bool,
+    unique_m: bool,
+    #[serde(with = "CollapsedLinesDef")]
+    collapsed_lines: CollapsedLines,
+    drop_short_lines: bool,
+}
+
+/// [`remove_repeated_points`] for one chunk of the storage of a `kind`.
+fn chunk_without_repeated_points(
+    chunk: &dyn Array,
+    kind: Kind,
+    kwargs: &RemoveRepeatedPointsKwargs,
+) -> PolarsResult<Box<dyn Array>> {
+    let rows = || downcast::<ListArray<i64>>(chunk, "a list of parts");
+    let tolerance = tolerance(kwargs.abs_tol, kwargs.rel_tol);
+    let (unique_z, unique_m, drop_short_lines) =
+        (kwargs.unique_z, kwargs.unique_m, kwargs.drop_short_lines);
+    let options = LineOptions {
+        collapsed_lines: kwargs.collapsed_lines,
+        drop_short_lines,
+    };
+    Ok(match kind {
+        Kind::Point => chunk.to_boxed(),
+        Kind::LineString => line_strings_without_repeated_points(
+            &LineStringArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+            options,
+        )
+        .into_list_array()
+        .boxed(),
+        Kind::MultiPoint => multi_points_without_repeated_points(
+            &MultiPointArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+        )
+        .into_list_array()
+        .boxed(),
+        Kind::Polygon => polygons_without_repeated_points(
+            &PolygonArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+            drop_short_lines,
+        )
+        .into_list_array()
+        .boxed(),
+        Kind::MultiLineString => multi_line_strings_without_repeated_points(
+            &MultiLineStringArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+            options,
+        )
+        .into_list_array()
+        .boxed(),
+        Kind::MultiPolygon => multi_polygons_without_repeated_points(
+            &MultiPolygonArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+            drop_short_lines,
+        )
+        .into_list_array()
+        .boxed(),
+    })
+}
+
+/// See `remove_repeated_points`.
+#[polars_expr(output_type_func=kernel_output_type_same_geometry)]
+fn remove_repeated_points(
+    inputs: &[Series],
+    kwargs: RemoveRepeatedPointsKwargs,
+) -> PolarsResult<Series> {
+    let kind = describe(inputs[0].dtype())?.kind;
+    let storage = trimmed(inputs[0].ext()?.storage());
+    let chunks = storage
+        .chunks()
+        .iter()
+        .map(|chunk| chunk_without_repeated_points(chunk.as_ref(), kind, &kwargs))
+        .collect::<PolarsResult<_>>()?;
+    // SAFETY: the geometries keep their kind and dimension, so this is the input's storage.
+    Ok(unsafe {
+        Series::from_chunks_and_dtype_unchecked(inputs[0].name().clone(), chunks, inputs[0].dtype())
+    })
+}

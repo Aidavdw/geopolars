@@ -26,14 +26,12 @@ pub struct HasRepeatedPointsKwargs {
     rel_tol: Option<f64>,
 }
 
-impl HasRepeatedPointsKwargs {
-    /// `None` when neither tolerance is given; otherwise the missing one is `0.0`.
-    fn tolerance(&self) -> Option<Tolerance> {
-        (self.abs_tol.is_some() || self.rel_tol.is_some()).then(|| Tolerance {
-            abs_tol: self.abs_tol.unwrap_or(0.0),
-            rel_tol: self.rel_tol.unwrap_or(0.0),
-        })
-    }
+/// `None` when neither tolerance is given; otherwise the missing one is `0.0`.
+pub(super) fn tolerance(abs_tol: Option<f64>, rel_tol: Option<f64>) -> Option<Tolerance> {
+    (abs_tol.is_some() || rel_tol.is_some()).then(|| Tolerance {
+        abs_tol: abs_tol.unwrap_or(0.0),
+        rel_tol: rel_tol.unwrap_or(0.0),
+    })
 }
 
 /// [`has_repeated_points`] for one chunk of the storage of a `kind`.
@@ -73,7 +71,7 @@ fn kernel_output_type_has_repeated_points(input_fields: &[Field]) -> PolarsResul
 fn has_repeated_points(inputs: &[Series], kwargs: HasRepeatedPointsKwargs) -> PolarsResult<Series> {
     let geometries = &inputs[0];
     let kind = describe(geometries.dtype())?.kind;
-    let tolerance = kwargs.tolerance();
+    let tolerance = tolerance(kwargs.abs_tol, kwargs.rel_tol);
     let storage = geometries.ext()?.storage();
     let chunks = storage
         .chunks()

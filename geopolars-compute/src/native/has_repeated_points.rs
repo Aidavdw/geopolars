@@ -28,7 +28,7 @@ use polars_arrow::datatypes::ArrowDataType;
 use crate::per_row::per_row_bool;
 
 #[inline(always)]
-fn coincide<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
+pub(super) fn coincide<const TOLERANCE_COINCIDENCE: bool, const Z: bool>(
     coords: &ValidCoords,
     i: usize,
     j: usize,
