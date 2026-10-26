@@ -61,6 +61,24 @@ Anything else that does not fit, including a different dimension, is an error.
 
 The metadata of a `{encoding_dtype}` column is carried over, and `crs` labels the result
 the same way it does for the constructors.""",
+    "box_of_coordinates": """\
+The bounds are the minimum and maximum of the stored coordinates.
+z and m are bounded like x and y.""",
+    "box_around_the_globe": """\
+With a geographic CRS, `x` is then brought back into `[-180, 180]`
+(or the same in the CRS's unit).
+`xmin` lands in `[-180, 180]`, and `xmax` moves by the same turns:
+coordinates running from 170 to 190 get a box from 170 to -170,
+which is how a box crosses the antimeridian (`xmin > xmax`),
+and ones from 540 to 545 get a box from -180 to -175.
+Ones spanning a full turn or more get `-180` to `180`.
+Coordinates that cross the antimeridian without leaving that range,
+such as a line from 170 straight to -170, cannot be told apart
+from ones going the long way round, and get a box from -170 to 170.
+Without a geographic CRS the bounds are left as they are.""",
+    "empty_box": """\
+Without any coordinates (or with only empty points), the box is empty:
+`inf` to `-inf` in every range.""",
     "crs_forms": """\
 `crs` is anything PROJ accepts:
 e.g. PROJJSON, WKT or an `AUTH:CODE` format such as `"EPSG:4326"`.""",

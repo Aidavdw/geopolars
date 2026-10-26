@@ -16,6 +16,12 @@
 //!
 //! Every function here is generic over `M`.
 //! If `M=true`, m is bounded too.
+//!
+//! ## `IGNORE_NULLS`
+//!
+//! The `*_column_extent` functions are generic over `IGNORE_NULLS`.
+//! If `IGNORE_NULLS=false`, a missing row makes the column's box missing.
+//! If `IGNORE_NULLS=true`, a missing row is skipped.
 
 use std::convert::Infallible;
 use std::ops::Range;
@@ -140,7 +146,8 @@ fn bound<const Z: bool, const M: bool>(
     options.finish(&extent)
 }
 
-fn box_struct_of<const Z: bool, const M: bool>(
+/// The struct of a `geoarrow.box` column holding `boxes`.
+pub fn box_array<const Z: bool, const M: bool>(
     dim: GeoDimension,
     boxes: &[Extent<Z, M>],
     validity: Option<Bitmap>,
@@ -164,7 +171,7 @@ fn row_boxes<const Z: bool, const M: bool>(
     let Ok(boxes) = per_row_values(rows, |i| {
         Ok::<_, Infallible>(bound::<Z, M>(coords, vertices_of(i), options))
     });
-    box_struct_of(coords.dim(), &boxes, rows.validity().cloned())
+    box_array(coords.dim(), &boxes, rows.validity().cloned())
 }
 
 /// The box of every part of `rows`, as a list per row.
@@ -186,7 +193,7 @@ fn part_boxes<const Z: bool, const M: bool>(
     let offsets = offsets.iter().map(|offset| offset - first).collect();
     // SAFETY: shifting every offset down by the first keeps them growing, from 0.
     let offsets = unsafe { Offsets::new_unchecked(offsets) }.into();
-    let boxes = box_struct_of(coords.dim(), &boxes, None);
+    let boxes = box_array(coords.dim(), &boxes, None);
     list_array(boxes.boxed(), offsets, rows.validity().cloned())
 }
 
@@ -199,7 +206,7 @@ pub fn point_bounds<const Z: bool, const M: bool>(
     let boxes: Vec<Extent<Z, M>> = (0..coords.len())
         .map(|i| bound(coords, i..i + 1, options))
         .collect();
-    box_struct_of(coords.dim(), &boxes, array.coords.validity().cloned())
+    box_array(coords.dim(), &boxes, array.coords.validity().cloned())
 }
 
 pub fn line_string_bounds<const Z: bool, const M: bool>(
@@ -271,5 +278,81 @@ pub fn multi_polygon_part_bounds<const Z: bool, const M: bool>(
 ) -> ListArray<i64> {
     part_boxes::<Z, M>(&array.rows, &array.coords, options, |j| {
         array.rings.span(array.polygons.range(j))
+    })
+}
+
+/// The extent of every row of `rows`, before [BoxOptions::finish].
+/// `vertices_of` maps a run of rows to where their coordinates sit.
+/// `None` when the column's box is missing.
+#[inline(always)]
+fn column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
+    rows: &List,
+    coords: &ValidCoords,
+    vertices_of: impl Fn(Range<usize>) -> Range<usize>,
+) -> Option<Extent<Z, M>> {
+    let mut extent = Extent::EMPTY;
+    if rows.is_all_valid() {
+        // Only this chunk's rows: it can be a slice of a larger array.
+        extent.add_range(coords, vertices_of(0..rows.len()));
+    } else if IGNORE_NULLS {
+        for i in (0..rows.len()).filter(|&i| rows.is_valid(i)) {
+            extent.add_range(coords, vertices_of(i..i + 1));
+        }
+    } else {
+        return None;
+    }
+    Some(extent)
+}
+
+pub fn point_column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
+    array: &PointArray,
+) -> Option<Extent<Z, M>> {
+    let coords = array.coords.ignoring_validity();
+    let mut extent = Extent::EMPTY;
+    if array.coords.is_all_valid() {
+        extent.add_range(coords, 0..coords.len());
+    } else if IGNORE_NULLS {
+        for i in (0..coords.len()).filter(|&i| array.coords.is_valid(i)) {
+            extent.add_range(coords, i..i + 1);
+        }
+    } else {
+        return None;
+    }
+    Some(extent)
+}
+
+pub fn line_string_column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
+    array: &LineStringArray,
+) -> Option<Extent<Z, M>> {
+    column_extent::<Z, M, IGNORE_NULLS>(&array.rows, &array.coords, |rows| array.rows.span(rows))
+}
+
+pub fn polygon_column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
+    array: &PolygonArray,
+) -> Option<Extent<Z, M>> {
+    column_extent::<Z, M, IGNORE_NULLS>(&array.rows, &array.coords, |rows| {
+        array.rings.span(array.rows.span(rows))
+    })
+}
+
+pub fn multi_point_column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
+    array: &MultiPointArray,
+) -> Option<Extent<Z, M>> {
+    column_extent::<Z, M, IGNORE_NULLS>(&array.rows, &array.coords, |rows| array.rows.span(rows))
+}
+
+pub fn multi_line_string_column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
+    array: &MultiLineStringArray,
+) -> Option<Extent<Z, M>> {
+    column_extent::<Z, M, IGNORE_NULLS>(&array.rows, &array.coords, |rows| {
+        array.lines.span(array.rows.span(rows))
+    })
+}
+
+pub fn multi_polygon_column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
+    array: &MultiPolygonArray,
+) -> Option<Extent<Z, M>> {
+    column_extent::<Z, M, IGNORE_NULLS>(&array.rows, &array.coords, |rows| {
+        array.rings.span(array.polygons.span(array.rows.span(rows)))
     })
 }

@@ -14,7 +14,7 @@ from geopolars.geo.affine import (
 )
 from geopolars.geo.area import area, area_geodesic, area_planar
 from geopolars.geo.boundary import boundary
-from geopolars.geo.bounds import bounds
+from geopolars.geo.bounds import bounds, total_bounds
 from geopolars.geo.buffer import buffer
 from geopolars.geo.centroid import centroid
 from geopolars.geo.construct import (
@@ -128,6 +128,7 @@ __all__ = [
     "to_polygon",
     "to_wkb",
     "to_wkt",
+    "total_bounds",
     "translate",
     "without_m",
     "wrap_longitude",

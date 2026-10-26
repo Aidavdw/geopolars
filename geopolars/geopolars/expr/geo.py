@@ -419,6 +419,11 @@ class ExprGeoNameSpace:
 
         return bounds(self._expr, margin_x=margin_x, margin_y=margin_y)
 
+    def total_bounds(self, *, ignore_nulls: bool = False) -> pl.Expr:
+        from geopolars.geo.bounds import total_bounds
+
+        return total_bounds(self._expr, ignore_nulls=ignore_nulls)
+
     def to_polygon(self) -> pl.Expr:
         from geopolars.geo.to_polygon import to_polygon
 

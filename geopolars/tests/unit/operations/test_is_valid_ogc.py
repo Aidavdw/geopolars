@@ -150,7 +150,10 @@ def test_a_line_may_cross_itself() -> None:
 def test_a_multilinestring_with_one_invalid_line_is_invalid() -> None:
     good, bad = _line((0, 0), (1, 1)), _line((0, 0))
 
-    assert _is_valid_ogc(MultiLineStringXY(), [good, good], [good, bad]) == [True, False]
+    assert _is_valid_ogc(MultiLineStringXY(), [good, good], [good, bad]) == [
+        True,
+        False,
+    ]
 
 
 # Polygons: all rings empty, or each with at least 4 distinct vertices.

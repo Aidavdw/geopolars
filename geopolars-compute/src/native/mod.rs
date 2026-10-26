@@ -23,9 +23,11 @@ pub use affine::{
 };
 pub use area::{multi_polygon_areas, polygon_areas, AreaMetric};
 pub use bounds::{
-    line_string_bounds, multi_line_string_bounds, multi_line_string_part_bounds,
-    multi_point_bounds, multi_point_part_bounds, multi_polygon_bounds, multi_polygon_part_bounds,
-    point_bounds, polygon_bounds, BoxOptions, Extent,
+    box_array, line_string_bounds, line_string_column_extent, multi_line_string_bounds,
+    multi_line_string_column_extent, multi_line_string_part_bounds, multi_point_bounds,
+    multi_point_column_extent, multi_point_part_bounds, multi_polygon_bounds,
+    multi_polygon_column_extent, multi_polygon_part_bounds, point_bounds, point_column_extent,
+    polygon_bounds, polygon_column_extent, BoxOptions, Extent,
 };
 pub use centroid::{
     line_string_centroids, multi_line_string_centroids, multi_polygon_centroids, polygon_centroids,

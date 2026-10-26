@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
 
@@ -50,6 +51,7 @@ def _envelope(geometry: IntoExprColumn) -> pl.Expr:
     )
 
 
+@doc()
 def bounds(
     geometry: IntoExprColumn, *, margin_x: float = 0.0, margin_y: float = 0.0
 ) -> pl.Expr:
@@ -66,25 +68,14 @@ def bounds(
     | `MultiPolygonXY[ZM]` | `list[BoxXY[ZM]]` |
 
     A point's box repeats its own coordinates: `xmin == xmax`.
-    z and m are bounded like x and y.
     `margin_x` and `margin_y` widen the box by that much on both sides
     (a negative margin shrinks it); z and m get no margin.
+    The margin is added before `x` is brought back around the globe.
 
-    The bounds are the minimum and maximum of the stored coordinates.
-    With a geographic CRS, `x` is then brought back into `[-180, 180]`
-    (or the same in the CRS's unit).
-    This considers the margin as well.
-    `xmin` lands in `[-180, 180]`, and `xmax` moves by the same turns:
-    a geometry running from 170 to 190 gets a box from 170 to -170,
-    which is how a box crosses the antimeridian (`xmin > xmax`),
-    and one from 540 to 545 gets a box from -180 to -175.
-    One spanning a full turn or more gets `-180` to `180`.
-    A geometry that crosses the antimeridian without leaving that range,
-    such as a line from 170 straight to -170, cannot be told apart
-    from one going the long way round, and gets a box from -170 to 170.
-    Without a geographic CRS the bounds are left as they are.
-    A geometry with no coordinates (or only empty points) gets an empty box,
-    `inf` to `-inf` in every range. A missing geometry gives a missing box.
+    {box_of_coordinates}
+    {box_around_the_globe}
+    {empty_box}
+    A missing geometry gives a missing box.
 
     ```python
     df.select(geo.bounds("parcel", margin_x=10.0, margin_y=10.0))
@@ -94,3 +85,40 @@ def bounds(
         geometry,
         lambda column, dtype: _bounds(column, dtype, margin_x, margin_y, per_part=True),
     )
+
+
+@doc()
+def total_bounds(geometry: IntoExprColumn, *, ignore_nulls: bool = False) -> pl.Expr:
+    """The bounding box of a whole column, as one `geoarrow.box`.
+    The one box surrounds every coordinate of every row,
+    with all parts of a multi-geometry together.
+    For a box per row, see `bounds`.
+
+    {box_of_coordinates}
+    {box_around_the_globe}
+    The column is brought back around the globe as a whole, not row by row.
+    {empty_box}
+
+    A missing geometry makes the box missing,
+    unless `ignore_nulls=True`: then it is skipped.
+    A column without rows, or with only missing ones, gives a missing box.
+
+    ```python
+    df.group_by("region").agg(geo.total_bounds("parcel"))
+    ```
+    """
+
+    # This function does not stream. Plugins cannot really make streaming things yet.
+    # We'd also have to make the kernel itself streaming if we do.
+
+    def build(column: pl.Expr, dtype: GeoArrowType) -> pl.Expr:
+        return register_plugin_function(
+            plugin_path=LIB,
+            args=[column],
+            function_name="total_bounds",
+            kwargs={"turn": dtype._longitude_turn(), "ignore_nulls": ignore_nulls},
+            changes_length=True,
+            returns_scalar=True,
+        )
+
+    return on_geometry(geometry, build)
