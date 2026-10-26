@@ -50,6 +50,10 @@ the comment says when one without a CRS takes a different tier.
 | `y` | C | `f64`, drops the CRS | C | `list[f64]` | C | `list²[f64]` | C | `list[f64]` | C | `list²[f64]` | C | `list³[f64]` |
 | `z` | C | like `x`; only with a `z` | C | | C | | C | | C | | C | |
 | `m` | C | like `x`; only with an `m` | C | | C | | C | | C | | C | |
+| `force_2d` | C | cast | C | | C | | C | | C | | C | |
+| `force_3d` | C | `0.0`, NaN if empty | C | `list.eval` per nesting level | C | | C | | C | | C | |
+| `without_m` | C | cast | C | | C | | C | | C | | C | |
+| `force_m` | C | `0.0`, NaN if empty | C | `list.eval` per nesting level | C | | C | | C | | C | |
 | `count_coordinates` | A | `0` if empty, unless `include_empty` | A | | A | SCC | A | | A | | A | SCC |
 | `is_empty` | A | NaN `x` and `y` | A | no verts, or only empty if `check_nested` | A | | A | | A | | A | |
 | `wrap_longitude` | C | needs geographic CRS | C | | C | | C | | C | | C | |

@@ -6,7 +6,14 @@ from typing import TYPE_CHECKING, Literal
 
 import polars as pl
 
-from geopolars.geo import affine, construct, coordinates, wkb, wkt
+from geopolars.geo import (
+    affine,
+    construct,
+    coordinates,
+    force_dimension,
+    wkb,
+    wkt,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -435,6 +442,18 @@ class ExprGeoNameSpace:
 
     def m(self) -> pl.Expr:
         return coordinates.m(self._expr)
+
+    def force_2d(self) -> pl.Expr:
+        return force_dimension.force_2d(self._expr)
+
+    def force_3d(self) -> pl.Expr:
+        return force_dimension.force_3d(self._expr)
+
+    def without_m(self) -> pl.Expr:
+        return force_dimension.without_m(self._expr)
+
+    def force_m(self) -> pl.Expr:
+        return force_dimension.force_m(self._expr)
 
     def to_wkb(self) -> pl.Expr:
         return wkb.to_wkb(self._expr)

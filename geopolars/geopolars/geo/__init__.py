@@ -42,6 +42,7 @@ from geopolars.geo.count_coordinates import count_coordinates
 from geopolars.geo.crs import is_geographic, set_crs, to_crs
 from geopolars.geo.distance import distance
 from geopolars.geo.exterior import exterior
+from geopolars.geo.force_dimension import force_2d, force_3d, force_m, without_m
 from geopolars.geo.has_repeated_points import has_repeated_points
 from geopolars.geo.interior import interior
 from geopolars.geo.is_ccw import is_ccw
@@ -78,6 +79,9 @@ __all__ = [
     "count_coordinates",
     "distance",
     "exterior",
+    "force_2d",
+    "force_3d",
+    "force_m",
     "from_wkb",
     "from_wkt",
     "has_repeated_points",
@@ -125,6 +129,7 @@ __all__ = [
     "to_wkb",
     "to_wkt",
     "translate",
+    "without_m",
     "wrap_longitude",
     "x",
     "y",
