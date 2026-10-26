@@ -29,33 +29,6 @@ use polars_arrow::offset::Offsets;
 
 use super::rings::offsets_of;
 
-#[inline(always)]
-pub(super) fn ranges_of_lists(
-    lists: &ValidList,
-) -> impl Iterator<Item = Range<usize>> + Clone + '_ {
-    (0..lists.len()).map(move |i| lists.range(i))
-}
-
-/// `coords` copied, with each of `ranges` reversed.
-pub(super) fn with_ranges_reversed(
-    coords: &ValidCoords,
-    ranges: impl Iterator<Item = Range<usize>> + Clone,
-) -> ValidCoords {
-    let reversed = |axis: &[f64]| {
-        let mut axis = axis.to_vec();
-        for range in ranges.clone() {
-            axis[range].reverse();
-        }
-        axis
-    };
-    ValidCoords::from_axes((
-        reversed(coords.x()),
-        reversed(coords.y()),
-        coords.z().map(&reversed),
-        coords.m().map(&reversed),
-    ))
-}
-
 /// `coords` with the exterior of each of `polygons` reversed.
 /// Each item of `polygons` is the range of that polygon's rings in `rings`.
 fn reverse_rings<const REVERSE_HOLES: bool>(
@@ -64,12 +37,12 @@ fn reverse_rings<const REVERSE_HOLES: bool>(
     coords: &ValidCoords,
 ) -> ValidCoords {
     if REVERSE_HOLES {
-        with_ranges_reversed(coords, ranges_of_lists(rings))
+        coords.with_ranges_reversed(rings.ranges())
     } else {
         let exteriors = polygons
             .filter(|polygon| !polygon.is_empty())
             .map(|polygon| rings.range(polygon.start));
-        with_ranges_reversed(coords, exteriors)
+        coords.with_ranges_reversed(exteriors)
     }
 }
 
@@ -78,7 +51,7 @@ fn reverse_rings<const REVERSE_HOLES: bool>(
 fn parts_reversed_per_row(rows: &ValidList, parts: &ValidList) -> ValidList {
     let old: &[i64] = parts.offsets().buffer();
     let mut new = old.to_vec();
-    for row in ranges_of_lists(rows) {
+    for row in rows.ranges() {
         // Reversing the items `start..end` moves the boundary at `o` to `start + end - o`.
         let (start, end) = (old[row.start], old[row.end]);
         for k in 0..=row.len() {
@@ -98,13 +71,13 @@ fn polygons_in_reverse_order(array: &MultiPolygonArray) -> MultiPolygonArray {
         &array.polygons,
         &array.rings,
     );
-    let reordered = ranges_of_lists(rows).flat_map(|row| row.rev());
+    let reordered = rows.ranges().flat_map(|row| row.rev());
     let ring_lengths = reordered
         .clone()
         .flat_map(|j| polygons.range(j).map(|ring| rings.range(ring).len()));
     MultiPolygonArray {
         rows: List::from_offsets(
-            offsets_of(ranges_of_lists(rows).map(|row| row.len())),
+            offsets_of(rows.ranges().map(|row| row.len())),
             array.rows.validity().cloned(),
         ),
         polygons: ValidList::from_offsets(offsets_of(
@@ -118,23 +91,23 @@ fn polygons_in_reverse_order(array: &MultiPolygonArray) -> MultiPolygonArray {
 }
 
 pub fn reverse_line_strings(array: &LineStringArray) -> LineStringArray {
-    let rows = ranges_of_lists(array.rows.ignoring_validity());
+    let rows = array.rows.ignoring_validity().ranges();
     LineStringArray {
         rows: array.rows.clone(),
-        coords: with_ranges_reversed(&array.coords, rows),
+        coords: array.coords.with_ranges_reversed(rows),
     }
 }
 
 pub fn reverse_multi_points(array: &MultiPointArray) -> MultiPointArray {
-    let rows = ranges_of_lists(array.rows.ignoring_validity());
+    let rows = array.rows.ignoring_validity().ranges();
     MultiPointArray {
         rows: array.rows.clone(),
-        coords: with_ranges_reversed(&array.coords, rows),
+        coords: array.coords.with_ranges_reversed(rows),
     }
 }
 
 pub fn reverse_polygons<const REVERSE_HOLES: bool>(array: &PolygonArray) -> PolygonArray {
-    let rows = ranges_of_lists(array.rows.ignoring_validity());
+    let rows = array.rows.ignoring_validity().ranges();
     PolygonArray {
         rows: array.rows.clone(),
         rings: array.rings.clone(),
@@ -147,17 +120,17 @@ pub fn reverse_multi_line_strings<const NESTED: bool>(
 ) -> MultiLineStringArray {
     let (rows, lines) = (array.rows.ignoring_validity(), &array.lines);
     if NESTED {
-        let spans = ranges_of_lists(rows).map(|parts| lines.span(parts));
+        let spans = rows.ranges().map(|parts| lines.span(parts));
         MultiLineStringArray {
             rows: array.rows.clone(),
             lines: parts_reversed_per_row(rows, lines),
-            coords: with_ranges_reversed(&array.coords, spans),
+            coords: array.coords.with_ranges_reversed(spans),
         }
     } else {
         MultiLineStringArray {
             rows: array.rows.clone(),
             lines: lines.clone(),
-            coords: with_ranges_reversed(&array.coords, ranges_of_lists(lines)),
+            coords: array.coords.with_ranges_reversed(lines.ranges()),
         }
     }
 }
@@ -170,7 +143,7 @@ pub fn reverse_multi_polygons<const REVERSE_HOLES: bool, const NESTED: bool>(
     if NESTED {
         return reverse_multi_polygons::<REVERSE_HOLES, false>(&polygons_in_reverse_order(array));
     }
-    let polygons = ranges_of_lists(&array.polygons);
+    let polygons = array.polygons.ranges();
     MultiPolygonArray {
         rows: array.rows.clone(),
         polygons: array.polygons.clone(),

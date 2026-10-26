@@ -23,7 +23,6 @@ use geopolars_core::{
 use polars_arrow::array::BooleanArray;
 
 use super::area::twice_signed_area;
-use super::reverse::{ranges_of_lists, with_ranges_reversed};
 use crate::per_row::per_row_bool;
 
 /// Whether `ring` runs counter-clockwise.
@@ -84,7 +83,7 @@ pub fn multi_polygons_are_ccw<const HOLES_CW: bool>(array: &MultiPolygonArray) -
 }
 
 /// Which of `lines` run clockwise, so have to be reversed to run counter-clockwise.
-/// Collected, as [with_ranges_reversed] goes over them once per axis.
+/// Collected, as [ValidCoords::with_ranges_reversed] goes over them once per axis.
 fn lines_to_flip(
     lines: impl Iterator<Item = Range<usize>>,
     coords: &ValidCoords,
@@ -101,7 +100,7 @@ fn lines_to_flip(
 
 /// Which rings of `polygons` have to be reversed to [run counter-clockwise](polygon_is_ccw).
 /// Each item of `polygons` is the range of that polygon's rings in `rings`.
-/// Collected, as [with_ranges_reversed] goes over them once per axis.
+/// Collected, as [ValidCoords::with_ranges_reversed] goes over them once per axis.
 fn rings_to_flip<const HOLES_CW: bool>(
     polygons: impl Iterator<Item = Range<usize>>,
     rings: &ValidList,
@@ -129,40 +128,40 @@ fn rings_to_flip<const HOLES_CW: bool>(
 }
 
 pub fn line_strings_to_ccw(array: &LineStringArray) -> LineStringArray {
-    let rows = ranges_of_lists(array.rows.ignoring_validity());
+    let rows = array.rows.ignoring_validity().ranges();
     let flipped = lines_to_flip(rows, &array.coords);
     LineStringArray {
         rows: array.rows.clone(),
-        coords: with_ranges_reversed(&array.coords, flipped.into_iter()),
+        coords: array.coords.with_ranges_reversed(flipped.into_iter()),
     }
 }
 
 pub fn polygons_to_ccw<const HOLES_CW: bool>(array: &PolygonArray) -> PolygonArray {
-    let rows = ranges_of_lists(array.rows.ignoring_validity());
+    let rows = array.rows.ignoring_validity().ranges();
     let flipped = rings_to_flip::<HOLES_CW>(rows, &array.rings, &array.coords);
     PolygonArray {
         rows: array.rows.clone(),
         rings: array.rings.clone(),
-        coords: with_ranges_reversed(&array.coords, flipped.into_iter()),
+        coords: array.coords.with_ranges_reversed(flipped.into_iter()),
     }
 }
 
 pub fn multi_line_strings_to_ccw(array: &MultiLineStringArray) -> MultiLineStringArray {
-    let flipped = lines_to_flip(ranges_of_lists(&array.lines), &array.coords);
+    let flipped = lines_to_flip(array.lines.ranges(), &array.coords);
     MultiLineStringArray {
         rows: array.rows.clone(),
         lines: array.lines.clone(),
-        coords: with_ranges_reversed(&array.coords, flipped.into_iter()),
+        coords: array.coords.with_ranges_reversed(flipped.into_iter()),
     }
 }
 
 pub fn multi_polygons_to_ccw<const HOLES_CW: bool>(array: &MultiPolygonArray) -> MultiPolygonArray {
-    let polygons = ranges_of_lists(&array.polygons);
+    let polygons = array.polygons.ranges();
     let flipped = rings_to_flip::<HOLES_CW>(polygons, &array.rings, &array.coords);
     MultiPolygonArray {
         rows: array.rows.clone(),
         polygons: array.polygons.clone(),
         rings: array.rings.clone(),
-        coords: with_ranges_reversed(&array.coords, flipped.into_iter()),
+        coords: array.coords.with_ranges_reversed(flipped.into_iter()),
     }
 }

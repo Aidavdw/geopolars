@@ -127,6 +127,24 @@ impl ValidCoords {
         }
     }
 
+    /// These coordinates copied into new buffers, with each of `ranges` reversed.
+    /// `ranges` is run once per axis.
+    pub fn with_ranges_reversed(&self, ranges: impl Iterator<Item = Range<usize>> + Clone) -> Self {
+        let reversed = |axis: &[f64]| {
+            let mut axis = axis.to_vec();
+            for range in ranges.clone() {
+                axis[range].reverse();
+            }
+            axis
+        };
+        Self::from_axes((
+            reversed(&self.x),
+            reversed(&self.y),
+            self.z.as_deref().map(&reversed),
+            self.m.as_deref().map(&reversed),
+        ))
+    }
+
     /// The coordinates at `ranges`, in order, copied into new buffers in one pass.
     /// `ranges` is run twice: once to size the buffers, once to copy.
     /// An axis these coordinates don't have is not copied either.

@@ -56,6 +56,12 @@ impl ValidList {
         let offsets = self.offsets.buffer();
         offsets[lists.start] as usize..offsets[lists.end] as usize
     }
+
+    /// The [range](Self::range) of every list, in order.
+    #[inline(always)]
+    pub fn ranges(&self) -> impl Iterator<Item = Range<usize>> + Clone + '_ {
+        (0..self.len()).map(move |i| self.range(i))
+    }
 }
 
 /// Lists where individual lists can be missing: the outer level of a geometry column.
