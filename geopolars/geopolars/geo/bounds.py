@@ -2,104 +2,40 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-import polars as pl
+from polars.plugins import register_plugin_function
 
-from geopolars.datatypes import (
-    BoxType,
-    MultiLineStringType,
-    MultiPointType,
-    MultiPolygonType,
-)
+from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
 
 if TYPE_CHECKING:
+    import polars as pl
+
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
 
-# Reduces a list of values to its smallest or largest one.
-Reduce = Callable[[pl.Expr], pl.Expr]
-
-
-def _extreme(values: pl.Expr, layers: int, axis: str, reduce: Reduce) -> pl.Expr:
-    """The smallest or largest value of one axis, `layers` lists deep."""
-    if layers == 0:
-        return values.struct.field(axis)
-    # `min` and `max` skip null (an empty part) and NaN (an empty point),
-    # so only what has no coordinates at all comes out null or NaN.
-    return reduce(values.list.eval(_extreme(pl.element(), layers - 1, axis, reduce)))
-
-
-def _around_the_globe(
-    low: pl.Expr, high: pl.Expr, turn: float
-) -> tuple[pl.Expr, pl.Expr]:
-    """A longitude range brought back to start in `[-turn / 2, turn / 2)`.
-    A range that went past the antimeridian ends up with `low > high`,
-    the way a box crosses it. One spanning a full turn or more covers the globe.
-    """
-    start = -turn / 2
-    full = (high - low) >= turn
-    # Both ends move by the turns that bring `low` into range,
-    # so a range lying entirely past the antimeridian moves as a whole.
-    turns = ((low - start) / turn).floor()
-    low, high = low - turns * turn, high - turns * turn
-    high = pl.when(high > -start).then(high - turn).otherwise(high)
-
-    return (
-        pl.when(full).then(start).otherwise(low),
-        pl.when(full).then(-start).otherwise(high),
-    )
-
-
-def _box(
-    part: pl.Expr,
-    layers: int,
-    box: BoxType,
-    turn: float | None,
-    margin_x: float,
-    margin_y: float,
-) -> pl.Expr:
-    """The box around one part, `layers` lists deep."""
-    margin = {"x": margin_x, "y": margin_y}
-    dimension = box._dimension
-    low, high = {}, {}
-    for axis in dimension:
-        low[axis] = _extreme(part, layers, axis, lambda e: e.list.min())
-        high[axis] = _extreme(part, layers, axis, lambda e: e.list.max())
-        if axis in margin:
-            low[axis] = low[axis] - margin[axis]
-            high[axis] = high[axis] + margin[axis]
-
-    if turn is not None:
-        # After the margin, which can push a box over the antimeridian too.
-        low["x"], high["x"] = _around_the_globe(low["x"], high["x"], turn)
-
-    for axis in dimension:
-        # Nothing to bound: the spec writes an empty range as `inf` to `-inf`.
-        low[axis] = low[axis].fill_nan(None).fill_null(float("inf"))
-        high[axis] = high[axis].fill_nan(None).fill_null(float("-inf"))
-
-    bounds = [low[axis].alias(f"{axis}min") for axis in dimension] + [
-        high[axis].alias(f"{axis}max") for axis in dimension
-    ]
-    return pl.when(part.is_not_null()).then(pl.struct(bounds)).ext.to(box)
-
 
 def _bounds(
-    column: pl.Expr, geometry: GeoArrowType, margin_x: float, margin_y: float
+    column: pl.Expr,
+    geometry: GeoArrowType,
+    margin_x: float,
+    margin_y: float,
+    *,
+    per_part: bool,
 ) -> pl.Expr:
-    storage = column.ext.storage()
-    box = BoxType.of_dimension(geometry._dimension)._with_metadata_of(geometry)
-    turn = geometry._longitude_turn()
-    if isinstance(geometry, (MultiPointType, MultiLineStringType, MultiPolygonType)):
-        # One box per part. A missing multi-geometry stays missing.
-        layers = geometry._nesting - 1
-        return storage.list.eval(
-            _box(pl.element(), layers, box, turn, margin_x, margin_y)
-        )
-    return _box(storage, geometry._nesting, box, turn, margin_x, margin_y)
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[column],
+        function_name="bounds",
+        kwargs={
+            "margin_x": margin_x,
+            "margin_y": margin_y,
+            "turn": geometry._longitude_turn(),
+            "per_part": per_part,
+        },
+        is_elementwise=True,
+    )
 
 
 def _envelope(geometry: IntoExprColumn) -> pl.Expr:
@@ -108,13 +44,10 @@ def _envelope(geometry: IntoExprColumn) -> pl.Expr:
     - all parts of a multi-geometry together.
     Used for a GeoParquet covering.
     """
-
-    def build(column: pl.Expr, dtype: GeoArrowType) -> pl.Expr:
-        box = BoxType.of_dimension(dtype._dimension)._with_metadata_of(dtype)
-        storage = column.ext.storage()
-        return _box(storage, dtype._nesting, box, dtype._longitude_turn(), 0.0, 0.0)
-
-    return on_geometry(geometry, build)
+    return on_geometry(
+        geometry,
+        lambda column, dtype: _bounds(column, dtype, 0.0, 0.0, per_part=False),
+    )
 
 
 def bounds(
@@ -159,5 +92,5 @@ def bounds(
     """
     return on_geometry(
         geometry,
-        lambda column, dtype: _bounds(column, dtype, margin_x, margin_y),
+        lambda column, dtype: _bounds(column, dtype, margin_x, margin_y, per_part=True),
     )

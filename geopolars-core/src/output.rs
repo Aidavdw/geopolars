@@ -80,6 +80,33 @@ pub(crate) fn coords_struct(
     )
 }
 
+/// The struct of a `geoarrow.box` of `dim`.
+/// `bounds` holds one array per field, in the order of
+/// [`box_field_names`](GeoDimension::box_field_names).
+/// `validity` is `None` when every box is there.
+/// Like [`coords_struct`], a missing box is missing in every field too.
+pub fn box_struct(
+    dim: GeoDimension,
+    bounds: Vec<Vec<f64>>,
+    validity: Option<Bitmap>,
+) -> StructArray {
+    let len = bounds[0].len();
+    let fields = bounds
+        .into_iter()
+        .map(|values| {
+            PrimitiveArray::from_vec(values)
+                .with_validity(validity.clone())
+                .boxed()
+        })
+        .collect();
+    StructArray::new(
+        dim.box_storage().to_arrow(CompatLevel::newest()),
+        len,
+        fields,
+        validity,
+    )
+}
+
 /// `values` split into lists at `offsets`.
 /// `validity` is `None` when every list is there.
 pub fn list_array(

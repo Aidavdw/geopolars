@@ -42,7 +42,7 @@ the comment says when one without a CRS takes a different tier.
 | `scale` | A | impl differs for const or col | A | | A | | A | | A | | A | |
 | `scale_about_centroid` | - | | C | CAA | C | | - | | - | | - | |
 | `affine_transform` | A | `origin` may be a point column | A | | A | | A | | A | | A | |
-| `bounds` | C | repeats its coordinate | C | | C | | C | LPP of `box` | C | LPP of `box` | C | LPP of `box` |
+| `bounds` | A | repeats its coordinate | A | | A | | A | LPP of `box` | A | LPP of `box` | A | LPP of `box` |
 | `set_crs` | C | relabels only | C | | C | | C | | C | | C | |
 | `to_crs` | B | PROJ | B | PROJ | B | PROJ | B | PROJ | B | PROJ | B | PROJ |
 | `is_geographic` | C | scalar, calls PROJ at plan | C | | C | | C | | C | | C | |

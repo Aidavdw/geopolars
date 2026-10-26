@@ -31,6 +31,11 @@ impl ValidList {
         self.offsets
     }
 
+    #[inline]
+    pub fn offsets(&self) -> &OffsetsBuffer<i64> {
+        &self.offsets
+    }
+
     /// How many lists there are.
     #[allow(clippy::len_without_is_empty)]
     #[inline]

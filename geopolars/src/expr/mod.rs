@@ -10,6 +10,7 @@
 
 pub mod affine;
 pub mod area;
+pub mod bounds;
 pub mod buffer;
 pub mod centroid;
 pub mod construct;

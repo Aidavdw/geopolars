@@ -2,6 +2,7 @@
 
 mod affine;
 mod area;
+mod bounds;
 mod centroid;
 mod count_coordinates;
 pub mod distance;
@@ -21,6 +22,11 @@ pub use affine::{
     affine_points, affine_polygons, AffineMatrix, RowShift,
 };
 pub use area::{multi_polygon_areas, polygon_areas, AreaMetric};
+pub use bounds::{
+    line_string_bounds, multi_line_string_bounds, multi_line_string_part_bounds,
+    multi_point_bounds, multi_point_part_bounds, multi_polygon_bounds, multi_polygon_part_bounds,
+    point_bounds, polygon_bounds, BoxOptions, Extent,
+};
 pub use centroid::{
     line_string_centroids, multi_line_string_centroids, multi_polygon_centroids, polygon_centroids,
 };
