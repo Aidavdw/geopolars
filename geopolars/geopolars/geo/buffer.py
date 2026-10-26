@@ -28,9 +28,11 @@ _MITRE_LIMIT = 5.0
 _SINGLE_SIDED = (PointType, LineStringType, MultiLineStringType)
 
 
-def _check_one_of(name: str, value: str, allowed: tuple[str, ...]) -> None:
+def _check_one_of(
+    function: str, name: str, value: str, allowed: tuple[str, ...]
+) -> None:
     if value not in allowed:
-        msg = f"buffer expects `{name}` to be one of {allowed}, got: {value!r}"
+        msg = f"{function} expects `{name}` to be one of {allowed}, got: {value!r}"
         raise ValueError(msg)
 
 
@@ -150,10 +152,10 @@ def buffer(
     if quadrant_segments < 1:
         msg = f"buffer expects `quadrant_segments` of at least 1, got: {quadrant_segments!r}"
         raise ValueError(msg)
-    _check_one_of("join_style", join_style, _JOIN_STYLES)
-    _check_one_of("side", side, _SIDES)
+    _check_one_of("buffer", "join_style", join_style, _JOIN_STYLES)
+    _check_one_of("buffer", "side", side, _SIDES)
     if cap_style is not None:
-        _check_one_of("cap_style", cap_style, _CAP_STYLES)
+        _check_one_of("buffer", "cap_style", cap_style, _CAP_STYLES)
     if mitre_limit is not None and join_style != "mitre":
         msg = f"buffer only takes `mitre_limit` with join_style='mitre', got: {join_style!r}"
         raise ValueError(msg)

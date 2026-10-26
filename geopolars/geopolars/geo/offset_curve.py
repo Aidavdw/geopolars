@@ -1,0 +1,138 @@
+"""The offset curve of a line: the line running alongside it at a distance.
+
+Forwarded to GEOS (B-tier).
+"""
+
+from __future__ import annotations
+
+import math
+from typing import TYPE_CHECKING, Literal
+
+from polars.plugins import register_plugin_function
+
+from geopolars._docs import doc
+from geopolars._utils import LIB
+from geopolars.datatypes import LineStringType, MultiLineStringType
+from geopolars.geo._dispatch import on_geometry
+from geopolars.geo.buffer import (
+    _JOIN_STYLES,
+    _MITRE_LIMIT,
+    _check_one_of,
+    _distances_of,
+)
+
+if TYPE_CHECKING:
+    import polars as pl
+
+    from geopolars._typing import IntoExprColumn
+    from geopolars.datatypes import GeoArrowType
+
+
+@doc(output="linestring")
+def offset_curve(
+    geometry: IntoExprColumn,
+    distance: float | IntoExprColumn,
+    *,
+    quadrant_segments: int = 8,
+    join_style: Literal["round", "mitre", "bevel"] = "round",
+    mitre_limit: float | None = None,
+    allow_splitting: bool = False,
+    ignore_per_row_errors: bool = False,
+    early_finite_check: bool = False,
+) -> pl.Expr:
+    """The line running alongside every line, `distance` away from it.
+    A positive `distance` offsets to the left, relative to the direction of the line.
+    A negative one offsets to the right.
+    The curve runs in the same direction as the line.
+    `distance` is in the units of the coordinates
+    (degrees for longitude/latitude).
+    It is one number for every geometry,
+    or a column (or expression) with one distance per geometry.
+    A missing distance gives a missing linestring.
+    A NaN or infinite distance in a column raises.
+    With `ignore_per_row_errors=True`, such a row gives a missing linestring instead.
+
+    Only linestrings and multilinestrings are accepted.
+    The output is always XY:
+
+    | in | out | with `allow_splitting` |
+    | - | - | - |
+    | `LineStringXY[Z][M]` | `LineStringXY` | `MultiLineStringXY` |
+    | `MultiLineStringXY[Z][M]` | `MultiLineStringXY` | `MultiLineStringXY` |
+
+    {computed_by_geos_dropping_z_and_m}
+    {empty_and_missing}
+    A line without length also gives an empty linestring.
+    So does an offset that vanishes,
+    such as the inside of a hairpin bend narrower than `distance`.
+
+    The curve leaves out the parts that come closer to the line than `distance`.
+    Where the line crosses itself or comes close to itself,
+    that can split the curve into several pieces, whatever the sign of `distance`.
+    A linestring column cannot hold those, so by default such a row fails.
+    With `allow_splitting=True`, a linestring column gives multilinestrings,
+    which hold every piece.
+    A multilinestring always gets every piece as a part.
+
+    `quadrant_segments`, `join_style` and `mitre_limit` shape the curve
+    as they shape a buffer (see `buffer`).
+    GEOS uses at least 8 `quadrant_segments` for an offset curve,
+    so a lower value is refused.
+
+    {geos_errors}
+    The same goes for a linestring it splits without `allow_splitting`.
+
+    {geos_non_finite}
+    {early_finite_check}
+
+    ```python
+    df.select(geo.offset_curve("road", 5.0))
+    df.select(geo.offset_curve("road", -5.0, join_style="mitre"))
+    ```
+    """
+    constant = isinstance(distance, int | float)
+    if constant and not math.isfinite(distance):
+        msg = f"offset_curve expects a finite distance, got: {distance!r}"
+        raise ValueError(msg)
+    if quadrant_segments < 8:
+        msg = (
+            "offset_curve expects `quadrant_segments` of at least 8,"
+            f" got: {quadrant_segments!r}"
+        )
+        raise ValueError(msg)
+    _check_one_of("offset_curve", "join_style", join_style, _JOIN_STYLES)
+    if mitre_limit is not None and join_style != "mitre":
+        msg = (
+            "offset_curve only takes `mitre_limit` with join_style='mitre',"
+            f" got: {join_style!r}"
+        )
+        raise ValueError(msg)
+
+    def build(column: pl.Expr, dtype: GeoArrowType) -> pl.Expr:
+        if not isinstance(dtype, LineStringType | MultiLineStringType):
+            msg = (
+                "offset_curve expects a linestring or multilinestring column,"
+                f" got: {dtype!r}"
+            )
+            raise TypeError(msg)
+        args = [column] if constant else [column, _distances_of(column, distance)]
+        return register_plugin_function(
+            plugin_path=LIB,
+            args=args,
+            function_name="offset_curve",
+            kwargs={
+                # `None` when the distances are the second argument.
+                "distance": float(distance) if constant else None,
+                "quadrant_segments": int(quadrant_segments),
+                "join_style": join_style,
+                "mitre_limit": _MITRE_LIMIT
+                if mitre_limit is None
+                else float(mitre_limit),
+                "allow_splitting": allow_splitting,
+                "ignore_per_row_errors": ignore_per_row_errors,
+                "early_finite_check": early_finite_check,
+            },
+            is_elementwise=True,
+        )
+
+    return on_geometry(geometry, build)

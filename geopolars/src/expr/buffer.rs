@@ -54,7 +54,7 @@ enum CapStyleDef {
 
 #[derive(Deserialize)]
 #[serde(remote = "JoinStyle", rename_all = "lowercase")]
-enum JoinStyleDef {
+pub(super) enum JoinStyleDef {
     Round,
     Mitre,
     Bevel,
@@ -166,35 +166,45 @@ fn chunk_buffered_as(
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_buffer)]
 fn buffer(inputs: &[Series], kwargs: BufferKwargs) -> PolarsResult<Series> {
     let (dtype, kind, into_multi) = buffered_type(inputs[0].dtype(), &kwargs)?;
-    let storage = inputs[0].ext()?.storage();
-    let chunks = match kwargs.distance {
-        Some(distance) => storage
-            .chunks()
-            .iter()
-            .map(|rows| {
-                let distance = BufferDistance::Constant(distance);
-                Ok(chunk_buffered(rows.as_ref(), kind, into_multi, distance, &kwargs)?.boxed())
-            })
-            .collect::<PolarsResult<_>>()?,
-        None => {
-            let storage = storage.rechunk();
-            // Python broadcast the distances to one per geometry.
-            let distances = inputs[1].rechunk();
-            polars_ensure!(
-                distances.len() == storage.len(),
-                ShapeMismatch: "cannot buffer {} geometries by {} distances",
-                storage.len(),
-                distances.len()
-            );
-            let distance = BufferDistance::PerRow(distances.f64()?.downcast_as_array());
-            let rows = storage.chunks()[0].as_ref();
-            vec![chunk_buffered(rows, kind, into_multi, distance, &kwargs)?.boxed()]
-        }
-    };
+    let chunks = chunks_by_distance(inputs, kwargs.distance, |rows, distance| {
+        chunk_buffered(rows, kind, into_multi, distance, &kwargs)
+    })?;
     // SAFETY: the buffers are XY polygons or multipolygons, as `dtype` says.
     Ok(
         unsafe {
             Series::from_chunks_and_dtype_unchecked(inputs[0].name().clone(), chunks, &dtype)
         },
     )
+}
+
+/// Every chunk of the geometries, the first input, through `chunk`.
+/// `distance` is `None` when the distances are a column, the second input.
+/// Then the geometries are rechunked into one chunk, to line up with the distances.
+pub(super) fn chunks_by_distance(
+    inputs: &[Series],
+    distance: Option<f64>,
+    chunk: impl Fn(&dyn Array, BufferDistance) -> PolarsResult<ListArray<i64>>,
+) -> PolarsResult<Vec<ArrayRef>> {
+    let storage = inputs[0].ext()?.storage();
+    match distance {
+        Some(distance) => storage
+            .chunks()
+            .iter()
+            .map(|rows| Ok(chunk(rows.as_ref(), BufferDistance::Constant(distance))?.boxed()))
+            .collect(),
+        None => {
+            let storage = storage.rechunk();
+            // Python broadcast the distances to one per geometry.
+            let distances = inputs[1].rechunk();
+            polars_ensure!(
+                distances.len() == storage.len(),
+                ShapeMismatch: "got {} geometries but {} distances",
+                storage.len(),
+                distances.len()
+            );
+            let distance = BufferDistance::PerRow(distances.f64()?.downcast_as_array());
+            let rows = storage.chunks()[0].as_ref();
+            Ok(vec![chunk(rows, distance)?.boxed()])
+        }
+    }
 }

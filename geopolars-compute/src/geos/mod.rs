@@ -37,6 +37,7 @@ mod buffer;
 mod convex_hull;
 mod is_simple;
 mod linestrings;
+mod offset_curve;
 mod polygons;
 mod rings_overlap;
 mod simplify;
@@ -53,6 +54,9 @@ pub use convex_hull::{
 pub use is_simple::{
     line_strings_are_simple, multi_line_strings_are_simple, multi_polygons_are_simple,
     polygons_are_simple,
+};
+pub use offset_curve::{
+    offset_curves_into_line_strings, offset_curves_into_multi_line_strings, OffsetCurveStyle,
 };
 pub use rings_overlap::{rings_overlap_against_one, rings_overlap_pairwise};
 pub use simplify::{

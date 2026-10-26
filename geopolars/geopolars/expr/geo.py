@@ -210,6 +210,30 @@ class ExprGeoNameSpace:
             early_finite_check=early_finite_check,
         )
 
+    def offset_curve(
+        self,
+        distance: float | IntoExprColumn,
+        *,
+        quadrant_segments: int = 8,
+        join_style: Literal["round", "mitre", "bevel"] = "round",
+        mitre_limit: float | None = None,
+        allow_splitting: bool = False,
+        ignore_per_row_errors: bool = False,
+        early_finite_check: bool = False,
+    ) -> pl.Expr:
+        from geopolars.geo.offset_curve import offset_curve
+
+        return offset_curve(
+            self._expr,
+            distance,
+            quadrant_segments=quadrant_segments,
+            join_style=join_style,
+            mitre_limit=mitre_limit,
+            allow_splitting=allow_splitting,
+            ignore_per_row_errors=ignore_per_row_errors,
+            early_finite_check=early_finite_check,
+        )
+
     def simplify(
         self,
         tolerance: float,

@@ -58,6 +58,7 @@ from geopolars.geo.is_valid import (
 )
 from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
+from geopolars.geo.offset_curve import offset_curve
 from geopolars.geo.rings_overlap import rings_overlap
 from geopolars.geo.simplify import simplify
 from geopolars.geo.to_polygon import to_polygon
@@ -111,6 +112,7 @@ __all__ = [
     "multi_polygon_from_polygons",
     "null_out_invalid_geoarrow",
     "null_out_invalid_ogc",
+    "offset_curve",
     "point",
     "polygon",
     "polygon_from_columns",

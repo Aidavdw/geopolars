@@ -110,31 +110,50 @@ fn buffer_params(style: &BufferStyle) -> GeoComputeResult<BufferParams> {
 }
 
 /// Every geometry buffered by `distance`, forwarded to GEOS.
-/// If `ignore_per_row_errors=true`, a geometry that fails becomes missing;
-/// otherwise its error is returned.
-/// A constant distance that fails would fail every row, so its error is always returned.
-/// The size hint stays the input's: it is only a starting capacity.
-/// Errors are the exception, so `ignore_per_row_errors` is checked per row.
+/// See [`by_distance_via_geos`].
 fn buffer_via_geos(
-    mut geometries: GeosGeometries,
+    geometries: GeosGeometries,
     distance: BufferDistance,
     style: &BufferStyle,
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<GeosGeometries> {
     let params = buffer_params(style)?;
-    let buffered = |input: &Geometry, geos_distance: f64| -> GeoComputeResult<GeosRow> {
-        match input.buffer_with_params(geos_distance, &params) {
-            Ok(buffered) => Ok(GeosRow::Geometry(buffered)),
+    by_distance_via_geos(
+        geometries,
+        distance,
+        ignore_per_row_errors,
+        |distance| geos_distance(distance, style.side),
+        |input, distance| input.buffer_with_params(distance, &params),
+    )
+}
+
+/// Every geometry passed to `op` with its distance, forwarded to GEOS.
+/// `geos_distance` checks a distance, and gives it as `op` takes it.
+/// If `ignore_per_row_errors=true`, a geometry that fails becomes missing;
+/// otherwise its error is returned.
+/// A constant distance that fails would fail every row, so its error is always returned.
+/// The size hint stays the input's: it is only a starting capacity.
+/// Errors are the exception, so `ignore_per_row_errors` is checked per row.
+pub(super) fn by_distance_via_geos(
+    mut geometries: GeosGeometries,
+    distance: BufferDistance,
+    ignore_per_row_errors: bool,
+    geos_distance: impl Fn(f64) -> GeoComputeResult<f64>,
+    op: impl Fn(&Geometry, f64) -> Result<Geometry, geos::Error>,
+) -> GeoComputeResult<GeosGeometries> {
+    let apply = |input: &Geometry, geos_distance: f64| -> GeoComputeResult<GeosRow> {
+        match op(input, geos_distance) {
+            Ok(output) => Ok(GeosRow::Geometry(output)),
             Err(e) if !ignore_per_row_errors => Err(e.into()),
             Err(_) => Ok(GeosRow::Missing),
         }
     };
     match distance {
         BufferDistance::Constant(distance) => {
-            let distance = geos_distance(distance, style.side)?;
+            let distance = geos_distance(distance)?;
             for geometry in &mut geometries.geometries {
                 if let GeosRow::Geometry(input) = geometry {
-                    *geometry = buffered(input, distance)?;
+                    *geometry = apply(input, distance)?;
                 }
             }
         }
@@ -148,8 +167,8 @@ fn buffer_via_geos(
                 let GeosRow::Geometry(input) = geometry else {
                     continue;
                 };
-                *geometry = match geos_distance(distance, style.side) {
-                    Ok(distance) => buffered(input, distance)?,
+                *geometry = match geos_distance(distance) {
+                    Ok(distance) => apply(input, distance)?,
                     Err(e) if !ignore_per_row_errors => return Err(e),
                     Err(_) => GeosRow::Missing,
                 };
@@ -159,13 +178,20 @@ fn buffer_via_geos(
     Ok(geometries)
 }
 
+/// `distance`, or an error if it is not finite.
+#[inline(always)]
+pub(super) fn finite_distance(distance: f64) -> GeoComputeResult<f64> {
+    if !distance.is_finite() {
+        return Err(GeoComputeError::NotFiniteDistance { distance });
+    }
+    Ok(distance)
+}
+
 /// `distance` as GEOS takes it, which gives the right side by a negative sign.
 /// An error if it is not finite, or negative with a single `side`.
 #[inline(always)]
 fn geos_distance(distance: f64, side: Side) -> GeoComputeResult<f64> {
-    if !distance.is_finite() {
-        return Err(GeoComputeError::NotFiniteDistance { distance });
-    }
+    let distance = finite_distance(distance)?;
     match side {
         Side::Both => Ok(distance),
         _ if distance < 0.0 => Err(GeoComputeError::NegativeOneSidedDistance { distance }),

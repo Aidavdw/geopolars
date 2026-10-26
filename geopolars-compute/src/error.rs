@@ -21,7 +21,7 @@ pub enum GeoComputeError {
     NotARing { vertices: usize },
     /// A coordinate with a NaN or infinite x or y, which GEOS cannot take.
     NotFinite { position: (f64, f64) },
-    /// A NaN or infinite buffer distance.
+    /// A NaN or infinite distance.
     NotFiniteDistance { distance: f64 },
     /// A negative distance for a buffer of one side, whose side is not given by the sign.
     NegativeOneSidedDistance { distance: f64 },
@@ -65,7 +65,7 @@ impl fmt::Display for GeoComputeError {
                 GEOS does not support empty points inside a geometry"
             ),
             Self::NotFiniteDistance { distance } => {
-                write!(f, "a buffer expects a finite distance, got: {distance}")
+                write!(f, "expects a finite distance, got: {distance}")
             }
             Self::NegativeOneSidedDistance { distance } => write!(
                 f,
