@@ -72,7 +72,7 @@ def filter_coordinates(
     too_short: TooShort = "invalid",
 ) -> pl.Expr:
     """Empties or drops the coordinates that are not finite, or empty.
-    As a repairing function, it does not require the geometry to be valid (yet).
+    {repairing_function}
 
     A coordinate is selected by either of:
 
@@ -83,7 +83,7 @@ def filter_coordinates(
       `ignore_z` and `ignore_m` do not change this.
       With z, `(NaN, NaN, 1.0)` is therefore not empty, but it is not finite either.
 
-    A flag for an axis the column does not have does nothing.
+    {flag_for_absent_axis}
 
     With `action="set_empty"`, every axis of a selected coordinate becomes NaN.
     Selecting only empty coordinates then changes nothing.

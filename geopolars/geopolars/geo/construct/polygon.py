@@ -42,6 +42,7 @@ def polygons_from_rings_in_single_column(
     A ring that is still too short after that stays refused.
 
     {closing_rings}
+    {flag_for_absent_axis}
 
     Rings normally arrive grouped, one linestring at a time:
 

@@ -43,8 +43,12 @@ For a ring with the first vertex as F and the last as L:
 | x, y and z the same, m differs | left as it is, or with `snap_m=True`, L gets the m of F |
 
 If `snap_z=True` and `snap_m=True`, a snapped L gets both the z and the m of F.
-An appended F brings its own z and m, so the ring is closed in every axis.
-A flag for an axis the column does not have does nothing.""",
+An appended F brings its own z and m, so the ring is closed in every axis.""",
+    "flag_for_absent_axis": """\
+A flag for an axis requires only does something if the geometry has that axis.
+If the geometry does not have the specific axis, the flag is ignored. """,
+    "repairing_function": """\
+As a repairing function, it does not require the geometry to be valid (yet).""",
     "too_short": """\
 This operation removes coordinates, which can leave a linestring or ring too short.
 A linestring is too short with a single vertex, and a ring with fewer than 4.

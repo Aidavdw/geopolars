@@ -65,12 +65,13 @@ def close_rings(
     in x, y and z (see `is_valid_geoarrow`).
     For a polygon, this acts on all of the rings.
 
-    As a repairing function, it does not require the linestring or polygon to be valid (yet).
+    {repairing_function}
 
     {keeps_type_dimension_and_crs}
     {ignores_empty_and_invalid}
 
     {closing_rings}
+    {flag_for_absent_axis}
 
     ```python
     pl.scan_parquet("parcels.parquet").select(geo.close_rings("parcel"))
