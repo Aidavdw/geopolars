@@ -17,6 +17,7 @@ from geopolars.geo.boundary import boundary
 from geopolars.geo.bounds import bounds, total_bounds
 from geopolars.geo.buffer import buffer
 from geopolars.geo.centroid import centroid
+from geopolars.geo.close_rings import close_rings
 from geopolars.geo.construct import (
     box,
     line_string,
@@ -79,6 +80,7 @@ __all__ = [
     "box",
     "buffer",
     "centroid",
+    "close_rings",
     "convex_hull",
     "count_coordinates",
     "distance",

@@ -325,6 +325,11 @@ class ExprGeoNameSpace:
 
         return to_cw(self._expr, holes_ccw=holes_ccw)
 
+    def close_rings(self, *, snap_z: bool = False, snap_m: bool = False) -> pl.Expr:
+        from geopolars.geo.close_rings import close_rings
+
+        return close_rings(self._expr, snap_z=snap_z, snap_m=snap_m)
+
     def is_valid_geoarrow(
         self,
         *,

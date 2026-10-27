@@ -160,10 +160,15 @@ fn kernel_output_type_multipolygon(
 }
 
 /// See [`close_open_rings`].
-/// The rings and their coordinates, or `None` if every ring was closed already.
-fn close_rings(rings: &ValidList, coords: &ValidCoords) -> Option<(ValidList, ValidCoords)> {
+/// The rings and their coordinates, or `None` if no ring changed.
+pub(super) fn closed_rings(
+    rings: &ValidList,
+    coords: &ValidCoords,
+    snap_z: bool,
+    snap_m: bool,
+) -> Option<(ValidList, ValidCoords)> {
     let z = coords.dim().has_z();
-    let closed = with_const_flags!(close_open_rings(rings, coords); z)?;
+    let closed = with_const_flags!(close_open_rings(rings, coords, snap_z, snap_m); z)?;
     Some((closed.rows.ignoring_validity().clone(), closed.coords))
 }
 
@@ -186,7 +191,7 @@ fn validated_chunk(chunk: &dyn Array, kind: Kind, close: bool) -> PolarsResult<B
         Kind::Polygon => {
             let mut array = propagate_inner_nulls_of_polygons(storage);
             if let Some((rings, coords)) = close
-                .then(|| close_rings(&array.rings, &array.coords))
+                .then(|| closed_rings(&array.rings, &array.coords, false, false))
                 .flatten()
             {
                 (array.rings, array.coords) = (rings, coords);
@@ -202,7 +207,7 @@ fn validated_chunk(chunk: &dyn Array, kind: Kind, close: bool) -> PolarsResult<B
         Kind::MultiPolygon => {
             let mut array = propagate_inner_nulls_of_multi_polygons(storage);
             if let Some((rings, coords)) = close
-                .then(|| close_rings(&array.rings, &array.coords))
+                .then(|| closed_rings(&array.rings, &array.coords, false, false))
                 .flatten()
             {
                 (array.rings, array.coords) = (rings, coords);

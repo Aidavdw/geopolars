@@ -65,7 +65,7 @@ geometry editing
 repair:
 
 - [ ] repair: drop overlaps, with the options for reltol etc.
-- [ ] Close rings expr, can use this inside of 'repair'
+- [x] Close rings expr, can use this inside of 'repair'
 
 ## Binary predicates
 

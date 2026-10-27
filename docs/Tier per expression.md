@@ -30,6 +30,7 @@ the comment says when one without a CRS takes a different tier.
 | `is_ccw` | - | | A | CCW | A | | - | | A | every part combined | A | every part combined |
 | `to_ccw` | - | | A | | A | `holes_cw` | - | | A | every part | A | every part |
 | `to_cw` | - | | C | `to_ccw` + `reverse` | C | | - | | C | | C | |
+| `close_rings` | - | | A | repeats the first vertex, or `snap_z`/`snap_m` | A | every ring | - | | A | every part | A | every ring |
 | `is_close` | A | pairwise or against one | A | same coordinates in order | A | same rings | A | | A | same parts | A | same polygons and rings |
 | `is_valid_geoarrow` | A | bounds from PROJ (plan-time) | A | | A | | A | EP | A | EP | A | EP |
 | `null_out_invalid_geoarrow` | A | nulls what `is_valid_geoarrow` rejects | A | | A | | A | | A | | A | |

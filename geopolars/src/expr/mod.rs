@@ -13,6 +13,7 @@ pub mod area;
 pub mod bounds;
 pub mod buffer;
 pub mod centroid;
+pub mod close_rings;
 pub mod construct;
 pub mod convex_hull;
 pub mod coords;
