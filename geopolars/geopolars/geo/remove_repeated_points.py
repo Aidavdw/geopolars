@@ -89,8 +89,7 @@ def remove_repeated_points(
     Note that leaving empty (outer) rings may make a polygon invalid by OGC,
     unless every hole of it is empty too (the empty polygon).
 
-    A missing geometry stays missing, and an empty one stays empty.
-    TODO: ^ This is repeated everywhere. Replace with 'Empty or invalid geometries are ignored, and therefore unaffected by this operation.'
+    {ignores_empty_and_invalid}
 
     ```python
     df.select(geo.remove_repeated_points("route", abs_tol=0.01))

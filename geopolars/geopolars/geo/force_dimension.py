@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import polars as pl
 
+from geopolars._docs import doc
 from geopolars.datatypes.dimension import XYZM
 from geopolars.geo._dispatch import on_geometry
 
@@ -55,6 +56,7 @@ def _with_axes(
     return build
 
 
+@doc()
 def force_2d(geometry: IntoExprColumn) -> pl.Expr:
     """The geometry without its `z` coordinate.
 
@@ -69,7 +71,7 @@ def force_2d(geometry: IntoExprColumn) -> pl.Expr:
     | `…XYZM` | `…XYM` |
 
     A geometry without a `z` is returned as it is.
-    A missing geometry stays missing, and an empty one stays empty.
+    {ignores_empty_and_invalid}
 
     ```python
     df.select(geo.force_2d("route"))

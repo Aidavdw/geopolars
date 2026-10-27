@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import PointType
 from geopolars.geo._dispatch import on_geometry
@@ -33,11 +34,12 @@ def _reverse(
     )
 
 
+@doc()
 def reverse(
     geometry: IntoExprColumn, *, reverse_holes: bool = False, nested: bool = True
 ) -> pl.Expr:
-    """The geometry with the order of its vertices reversed,
-    keeping its type, dimension and CRS.
+    """The geometry with the order of its vertices reversed.
+    {keeps_type_dimension_and_crs}
 
     | in | reversed |
     | - | - |
@@ -57,7 +59,7 @@ def reverse(
     For a multilinestring, this reverses it as a whole, which is the cheaper option.
     For a multipolygon, it is the more expensive one.
 
-    A missing geometry stays missing, and an empty one stays empty.
+    {ignores_empty_and_invalid}
 
     ```python
     df.select(geo.reverse("route"))

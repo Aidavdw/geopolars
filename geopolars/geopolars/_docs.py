@@ -35,6 +35,11 @@ Otherwise they only have to be close on every compared axis, as in `pl.Expr.is_c
 A tolerance that is not given then counts as `0.0`.""",
     "empty_and_missing": """\
 An empty geometry gives an empty {output}, and a missing one a missing {output}.""",
+    "keeps_type_dimension_and_crs": """\
+The type, dimension and CRS of the output geometry are kept from the input.""",
+    "ignores_empty_and_invalid": """\
+This operation ignores empty and invalid geometries.
+Empty and invalid geometries stay empty or invalid.""",
     "geos_errors": """\
 A geometry GEOS fails on raises GEOS's error, failing the query.
 With `ignore_per_row_errors=True`, it gives a missing {output} instead.""",

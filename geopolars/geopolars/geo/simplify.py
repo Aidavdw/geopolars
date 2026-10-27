@@ -56,7 +56,7 @@ def simplify(
     {computed_by_geos_keeping_z}
     A point or multipoint has nothing to leave out,
     so it is returned as it is, m included.
-    An empty geometry stays empty, and a missing one missing.
+    {ignores_empty_and_invalid}
     A linestring always keeps its endpoints.
 
     By default this uses Douglas-Peucker simplification,

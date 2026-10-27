@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import (
     LineStringType,
@@ -44,6 +45,7 @@ def _close_rings(
     )
 
 
+@doc()
 def close_rings(
     geometry: IntoExprColumn, *, snap_z: bool = False, snap_m: bool = False
 ) -> pl.Expr:
@@ -54,10 +56,8 @@ def close_rings(
 
     As a repairing function, it does not require the linestring or polygon to be valid (yet).
 
-    TODO: make reusable docstr
-    Type, dimension and CRS are kept.
-    TODO: replace this with the reusable docstr
-    An empty ring stays empty, and a missing geometry stays missing.
+    {keeps_type_dimension_and_crs}
+    {ignores_empty_and_invalid}
 
     For a geometry with the first vertex as F and the last as L:
 

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import (
     LineStringType,
@@ -43,16 +44,18 @@ def _to_ccw(column: pl.Expr, geometry: GeoArrowType, *, holes_cw: bool) -> pl.Ex
     )
 
 
+@doc()
 def to_ccw(geometry: IntoExprColumn, *, holes_cw: bool = True) -> pl.Expr:
     """The geometry, with every ring that runs the wrong way for `is_ccw` reversed.
 
-    Takes the same geometries as `is_ccw`, and keeps their type, dimension and CRS.
+    Takes the same geometries as `is_ccw`.
+    {keeps_type_dimension_and_crs}
     A polygon gets its exterior counter-clockwise and its holes clockwise.
     With `holes_cw=False`, its holes run counter-clockwise too.
     A multilinestring or multipolygon has every part made so, and keeps the order of its parts.
 
     A ring that runs neither way (see `is_ccw`) is left as it is.
-    So is an empty geometry, and a missing one stays missing.
+    {ignores_empty_and_invalid}
 
     ```python
     df.select(geo.to_ccw("parcel"))
