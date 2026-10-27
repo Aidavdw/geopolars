@@ -22,6 +22,7 @@ from geopolars.datatypes import (
 )
 
 _XY = pl.Struct({"x": pl.Float64, "y": pl.Float64})
+_XYZ = pl.Struct({"x": pl.Float64, "y": pl.Float64, "z": pl.Float64})
 _XYM = pl.Struct({"x": pl.Float64, "y": pl.Float64, "m": pl.Float64})
 
 Coord = dict[str, float]
@@ -32,7 +33,7 @@ def _xy(*xy: tuple[float, float]) -> list[Coord]:
 
 
 def _series(name: str, dtype: GeoArrowType, rows: list[object]) -> pl.Series:
-    storage = _XYM if isinstance(dtype, PointXYM) else _XY
+    storage = {PointXYZ: _XYZ, PointXYM: _XYM}.get(type(dtype), _XY)
     for _ in range(dtype._nesting):
         storage = pl.List(storage)
     return pl.Series(name, rows, dtype=storage).ext.to(dtype)
@@ -164,12 +165,20 @@ def test_empty_points_are_only_close_with_nans_equal() -> None:
     assert _is_close(PointXY(), [empty], [empty], nans_equal=True) == [True]
 
 
-def test_m_is_compared_unless_ignored() -> None:
+def test_m_is_only_compared_when_unique() -> None:
     a = {"x": 1.0, "y": 2.0, "m": 0.0}
     b = a | {"m": 5.0}
 
-    assert _is_close(PointXYM(), [a], [b]) == [False]
-    assert _is_close(PointXYM(), [a], [b], ignore_m=True) == [True]
+    assert _is_close(PointXYM(), [a], [b]) == [True]
+    assert _is_close(PointXYM(), [a], [b], unique_m=True) == [False]
+
+
+def test_z_is_compared_unless_ignored() -> None:
+    a = {"x": 1.0, "y": 2.0, "z": 0.0}
+    b = a | {"z": 5.0}
+
+    assert _is_close(PointXYZ(), [a], [b]) == [False]
+    assert _is_close(PointXYZ(), [a], [b], unique_z=False) == [True]
 
 
 def test_infinities_are_only_close_to_themselves() -> None:

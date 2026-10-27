@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
 
@@ -16,11 +17,14 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
+@doc()
 def has_repeated_points(
     geometry: IntoExprColumn,
     *,
     abs_tol: float | None = None,
     rel_tol: float | None = None,
+    unique_z: bool = True,
+    unique_m: bool = False,
 ) -> pl.Expr:
     """Whether each geometry has two points that lie at the same place.
     One `bool` per row, a multi-geometry included. A missing geometry gives a missing result.
@@ -37,12 +41,10 @@ def has_repeated_points(
 
     The ends of a ring lie at the same place, but they are not in a row, so they do not count.
 
-    "At the same place" is compared in x, y and z.
-    With `abs_tol=None` and `rel_tol=None`, the default, the coordinates have to be exactly equal.
-    Otherwise they only have to be close on every axis, as in `pl.Expr.is_close` (see `geo.is_close`).
-    A tolerance that is not given then counts as `0.0`.
+    {coincidence_axes}
+    {coincidence_tolerance}
 
-    Repeated points are valid, also by OGC (see `is_valid_ogc`), but some tools stumble over them.
+    Repeated points are valid, also by OGC (see `is_valid_ogc`), but some tools may stumble over them.
 
     ```python
     df.filter(~geo.has_repeated_points("route"))
@@ -55,7 +57,12 @@ def has_repeated_points(
             args=[column],
             function_name="has_repeated_points",
             is_elementwise=True,
-            kwargs={"abs_tol": abs_tol, "rel_tol": rel_tol},
+            kwargs={
+                "abs_tol": abs_tol,
+                "rel_tol": rel_tol,
+                "unique_z": unique_z,
+                "unique_m": unique_m,
+            },
         )
 
     return on_geometry(geometry, build)

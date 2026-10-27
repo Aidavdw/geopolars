@@ -49,7 +49,7 @@ def _frame(dtype: GeoArrowType, *rows: object) -> pl.DataFrame:
 
 
 def _has_repeated_points(
-    dtype: GeoArrowType, *rows: object, **kwargs: float | None
+    dtype: GeoArrowType, *rows: object, **kwargs: float | bool | None
 ) -> list[bool | None]:
     out = _frame(dtype, *rows).select(geo.has_repeated_points("g", **kwargs))
     return out["g"].to_list()
@@ -72,19 +72,25 @@ def test_vertices_in_a_row_that_are_almost_the_same_need_a_tolerance(
     assert _has_repeated_points(LineStringXY(), line, **tolerance) == [repeated]
 
 
-def test_vertices_in_a_row_that_differ_only_in_m_are_repeated() -> None:
+def test_vertices_in_a_row_that_differ_only_in_m_are_repeated_unless_m_is_unique() -> (
+    None
+):
     """m is a measure along the line, not a place on it."""
     a = {"x": 1.0, "y": 1.0, "z": 0.0, "m": 0.0}
     b = a | {"m": 1.0}
 
     assert _has_repeated_points(LineStringXYZM(), [a, b]) == [True]
+    assert _has_repeated_points(LineStringXYZM(), [a, b], unique_m=True) == [False]
 
 
-def test_vertices_in_a_row_that_differ_in_z_are_not_repeated() -> None:
+def test_vertices_in_a_row_that_differ_in_z_are_not_repeated_unless_z_is_ignored() -> (
+    None
+):
     a = {"x": 1.0, "y": 1.0, "z": 0.0, "m": 0.0}
     b = a | {"z": 1.0}
 
     assert _has_repeated_points(LineStringXYZM(), [a, b]) == [False]
+    assert _has_repeated_points(LineStringXYZM(), [a, b], unique_z=False) == [True]
 
 
 def test_a_vertex_repeated_further_on_is_not_repeated() -> None:

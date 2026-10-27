@@ -18,7 +18,7 @@ pub fn points_are_simple(array: &PointArray) -> BooleanArray {
 
 pub fn multi_points_are_simple(array: &MultiPointArray) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
-        !has_repeated_points::<false, false>(
+        !has_repeated_points::<false, false, false>(
             &array.coords,
             array.rows.range(i),
             Tolerance::default(),

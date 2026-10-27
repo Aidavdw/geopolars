@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Literal, get_args
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
 
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
 CollapsedLines = Literal["keep_ends", "single_vertex"]
 
 
+@doc()
 def remove_repeated_points(
     geometry: IntoExprColumn,
     *,
@@ -48,17 +50,8 @@ def remove_repeated_points(
     Each vertex is compared with the first vertex in a coinciding set, not the one directly in front of it.
     This means that a group of vertices that slowly drifts will at some point be cut off.
 
-
-    If `unique_z=False` or `unique_m=False`, this operation does not consider `z` or `m` for
-    repetition respectively. Successive points with different `z` or `m` values,
-    but coincident `x` and `y` would still be considered repeated, and thus removed.
-    A considered `m` is compared like `z`, so within the tolerance if one is given.
-    Either is ignored for a geometry without that axis.
-
-
-    TODO: reusable doc snippet for abs_tol rel_tol
-    "At the same place" and `abs_tol` and `rel_tol` are as in `has_repeated_points`.
-    Without a tolerance, the default, only exactly equal coordinates are removed.
+    {coincidence_axes}
+    {coincidence_tolerance}
 
     This operation removes coordinates, which means that linestrings can be left
     with an insufficient amount of vertices.
@@ -103,8 +96,6 @@ def remove_repeated_points(
     df.select(geo.remove_repeated_points("route", abs_tol=0.01))
     ```
     """
-
-    # TODO: add `unique_z` and `unique_m` to every operation that takes x/y.
 
     if collapsed_lines not in get_args(CollapsedLines):
         msg = (

@@ -24,7 +24,8 @@ pub struct IsCloseKwargs {
     abs_tol: f64,
     rel_tol: f64,
     nans_equal: bool,
-    ignore_m: bool,
+    unique_z: bool,
+    unique_m: bool,
 }
 
 impl Default for IsCloseKwargs {
@@ -33,7 +34,8 @@ impl Default for IsCloseKwargs {
             abs_tol: 0.0,
             rel_tol: 1e-9,
             nans_equal: false,
-            ignore_m: false,
+            unique_z: true,
+            unique_m: false,
         }
     }
 }
@@ -67,49 +69,55 @@ fn chunk_is_close(
         abs_tol: kwargs.abs_tol,
         rel_tol: kwargs.rel_tol,
     };
-    let (ignore_m, nans_equal) = (kwargs.ignore_m, kwargs.nans_equal);
+    let (unique_z, unique_m, nans_equal) = (kwargs.unique_z, kwargs.unique_m, kwargs.nans_equal);
     let rows = |chunk| downcast::<ListArray<i64>>(chunk, "a list of parts");
     Ok(match kind {
         Kind::Point => points_are_close(
             &PointArray::new(Coords::new(a)?),
             &PointArray::new(Coords::new(b)?),
             tolerance,
-            ignore_m,
+            unique_z,
+            unique_m,
             nans_equal,
         ),
         Kind::MultiPoint => multi_points_are_close(
             &MultiPointArray::new(rows(a)?)?,
             &MultiPointArray::new(rows(b)?)?,
             tolerance,
-            ignore_m,
+            unique_z,
+            unique_m,
             nans_equal,
         ),
         Kind::LineString => line_strings_are_close(
             &LineStringArray::new(rows(a)?)?,
             &LineStringArray::new(rows(b)?)?,
             tolerance,
-            ignore_m,
+            unique_z,
+            unique_m,
             nans_equal,
         ),
         Kind::MultiLineString => multi_line_strings_are_close(
             &MultiLineStringArray::new(rows(a)?)?,
             &MultiLineStringArray::new(rows(b)?)?,
             tolerance,
-            ignore_m,
+            unique_z,
+            unique_m,
             nans_equal,
         ),
         Kind::Polygon => polygons_are_close(
             &PolygonArray::new(rows(a)?)?,
             &PolygonArray::new(rows(b)?)?,
             tolerance,
-            ignore_m,
+            unique_z,
+            unique_m,
             nans_equal,
         ),
         Kind::MultiPolygon => multi_polygons_are_close(
             &MultiPolygonArray::new(rows(a)?)?,
             &MultiPolygonArray::new(rows(b)?)?,
             tolerance,
-            ignore_m,
+            unique_z,
+            unique_m,
             nans_equal,
         ),
     })

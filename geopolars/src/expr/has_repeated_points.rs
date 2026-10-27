@@ -19,11 +19,13 @@ use serde::Deserialize;
 use crate::geoarrow::{describe, Kind};
 
 /// See python
-#[derive(Debug, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HasRepeatedPointsKwargs {
     abs_tol: Option<f64>,
     rel_tol: Option<f64>,
+    unique_z: bool,
+    unique_m: bool,
 }
 
 /// `None` when neither tolerance is given; otherwise the missing one is `0.0`.
@@ -39,23 +41,42 @@ fn chunk_has_repeated_points(
     chunk: &dyn Array,
     kind: Kind,
     tolerance: Option<Tolerance>,
+    unique_z: bool,
+    unique_m: bool,
 ) -> PolarsResult<BooleanArray> {
     let rows = || downcast::<ListArray<i64>>(chunk, "a list of parts");
     Ok(match kind {
         Kind::Point => points_have_repeated_points(&PointArray::new(Coords::new(chunk)?)),
-        Kind::LineString => {
-            line_strings_have_repeated_points(&LineStringArray::new(rows()?)?, tolerance)
-        }
-        Kind::MultiPoint => {
-            multi_points_have_repeated_points(&MultiPointArray::new(rows()?)?, tolerance)
-        }
-        Kind::MultiLineString => {
-            multi_line_strings_have_repeated_points(&MultiLineStringArray::new(rows()?)?, tolerance)
-        }
-        Kind::Polygon => polygons_have_repeated_points(&PolygonArray::new(rows()?)?, tolerance),
-        Kind::MultiPolygon => {
-            multi_polygons_have_repeated_points(&MultiPolygonArray::new(rows()?)?, tolerance)
-        }
+        Kind::LineString => line_strings_have_repeated_points(
+            &LineStringArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+        ),
+        Kind::MultiPoint => multi_points_have_repeated_points(
+            &MultiPointArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+        ),
+        Kind::MultiLineString => multi_line_strings_have_repeated_points(
+            &MultiLineStringArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+        ),
+        Kind::Polygon => polygons_have_repeated_points(
+            &PolygonArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+        ),
+        Kind::MultiPolygon => multi_polygons_have_repeated_points(
+            &MultiPolygonArray::new(rows()?)?,
+            tolerance,
+            unique_z,
+            unique_m,
+        ),
     })
 }
 
@@ -73,9 +94,14 @@ fn has_repeated_points(inputs: &[Series], kwargs: HasRepeatedPointsKwargs) -> Po
     let kind = describe(geometries.dtype())?.kind;
     let tolerance = tolerance(kwargs.abs_tol, kwargs.rel_tol);
     let storage = geometries.ext()?.storage();
-    let chunks = storage
-        .chunks()
-        .iter()
-        .map(|chunk| chunk_has_repeated_points(chunk.as_ref(), kind, tolerance));
+    let chunks = storage.chunks().iter().map(|chunk| {
+        chunk_has_repeated_points(
+            chunk.as_ref(),
+            kind,
+            tolerance,
+            kwargs.unique_z,
+            kwargs.unique_m,
+        )
+    });
     Ok(BooleanChunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())
 }

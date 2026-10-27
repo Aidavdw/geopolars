@@ -10,31 +10,19 @@
 //!
 //! # Const generic flags
 //!
-//! Every kernel here is generic over `TOLERANCE_COINCIDENCE`,
+//! Every kernel here is generic over `TOLERANCE_COINCIDENCE`, `UNIQUE_Z` and `UNIQUE_M`,
 //! as in [has_repeated_points](super::has_repeated_points).
-//!
-//! ## `UNIQUE_Z`
-//!
-//! Every kernel here is generic over `UNIQUE_Z`.
-//! If `UNIQUE_Z=true`, two vertices are only repeated when their z values are too.
-//! A runtime `unique_z` is ignored for coordinates without a z.
-//!
-//! ## `UNIQUE_M`
-//!
-//! Every kernel here is generic over `UNIQUE_M`.
-//! If `UNIQUE_M=true`, two vertices are only repeated when their m values are too.
-//! A runtime `unique_m` is ignored for coordinates without an m.
 
 use std::ops::Range;
 
 use geopolars_core::output::validity_without;
 use geopolars_core::{
-    is_close, LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PolygonArray, Tolerance, ValidCoords, ValidList, MIN_RING_VERTICES,
+    LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PolygonArray,
+    Tolerance, ValidCoords, ValidList, MIN_RING_VERTICES,
 };
 use polars_arrow::offset::OffsetsBuffer;
 
-use super::has_repeated_points::coincide;
+use super::has_repeated_points::{coincide, unique_axes};
 use super::rings::offsets_of;
 
 /// See `collapsed_lines` of `remove_repeated_points` in Python.
@@ -101,33 +89,8 @@ impl Lists {
     }
 }
 
-/// Whether vertices `i` and `j` [coincide], with `UNIQUE_M` in m too.
-#[inline(always)]
-fn is_repeat<const TOLERANCE_COINCIDENCE: bool, const UNIQUE_Z: bool, const UNIQUE_M: bool>(
-    coords: &ValidCoords,
-    i: usize,
-    j: usize,
-    tolerance: Tolerance,
-) -> bool {
-    coincide::<TOLERANCE_COINCIDENCE, UNIQUE_Z>(coords, i, j, tolerance)
-        && (!UNIQUE_M || {
-            let m = coords.m().expect("an m, with `UNIQUE_M`");
-            if TOLERANCE_COINCIDENCE {
-                is_close(m[i], m[j], tolerance)
-            } else {
-                m[i] == m[j]
-            }
-        })
-}
-
-/// `unique_z` and `unique_m`, only for an axis `coords` has.
-fn unique_axes(coords: &ValidCoords, unique_z: bool, unique_m: bool) -> (bool, bool) {
-    let dim = coords.dim();
-    (unique_z && dim.has_z(), unique_m && dim.has_m())
-}
-
 /// Pushes the runs of `vertices` to keep onto `runs`, and returns how many vertices they hold.
-/// A vertex is dropped when it [is a repeat](is_repeat) of the one kept before it.
+/// A vertex is dropped when it [coincides](coincide) with the one kept before it.
 ///
 /// Unless `lists` is [Lists::Points], the last vertex is always kept.
 /// If it coincides with the one kept before it, that one is dropped instead, unless it is the first.
@@ -154,7 +117,7 @@ fn push_kept_runs<const TOLERANCE_COINCIDENCE: bool, const UNIQUE_Z: bool, const
     let first_run = runs.len();
     let (mut kept, mut last_kept, mut run_start) = (end - start, start, start);
     for i in start + 1..end {
-        if is_repeat::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(coords, last_kept, i, tolerance) {
+        if coincide::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(coords, last_kept, i, tolerance) {
             kept -= 1;
             // The last vertex is only added back below when all others coincide with the first,
             // which leaves 2. Only such a list can still end up short.

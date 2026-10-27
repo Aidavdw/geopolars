@@ -295,7 +295,8 @@ class ExprGeoNameSpace:
         abs_tol: float = 0.0,
         rel_tol: float = 1e-09,
         nans_equal: bool = False,
-        ignore_m: bool = False,
+        unique_z: bool = True,
+        unique_m: bool = False,
     ) -> pl.Expr:
         from geopolars.geo.is_close import is_close
 
@@ -305,7 +306,8 @@ class ExprGeoNameSpace:
             abs_tol=abs_tol,
             rel_tol=rel_tol,
             nans_equal=nans_equal,
-            ignore_m=ignore_m,
+            unique_z=unique_z,
+            unique_m=unique_m,
         )
 
     def is_ccw(self, *, holes_cw: bool = True) -> pl.Expr:
@@ -396,11 +398,22 @@ class ExprGeoNameSpace:
         )
 
     def has_repeated_points(
-        self, *, abs_tol: float | None = None, rel_tol: float | None = None
+        self,
+        *,
+        abs_tol: float | None = None,
+        rel_tol: float | None = None,
+        unique_z: bool = True,
+        unique_m: bool = False,
     ) -> pl.Expr:
         from geopolars.geo.has_repeated_points import has_repeated_points
 
-        return has_repeated_points(self._expr, abs_tol=abs_tol, rel_tol=rel_tol)
+        return has_repeated_points(
+            self._expr,
+            abs_tol=abs_tol,
+            rel_tol=rel_tol,
+            unique_z=unique_z,
+            unique_m=unique_m,
+        )
 
     def remove_repeated_points(
         self,

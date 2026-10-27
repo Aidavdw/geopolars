@@ -7,20 +7,17 @@
 //!
 //! # Const generic flags
 //!
-//! ## `Z`
+//! ## `UNIQUE_Z`
 //!
-//! Every kernel is generic over `Z`, or takes it from the dimension of `a`.
-//! If `Z=true`, the z values are compared too.
+//! Every kernel is generic over `UNIQUE_Z`, or takes it as `unique_z`.
+//! If `UNIQUE_Z=true`, the z values are compared too.
+//! A runtime `unique_z` is ignored for coordinates without a z.
 //!
-//! ## `M`
+//! ## `UNIQUE_M`
 //!
-//! Every kernel is generic over `M`, or takes it from the dimension of `a`.
-//! If `M=true` and `IGNORE_M=false`, the m values are compared too.
-//!
-//! ## `IGNORE_M`
-//!
-//! Every kernel is generic over `IGNORE_M`, or takes it as `ignore_m`.
-//! If `IGNORE_M=true`, the m values are not compared.
+//! Every kernel is generic over `UNIQUE_M`, or takes it as `unique_m`.
+//! If `UNIQUE_M=true`, the m values are compared too.
+//! A runtime `unique_m` is ignored for coordinates without an m.
 //!
 //! ## `NANS_EQUAL`
 //!
@@ -55,12 +52,7 @@ fn values_are_close<const NANS_EQUAL: bool>(a: &[f64], b: &[f64], tolerance: Tol
 /// Whether there are as many coordinates in `a_vertices` as in `b_vertices`,
 /// and every one of them is close to the one at the same position in the other.
 #[inline(always)]
-fn coordinates_are_close<
-    const Z: bool,
-    const M: bool,
-    const IGNORE_M: bool,
-    const NANS_EQUAL: bool,
->(
+fn coordinates_are_close<const UNIQUE_Z: bool, const UNIQUE_M: bool, const NANS_EQUAL: bool>(
     a: &ValidCoords,
     a_vertices: Range<usize>,
     b: &ValidCoords,
@@ -73,12 +65,15 @@ fn coordinates_are_close<
     a_vertices.len() == b_vertices.len()
         && axis_is_close(a.x(), b.x())
         && axis_is_close(a.y(), b.y())
-        && (!Z || axis_is_close(a.z().expect("a z, with `Z`"), b.z().expect("a z, with `Z`")))
-        && (!M
-            || IGNORE_M
+        && (!UNIQUE_Z
             || axis_is_close(
-                a.m().expect("an m, with `M`"),
-                b.m().expect("an m, with `M`"),
+                a.z().expect("a z, with `UNIQUE_Z`"),
+                b.z().expect("a z, with `UNIQUE_Z`"),
+            ))
+        && (!UNIQUE_M
+            || axis_is_close(
+                a.m().expect("an m, with `UNIQUE_M`"),
+                b.m().expect("an m, with `UNIQUE_M`"),
             ))
 }
 
@@ -118,12 +113,7 @@ fn per_compared_row(a: &List, b: &List, test: impl Fn(usize, usize) -> bool) -> 
     }
 }
 
-fn points_are_close_with<
-    const Z: bool,
-    const M: bool,
-    const IGNORE_M: bool,
-    const NANS_EQUAL: bool,
->(
+fn points_are_close_with<const UNIQUE_Z: bool, const UNIQUE_M: bool, const NANS_EQUAL: bool>(
     a: &PointArray,
     b: &PointArray,
     tolerance: Tolerance,
@@ -136,7 +126,7 @@ fn points_are_close_with<
     );
     let (a_coords, b_coords) = (a.ignoring_validity(), b.ignoring_validity());
     let close = |i: usize, j: usize| {
-        coordinates_are_close::<Z, M, IGNORE_M, NANS_EQUAL>(
+        coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
             a_coords,
             i..i + 1,
             b_coords,
@@ -155,9 +145,8 @@ fn points_are_close_with<
 }
 
 fn line_strings_are_close_with<
-    const Z: bool,
-    const M: bool,
-    const IGNORE_M: bool,
+    const UNIQUE_Z: bool,
+    const UNIQUE_M: bool,
     const NANS_EQUAL: bool,
 >(
     a: &LineStringArray,
@@ -165,7 +154,7 @@ fn line_strings_are_close_with<
     tolerance: Tolerance,
 ) -> BooleanArray {
     per_compared_row(&a.rows, &b.rows, |i, j| {
-        coordinates_are_close::<Z, M, IGNORE_M, NANS_EQUAL>(
+        coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
             &a.coords,
             a.rows.range(i),
             &b.coords,
@@ -176,9 +165,8 @@ fn line_strings_are_close_with<
 }
 
 fn multi_points_are_close_with<
-    const Z: bool,
-    const M: bool,
-    const IGNORE_M: bool,
+    const UNIQUE_Z: bool,
+    const UNIQUE_M: bool,
     const NANS_EQUAL: bool,
 >(
     a: &MultiPointArray,
@@ -186,7 +174,7 @@ fn multi_points_are_close_with<
     tolerance: Tolerance,
 ) -> BooleanArray {
     per_compared_row(&a.rows, &b.rows, |i, j| {
-        coordinates_are_close::<Z, M, IGNORE_M, NANS_EQUAL>(
+        coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
             &a.coords,
             a.rows.range(i),
             &b.coords,
@@ -197,9 +185,8 @@ fn multi_points_are_close_with<
 }
 
 fn multi_line_strings_are_close_with<
-    const Z: bool,
-    const M: bool,
-    const IGNORE_M: bool,
+    const UNIQUE_Z: bool,
+    const UNIQUE_M: bool,
     const NANS_EQUAL: bool,
 >(
     a: &MultiLineStringArray,
@@ -209,7 +196,7 @@ fn multi_line_strings_are_close_with<
     per_compared_row(&a.rows, &b.rows, |i, j| {
         let (a_parts, b_parts) = (a.rows.range(i), b.rows.range(j));
         lists_match(&a.lines, a_parts.clone(), &b.lines, b_parts.clone())
-            && coordinates_are_close::<Z, M, IGNORE_M, NANS_EQUAL>(
+            && coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
                 &a.coords,
                 a.lines.span(a_parts),
                 &b.coords,
@@ -219,12 +206,7 @@ fn multi_line_strings_are_close_with<
     })
 }
 
-fn polygons_are_close_with<
-    const Z: bool,
-    const M: bool,
-    const IGNORE_M: bool,
-    const NANS_EQUAL: bool,
->(
+fn polygons_are_close_with<const UNIQUE_Z: bool, const UNIQUE_M: bool, const NANS_EQUAL: bool>(
     a: &PolygonArray,
     b: &PolygonArray,
     tolerance: Tolerance,
@@ -232,7 +214,7 @@ fn polygons_are_close_with<
     per_compared_row(&a.rows, &b.rows, |i, j| {
         let (a_rings, b_rings) = (a.rows.range(i), b.rows.range(j));
         lists_match(&a.rings, a_rings.clone(), &b.rings, b_rings.clone())
-            && coordinates_are_close::<Z, M, IGNORE_M, NANS_EQUAL>(
+            && coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
                 &a.coords,
                 a.rings.span(a_rings),
                 &b.coords,
@@ -243,9 +225,8 @@ fn polygons_are_close_with<
 }
 
 fn multi_polygons_are_close_with<
-    const Z: bool,
-    const M: bool,
-    const IGNORE_M: bool,
+    const UNIQUE_Z: bool,
+    const UNIQUE_M: bool,
     const NANS_EQUAL: bool,
 >(
     a: &MultiPolygonArray,
@@ -264,7 +245,7 @@ fn multi_polygons_are_close_with<
         }
         let (a_rings, b_rings) = (a.polygons.span(a_polygons), b.polygons.span(b_polygons));
         lists_match(&a.rings, a_rings.clone(), &b.rings, b_rings.clone())
-            && coordinates_are_close::<Z, M, IGNORE_M, NANS_EQUAL>(
+            && coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
                 &a.coords,
                 a.rings.span(a_rings),
                 &b.coords,
@@ -274,13 +255,14 @@ fn multi_polygons_are_close_with<
     })
 }
 
-/// Dispatches a `*_are_close_with` kernel on the dimension of `$a`, `ignore_m` and `nans_equal`.
+/// Dispatches a `*_are_close_with` kernel on `unique_z` and `unique_m`
+/// (each only for an axis `$a` has) and `nans_equal`.
 macro_rules! are_close {
-    ($kernel:ident, $a:expr, $b:expr, $tolerance:expr, $ignore_m:expr, $nans_equal:expr) => {{
+    ($kernel:ident, $a:expr, $b:expr, $tolerance:expr, $unique_z:expr, $unique_m:expr, $nans_equal:expr) => {{
         let dim = $a.coords.dim();
         with_const_flags!(
             $kernel($a, $b, $tolerance);
-            dim.has_z(), dim.has_m(), $ignore_m, $nans_equal
+            $unique_z && dim.has_z(), $unique_m && dim.has_m(), $nans_equal
         )
     }};
 }
@@ -289,17 +271,27 @@ pub fn points_are_close(
     a: &PointArray,
     b: &PointArray,
     tolerance: Tolerance,
-    ignore_m: bool,
+    unique_z: bool,
+    unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
-    are_close!(points_are_close_with, a, b, tolerance, ignore_m, nans_equal)
+    are_close!(
+        points_are_close_with,
+        a,
+        b,
+        tolerance,
+        unique_z,
+        unique_m,
+        nans_equal
+    )
 }
 
 pub fn multi_points_are_close(
     a: &MultiPointArray,
     b: &MultiPointArray,
     tolerance: Tolerance,
-    ignore_m: bool,
+    unique_z: bool,
+    unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
     are_close!(
@@ -307,7 +299,8 @@ pub fn multi_points_are_close(
         a,
         b,
         tolerance,
-        ignore_m,
+        unique_z,
+        unique_m,
         nans_equal
     )
 }
@@ -316,7 +309,8 @@ pub fn line_strings_are_close(
     a: &LineStringArray,
     b: &LineStringArray,
     tolerance: Tolerance,
-    ignore_m: bool,
+    unique_z: bool,
+    unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
     are_close!(
@@ -324,7 +318,8 @@ pub fn line_strings_are_close(
         a,
         b,
         tolerance,
-        ignore_m,
+        unique_z,
+        unique_m,
         nans_equal
     )
 }
@@ -334,7 +329,8 @@ pub fn multi_line_strings_are_close(
     a: &MultiLineStringArray,
     b: &MultiLineStringArray,
     tolerance: Tolerance,
-    ignore_m: bool,
+    unique_z: bool,
+    unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
     are_close!(
@@ -342,7 +338,8 @@ pub fn multi_line_strings_are_close(
         a,
         b,
         tolerance,
-        ignore_m,
+        unique_z,
+        unique_m,
         nans_equal
     )
 }
@@ -352,7 +349,8 @@ pub fn polygons_are_close(
     a: &PolygonArray,
     b: &PolygonArray,
     tolerance: Tolerance,
-    ignore_m: bool,
+    unique_z: bool,
+    unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
     are_close!(
@@ -360,7 +358,8 @@ pub fn polygons_are_close(
         a,
         b,
         tolerance,
-        ignore_m,
+        unique_z,
+        unique_m,
         nans_equal
     )
 }
@@ -370,7 +369,8 @@ pub fn multi_polygons_are_close(
     a: &MultiPolygonArray,
     b: &MultiPolygonArray,
     tolerance: Tolerance,
-    ignore_m: bool,
+    unique_z: bool,
+    unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
     are_close!(
@@ -378,7 +378,8 @@ pub fn multi_polygons_are_close(
         a,
         b,
         tolerance,
-        ignore_m,
+        unique_z,
+        unique_m,
         nans_equal
     )
 }

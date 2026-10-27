@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry_pair
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
+@doc()
 def is_close(
     a: IntoExprColumn,
     b: IntoExprColumn,
@@ -26,10 +28,11 @@ def is_close(
     abs_tol: float = 0.0,
     rel_tol: float = 1e-09,
     nans_equal: bool = False,
-    ignore_m: bool = False,
+    unique_z: bool = True,
+    unique_m: bool = False,
 ) -> pl.Expr:
     """Whether two geometries are almost coincident or the same.
-    Every coordinate has to be close to the one at the same position in the other, on every axis.
+    Every coordinate has to be close to the one at the same position in the other, on every compared axis.
     This operation runs row by row, returning a `bool`.
     This is meant to complement pl.Expr.is_close` with `abs_tol`, `rel_tol` and `nans_equal`.
 
@@ -47,7 +50,7 @@ def is_close(
     so a ring that starts at another vertex, or runs the other way, is not close.
     The same goes for the parts of a multi-geometry, even though they have no order of their own.
 
-    m is compared too, unless `ignore_m=True`.
+    {coincidence_axes}
     The empty point (NaN in x and y) is only close to another one with `nans_equal=True`.
 
     Equal lengths are compared row by row.
@@ -83,7 +86,8 @@ def is_close(
                 "abs_tol": abs_tol,
                 "rel_tol": rel_tol,
                 "nans_equal": nans_equal,
-                "ignore_m": ignore_m,
+                "unique_z": unique_z,
+                "unique_m": unique_m,
             },
             is_elementwise=True,
         )
