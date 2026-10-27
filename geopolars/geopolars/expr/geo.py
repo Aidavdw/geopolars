@@ -56,10 +56,62 @@ class ExprGeoNameSpace:
             self._expr, holes, crs=crs, close=close
         )
 
-    def multi_polygon(
+    def polygons_from_coordinates(
+        self,
+        y: IntoExprColumn,
+        z: IntoExprColumn | None = None,
+        m: IntoExprColumn | None = None,
+        *,
+        crs: str | None = None,
+        close: CloseRings | None = None,
+    ) -> pl.Expr:
+        return polygon.polygons_from_coordinates(
+            self._expr, y, z, m, crs=crs, close=close
+        )
+
+    def polygons_from_nested_coordinates(
+        self,
+        y: IntoExprColumn,
+        z: IntoExprColumn | None = None,
+        m: IntoExprColumn | None = None,
+        *,
+        crs: str | None = None,
+        close: CloseRings | None = None,
+    ) -> pl.Expr:
+        return polygon.polygons_from_nested_coordinates(
+            self._expr, y, z, m, crs=crs, close=close
+        )
+
+    def multi_polygons_from_polygons(
         self, *, crs: str | None = None, close: CloseRings | None = None
     ) -> pl.Expr:
-        return polygon.multi_polygon_from_polygons(self._expr, crs=crs, close=close)
+        return polygon.multi_polygons_from_polygons(self._expr, crs=crs, close=close)
+
+    def multi_polygons_from_coordinates(
+        self,
+        y: IntoExprColumn,
+        z: IntoExprColumn | None = None,
+        m: IntoExprColumn | None = None,
+        *,
+        crs: str | None = None,
+        close: CloseRings | None = None,
+    ) -> pl.Expr:
+        return polygon.multi_polygons_from_coordinates(
+            self._expr, y, z, m, crs=crs, close=close
+        )
+
+    def multi_polygons_from_nested_coordinates(
+        self,
+        y: IntoExprColumn,
+        z: IntoExprColumn | None = None,
+        m: IntoExprColumn | None = None,
+        *,
+        crs: str | None = None,
+        close: CloseRings | None = None,
+    ) -> pl.Expr:
+        return polygon.multi_polygons_from_nested_coordinates(
+            self._expr, y, z, m, crs=crs, close=close
+        )
 
     def translate(self, offset: affine.Offset | IntoExprColumn) -> pl.Expr:
         return affine.translate(self._expr, offset)

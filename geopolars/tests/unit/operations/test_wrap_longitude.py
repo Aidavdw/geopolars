@@ -129,7 +129,9 @@ def test_every_part_of_a_multipolygon_counts() -> None:
             ],
             "y": [[[ring], [ring]], [[ring], [ring]]],
         }
-    ).select(geo.multi_polygon_from_columns("x", "y", crs=WGS84).alias("parts"))
+    ).select(
+        geo.multi_polygons_from_nested_coordinates("x", "y", crs=WGS84).alias("parts")
+    )
 
     assert _x(multipolygons, skip_crossing=True) == [
         [[[170.0, 175.0, 175.0, 170.0]], [[190.0, 195.0, 195.0, 190.0]]],

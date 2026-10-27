@@ -225,7 +225,7 @@ _ZM_RINGS = [
             _column(
                 MultiPolygonXYZM(), 3, *([[ring]] for ring in _ZM_RINGS), axes="xyzm"
             ),
-            geo.multi_polygon,
+            geo.multi_polygons_from_polygons,
         ),
     ],
     ids=["polygon", "multipolygon"],

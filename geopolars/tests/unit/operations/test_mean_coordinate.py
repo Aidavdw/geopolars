@@ -246,7 +246,7 @@ def test_a_multipolygon_of_one_polygon_agrees_with_the_polygon() -> None:
         geo.polygons_from_rings_in_single_column("rings").alias("polygon")
     )
     multipolygon = polygon.select(
-        geo.multi_polygon(pl.col("polygon").implode()).alias("polygon")
+        geo.multi_polygons_from_polygons(pl.col("polygon").implode()).alias("polygon")
     )
 
     assert_frame_equal(
@@ -265,7 +265,7 @@ def test_an_empty_or_missing_multipolygon_has_no_mean_coordinate(
                 pl.List(pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64))))
             )
         },
-    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygons_from_polygons("polygons").alias("multipolygon"))
 
     out = df.select(geo.mean_coordinate("multipolygon"))
 

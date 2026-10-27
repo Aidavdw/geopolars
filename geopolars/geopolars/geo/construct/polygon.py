@@ -170,7 +170,7 @@ def polygons_from_nested_coordinates(
 
 
 @doc()
-def multi_polygon_from_polygons(
+def multi_polygons_from_polygons(
     polygons: IntoExprColumn,
     *,
     crs: str | None = None,
@@ -195,23 +195,21 @@ def multi_polygon_from_polygons(
         )
         .group_by("country", maintain_order=True)
         .agg(
-            geo.multi_polygon_from_polygons(
+            geo.multi_polygons_from_polygons(
                 pl.col("island").implode()
             ).alias("country")
         )
     )
     ```
 
-    As for `polygons_from_rings_in_single_column`, every ring has to be a ring, or be closed with `close`.
+    Rings are checked (and closed with `close`)
+    as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
     A multipolygon with a polygon that fails this is missing in the result.
-
-    {constructed_geoarrow_valid}
     """
     return _gather("multipolygon", polygons, _polygon_kwargs(crs, close))
 
 
-@doc()
-def multi_polygon_from_columns(
+def multi_polygons_from_coordinates(
     x: IntoExprColumn,
     y: IntoExprColumn,
     z: IntoExprColumn | None = None,
@@ -220,45 +218,47 @@ def multi_polygon_from_columns(
     crs: str | None = None,
     close: CloseRings | None = None,
 ) -> pl.Expr:
-    """Build a `geoarrow.multipolygon` column from one column per axis.
-    Each is a `List[List[List[Float64]]]`: polygons, then rings, then coordinates.
+    """Build a `geoarrow.multipolygon` column from one coordinate column per axis.
+    Each is a `List[List[Float64]]`: one list per multipolygon,
+    of the exterior ring of each of its polygons.
+    Multipolygons created by this expression can therefore not have any holes.
+    For those, use [`multi_polygons_from_nested_coordinates`][geopolars.geo.multi_polygons_from_nested_coordinates]
+    or [`multi_polygons_from_polygons`][geopolars.geo.multi_polygons_from_polygons].
 
     ```python
-    df.select(geo.multi_polygon_from_columns("lon", "lat"))
+    df.select(geo.multi_polygons_from_coordinates("lon", "lat"))
     ```
 
-    The first ring of every polygon is its exterior ring,
-    and the rest are its holes.
     Rings are checked (and closed with `close`)
-    as in [`multi_polygon_from_polygons`][geopolars.geo.multi_polygon_from_polygons].
-
-    {constructed_geoarrow_valid}
+    as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
+    A multipolygon with a polygon that fails this is missing in the result.
     """
     return _from_columns("multipolygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
 
 
-def multi_polygon(
+def multi_polygons_from_nested_coordinates(
     x: IntoExprColumn,
-    y: IntoExprColumn | None = None,
+    y: IntoExprColumn,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
     *,
     crs: str | None = None,
     close: CloseRings | None = None,
 ) -> pl.Expr:
-    """Build a `geoarrow.multipolygon` column, from polygons or from coordinates.
-    Dispatches to either:
-    - [`multi_polygon_from_polygons`][geopolars.geo.multi_polygon_from_polygons]
-    - [`multi_polygon_from_columns`][geopolars.geo.multi_polygon_from_columns]
-    """
-    if y is None:
-        if z is not None or m is not None:
-            msg = (
-                "multi_polygon() got a z or m coordinate without a y "
-                "coordinate; pass x and y as columns, or call "
-                "multi_polygon_from_polygons()"
-            )
-            raise TypeError(msg)
-        return multi_polygon_from_polygons(x, crs=crs, close=close)
+    """Build a `geoarrow.multipolygon` column from one coordinate column per axis.
+    Each is a `List[List[List[Float64]]]`: polygons, then rings, then coordinates.
+    The first ring of every polygon is its exterior ring, and the rest are its holes.
+    See [`multi_polygons_from_coordinates`][geopolars.geo.multi_polygons_from_coordinates]
+    for multipolygons without holes.
 
-    return multi_polygon_from_columns(x, y, z, m, crs=crs, close=close)
+    ```python
+    df.select(geo.multi_polygons_from_nested_coordinates("lon", "lat"))
+    ```
+
+    Rings are checked (and closed with `close`)
+    as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
+    A multipolygon with a polygon that fails this is missing in the result.
+    """
+    return _from_columns(
+        "multipolygon_nested_coords", x, y, z, m, _polygon_kwargs(crs, close)
+    )

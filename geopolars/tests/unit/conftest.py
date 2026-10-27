@@ -100,7 +100,7 @@ class Dimension(NamedTuple):
 
     def multipolygon(self) -> pl.Expr:
         """Build a multipolygon of this dimension from a `polygon` list column."""
-        return geo.multi_polygon("polygon").alias("multipolygon")
+        return geo.multi_polygons_from_polygons("polygon").alias("multipolygon")
 
     def lines(self, vertices: pl.DataFrame) -> pl.DataFrame:
         """One linestring of this dimension per `line` in a vertex frame."""
@@ -206,7 +206,29 @@ class Dimension(NamedTuple):
             .agg(COORDS)
             .group_by("multipolygon", maintain_order=True)
             .agg(COORDS)
-            .select(self.of_coords(geo.multi_polygon).alias("multipolygon"))
+            .select(
+                self.of_coords(geo.multi_polygons_from_nested_coordinates).alias(
+                    "multipolygon"
+                )
+            )
+        )
+
+    def multipolygons_of_exteriors_from_coords(
+        self, vertices: pl.DataFrame
+    ) -> pl.DataFrame:
+        """The exterior rings of `multipolygons`, out of one coordinate column
+        per axis. These coordinate columns cannot spell holes, so ring 0 is all there is."""
+        return (
+            vertices.filter(pl.col("ring") == 0)
+            .group_by("multipolygon", "polygon", maintain_order=True)
+            .agg(COORDS)
+            .group_by("multipolygon", maintain_order=True)
+            .agg(COORDS)
+            .select(
+                self.of_coords(geo.multi_polygons_from_coordinates).alias(
+                    "multipolygon"
+                )
+            )
         )
 
 

@@ -90,7 +90,8 @@ def test_point_declares_its_crs(coords: pl.DataFrame, dimension: Dimension) -> N
         (geo.polygons_from_coordinates, 1, PolygonXY),
         (geo.polygons_from_nested_coordinates, 2, PolygonXY),
         (geo.multi_line_string_from_columns, 2, MultiLineStringXY),
-        (geo.multi_polygon_from_columns, 3, MultiPolygonXY),
+        (geo.multi_polygons_from_coordinates, 2, MultiPolygonXY),
+        (geo.multi_polygons_from_nested_coordinates, 3, MultiPolygonXY),
     ],
     ids=[
         "linestring",
@@ -99,6 +100,7 @@ def test_point_declares_its_crs(coords: pl.DataFrame, dimension: Dimension) -> N
         "nested polygon",
         "multilinestring",
         "multipolygon",
+        "nested multipolygon",
     ],
 )
 def test_coordinate_columns_declare_a_crs(
@@ -126,7 +128,7 @@ def test_coordinate_columns_declare_a_crs(
         (geo.multi_point_from_points, _points, MultiPointXY),
         (geo.polygons_from_rings_in_single_column, _lines, PolygonXY),
         (geo.multi_line_string_from_line_strings, _lines, MultiLineStringXY),
-        (geo.multi_polygon_from_polygons, _polygons, MultiPolygonXY),
+        (geo.multi_polygons_from_polygons, _polygons, MultiPolygonXY),
     ],
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )

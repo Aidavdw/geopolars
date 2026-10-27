@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use polars::prelude::*;
-use polars_arrow::array::Array;
+use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
@@ -358,15 +358,15 @@ fn zipped(input_fields: &[Field], kwargs: &MetadataKwargs, kind: Kind) -> Polars
     Ok(Geo::new(kind, dim, kwargs.apply(Default::default())?))
 }
 
-/// The polygons `polygon_coords` zips:
-/// one ring per row, so nested as deep as a linestring.
-fn zipped_exteriors(input_fields: &[Field], kwargs: &MetadataKwargs) -> PolarsResult<Geo> {
-    let dim = coordinates_of(input_fields, Kind::Polygon, Kind::LineString.nesting())?;
-    Ok(Geo::new(
-        Kind::Polygon,
-        dim,
-        kwargs.apply(Default::default())?,
-    ))
+/// The polygons or multipolygons `polygon_coords` and `multipolygon_coords` zip:
+/// one ring per polygon, so nested one layer less deep than a `kind`.
+fn zipped_exteriors(
+    input_fields: &[Field],
+    kwargs: &MetadataKwargs,
+    kind: Kind,
+) -> PolarsResult<Geo> {
+    let dim = coordinates_of(input_fields, kind, kind.nesting() - 1)?;
+    Ok(Geo::new(kind, dim, kwargs.apply(Default::default())?))
 }
 
 /// For zipping coordinate columns into a `kind`.
@@ -390,7 +390,7 @@ fn kernel_output_type_polygon_coords(
     input_fields: &[Field],
     kwargs: PolygonKwargs,
 ) -> PolarsResult<Field> {
-    let geo = zipped_exteriors(input_fields, &kwargs.metadata())?;
+    let geo = zipped_exteriors(input_fields, &kwargs.metadata(), Kind::Polygon)?;
     Ok(Field::new(input_fields[0].name().clone(), geo.dtype()))
 }
 
@@ -416,6 +416,14 @@ fn kernel_output_type_multilinestring_coords(
 }
 
 fn kernel_output_type_multipolygon_coords(
+    input_fields: &[Field],
+    kwargs: PolygonKwargs,
+) -> PolarsResult<Field> {
+    let geo = zipped_exteriors(input_fields, &kwargs.metadata(), Kind::MultiPolygon)?;
+    Ok(Field::new(input_fields[0].name().clone(), geo.dtype()))
+}
+
+fn kernel_output_type_multipolygon_nested_coords(
     input_fields: &[Field],
     kwargs: PolygonKwargs,
 ) -> PolarsResult<Field> {
@@ -505,7 +513,7 @@ fn linestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<
 /// See `polygons_from_coordinates`.
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon_coords)]
 fn polygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
-    let geo = zipped_exteriors(&fields_of(inputs), &kwargs.metadata())?;
+    let geo = zipped_exteriors(&fields_of(inputs), &kwargs.metadata(), Kind::Polygon)?;
     let exteriors = trimmed(&interleaved_columns(inputs, Kind::LineString.nesting())?);
     let chunks = exteriors
         .chunks()
@@ -536,9 +544,46 @@ fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsRe
     zip(inputs, &kwargs, None, Kind::MultiLineString)
 }
 
-/// See `multipolygon_from_columns`.
+/// `rows` of rings, as the rows of polygons of one ring each.
+fn one_ring_per_polygon(rows: &ListArray<i64>) -> ListArray<i64> {
+    let rings = rows.values().clone();
+    let lengths = std::iter::repeat_n(1, rings.len());
+    let offsets = Offsets::<i64>::try_from_lengths(lengths).expect("one per polygon");
+    let polygon_dtype = ListArray::<i64>::default_datatype(rings.dtype().clone());
+    let polygons = ListArray::new(polygon_dtype.clone(), offsets.into(), rings, None);
+    ListArray::new(
+        ListArray::<i64>::default_datatype(polygon_dtype),
+        rows.offsets().clone(),
+        polygons.boxed(),
+        rows.validity().cloned(),
+    )
+}
+
+/// See `multi_polygons_from_coordinates`.
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipolygon_coords)]
 fn multipolygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
+    let geo = zipped_exteriors(&fields_of(inputs), &kwargs.metadata(), Kind::MultiPolygon)?;
+    let exteriors = trimmed(&interleaved_columns(
+        inputs,
+        Kind::MultiLineString.nesting(),
+    )?);
+    let chunks = exteriors
+        .list()?
+        .downcast_iter()
+        .map(|chunk| {
+            let multi_polygons = one_ring_per_polygon(chunk);
+            validated_chunk(&multi_polygons, Kind::MultiPolygon, kwargs.close)
+        })
+        .collect::<PolarsResult<Vec<_>>>()?;
+    // SAFETY: every chunk is the storage of a multipolygon of `geo`'s dimension.
+    Ok(unsafe {
+        Series::from_chunks_and_dtype_unchecked(exteriors.name().clone(), chunks, &geo.dtype())
+    })
+}
+
+/// See `multi_polygons_from_nested_coordinates`.
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipolygon_nested_coords)]
+fn multipolygon_nested_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs.metadata(), kwargs.close, Kind::MultiPolygon)
 }
 

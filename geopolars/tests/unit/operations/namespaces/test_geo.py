@@ -333,7 +333,7 @@ def test_translate_keeps_empty_and_missing_multipolygons(
                 pl.List(pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64))))
             )
         },
-    ).select(geo.multi_polygon("polygons").alias("multipolygon"))
+    ).select(geo.multi_polygons_from_polygons("polygons").alias("multipolygon"))
     out = df.select(geo.translate("multipolygon", (1.0, 1.0)).alias("multipolygon"))
 
     assert_frame_equal(out, df)
@@ -415,6 +415,37 @@ def test_separate_rings_namespace_matches_the_functional_api(
     )
 
 
+def test_polygon_coordinates_namespace_matches_the_functional_api(
+    ring_coords: pl.DataFrame,
+) -> None:
+    exteriors = (
+        ring_coords.filter(pl.col("ring") == 0)
+        .group_by("polygon", maintain_order=True)
+        .agg("x", "y", "z")
+    )
+
+    assert_frame_equal(
+        exteriors.select(gpl.col("x").geo.polygons_from_coordinates("y", "z")),
+        exteriors.select(geo.polygons_from_coordinates("x", "y", "z")),
+    )
+
+
+def test_polygon_nested_coordinates_namespace_matches_the_functional_api(
+    ring_coords: pl.DataFrame,
+) -> None:
+    rings = (
+        ring_coords.group_by("polygon", "ring", maintain_order=True)
+        .agg("x", "y", "z")
+        .group_by("polygon", maintain_order=True)
+        .agg("x", "y", "z")
+    )
+
+    assert_frame_equal(
+        rings.select(gpl.col("x").geo.polygons_from_nested_coordinates("y", "z")),
+        rings.select(geo.polygons_from_nested_coordinates("x", "y", "z")),
+    )
+
+
 def test_multilinestring_namespace_matches_the_functional_api(
     ring_coords: pl.DataFrame,
 ) -> None:
@@ -449,8 +480,49 @@ def test_multipolygon_namespace_matches_the_functional_api(
     )
 
     assert_frame_equal(
-        polygons.select(gpl.col("polygon").geo.multi_polygon().alias("multipolygon")),
-        polygons.select(geo.multi_polygon("polygon").alias("multipolygon")),
+        polygons.select(
+            gpl.col("polygon").geo.multi_polygons_from_polygons().alias("multipolygon")
+        ),
+        polygons.select(
+            geo.multi_polygons_from_polygons("polygon").alias("multipolygon")
+        ),
+    )
+
+
+def test_multipolygon_coordinates_namespace_matches_the_functional_api(
+    multipolygon_coords: pl.DataFrame,
+) -> None:
+    exteriors = (
+        multipolygon_coords.filter(pl.col("ring") == 0)
+        .group_by("multipolygon", "polygon", maintain_order=True)
+        .agg("x", "y", "z")
+        .group_by("multipolygon", maintain_order=True)
+        .agg("x", "y", "z")
+    )
+
+    assert_frame_equal(
+        exteriors.select(gpl.col("x").geo.multi_polygons_from_coordinates("y", "z")),
+        exteriors.select(geo.multi_polygons_from_coordinates("x", "y", "z")),
+    )
+
+
+def test_multipolygon_nested_coordinates_namespace_matches_the_functional_api(
+    multipolygon_coords: pl.DataFrame,
+) -> None:
+    rings = (
+        multipolygon_coords.group_by(
+            "multipolygon", "polygon", "ring", maintain_order=True
+        )
+        .agg("x", "y", "z")
+        .group_by("multipolygon", "polygon", maintain_order=True)
+        .agg("x", "y", "z")
+        .group_by("multipolygon", maintain_order=True)
+        .agg("x", "y", "z")
+    )
+
+    assert_frame_equal(
+        rings.select(gpl.col("x").geo.multi_polygons_from_nested_coordinates("y", "z")),
+        rings.select(geo.multi_polygons_from_nested_coordinates("x", "y", "z")),
     )
 
 
@@ -463,8 +535,10 @@ def test_multipolygon_namespace_forwards_close() -> None:
     )
     close = geo.CloseRings()
 
-    namespaced = df.select(gpl.col("polygons").geo.multi_polygon(close=close))
-    functional = df.select(geo.multi_polygon("polygons", close=close))
+    namespaced = df.select(
+        gpl.col("polygons").geo.multi_polygons_from_polygons(close=close)
+    )
+    functional = df.select(geo.multi_polygons_from_polygons("polygons", close=close))
 
     assert namespaced["polygons"].is_null().to_list() == [False]
     assert_frame_equal(namespaced, functional)
