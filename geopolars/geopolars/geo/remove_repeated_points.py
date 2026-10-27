@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 CollapsedLines = Literal["keep_ends", "single_vertex"]
+TooShort = Literal["invalid", "keep", "empty"]
 
 
 @doc()
@@ -28,7 +29,7 @@ def remove_repeated_points(
     unique_z: bool = True,
     unique_m: bool = False,
     collapsed_lines: CollapsedLines = "keep_ends",
-    drop_short_lines: bool = False,
+    too_short: TooShort = "invalid",
 ) -> pl.Expr:
     """Removes coincident points in direct succession, leaving only one.
     If `n` repeating points are all at the same place, all but the first are removed,
@@ -53,40 +54,27 @@ def remove_repeated_points(
     {coincidence_axes}
     {coincidence_tolerance}
 
-    This operation removes coordinates, which means that linestrings can be left
-    with an insufficient amount of vertices.
-    What is done with these is determined by the argument `collapsed_lines`.
     `collapsed_lines` says what a linestring keeps when all its vertices lie at one place.
     With `"keep_ends"`, it keeps its first and last vertex, as GEOS does.
     With `"single_vertex"`, it keeps only its first.
     This argument is not considered for polygon rings.
     A ring always keeps both ends in order to stay closed (and therefore valid GeoArrow).
 
-    `collapsed_lines` works together with `drop_short_lines`.
-    `drop_short_lines` sets any resulting linestring that is left with only a single vertex,
-    and a polygon ring with fewer than 3 (all at one place, closed), to empty.
+    This operation removes coordinates, which can leave a linestring or ring too short.
+    A linestring is too short with a single vertex, and a ring with fewer than 4.
+    This also holds for input that was too short already.
+    What is done with these is determined by `too_short`:
 
-    For a linestring:
+    | `too_short` | a too-short linestring or ring |
+    | - | - |
+    | `"invalid"` | makes its row missing |
+    | `"keep"` | stays as it is, e.g. `[A]`, or a ring `[A, B, A]` |
+    | `"empty"` | becomes empty |
 
-    | `collapsed_lines` | `drop_short_lines` | `A A A` gives | 1-vertex input gives |
-    | - | - | - | - |
-    | `"keep_ends"` | `False` | `[A, A]` (as GEOS does) | unchanged |
-    | `"keep_ends"` | `True` | `[A, A]` | empty |
-    | `"single_vertex"` | `False` | `[A]` | unchanged |
-    | `"single_vertex"` | `True` | empty | empty |
+    For a linestring `A A A`, `"keep_ends"` gives `[A, A]`, which is not too short.
+    `"single_vertex"` gives `[A]`, which is.
 
-    Only the last combination never leaves a linestring that `is_valid_ogc` rejects.
-
-    A (multi)polygon with a ring that is left with fewer than 4 vertices becomes missing,
-    unless `drop_short_lines` empties that ring.
-    For a ring, which `collapsed_lines` does not affect:
-
-    | `drop_short_lines` | `A A A A` gives | `A B B A` gives |
-    | - | - | - |
-    | `False` | missing row | missing row |
-    | `True` | empty ring | missing row |
-
-    Note that leaving empty (outer) rings may make a polygon invalid by OGC,
+    Note that an empty exterior ring makes a polygon invalid by OGC,
     unless every hole of it is empty too (the empty polygon).
 
     {ignores_empty_and_invalid}
@@ -102,6 +90,9 @@ def remove_repeated_points(
             f"got {collapsed_lines!r}"
         )
         raise ValueError(msg)
+    if too_short not in get_args(TooShort):
+        msg = f"`too_short` must be one of {list(get_args(TooShort))}, got {too_short!r}"
+        raise ValueError(msg)
 
     def build(column: pl.Expr, _geometry: GeoArrowType) -> pl.Expr:
         return register_plugin_function(
@@ -115,7 +106,7 @@ def remove_repeated_points(
                 "unique_z": unique_z,
                 "unique_m": unique_m,
                 "collapsed_lines": collapsed_lines,
-                "drop_short_lines": drop_short_lines,
+                "too_short": too_short,
             },
         )
 

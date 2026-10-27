@@ -5,7 +5,7 @@
 use geopolars_compute::native::{
     line_strings_without_repeated_points, multi_line_strings_without_repeated_points,
     multi_points_without_repeated_points, multi_polygons_without_repeated_points,
-    polygons_without_repeated_points, CollapsedLines, LineOptions,
+    polygons_without_repeated_points, CollapsedLines, LineOptions, TooShort,
 };
 use geopolars_core::{
     downcast, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
@@ -27,6 +27,14 @@ enum CollapsedLinesDef {
     SingleVertex,
 }
 
+#[derive(Deserialize)]
+#[serde(remote = "TooShort", rename_all = "snake_case")]
+enum TooShortDef {
+    Invalid,
+    Keep,
+    Empty,
+}
+
 /// See python
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -37,7 +45,8 @@ pub struct RemoveRepeatedPointsKwargs {
     unique_m: bool,
     #[serde(with = "CollapsedLinesDef")]
     collapsed_lines: CollapsedLines,
-    drop_short_lines: bool,
+    #[serde(with = "TooShortDef")]
+    too_short: TooShort,
 }
 
 /// [`remove_repeated_points`] for one chunk of the storage of a `kind`.
@@ -48,11 +57,10 @@ fn chunk_without_repeated_points(
 ) -> PolarsResult<Box<dyn Array>> {
     let rows = || downcast::<ListArray<i64>>(chunk, "a list of parts");
     let tolerance = tolerance(kwargs.abs_tol, kwargs.rel_tol);
-    let (unique_z, unique_m, drop_short_lines) =
-        (kwargs.unique_z, kwargs.unique_m, kwargs.drop_short_lines);
+    let (unique_z, unique_m, too_short) = (kwargs.unique_z, kwargs.unique_m, kwargs.too_short);
     let options = LineOptions {
         collapsed_lines: kwargs.collapsed_lines,
-        drop_short_lines,
+        too_short,
     };
     Ok(match kind {
         Kind::Point => chunk.to_boxed(),
@@ -78,7 +86,7 @@ fn chunk_without_repeated_points(
             tolerance,
             unique_z,
             unique_m,
-            drop_short_lines,
+            too_short,
         )
         .into_list_array()
         .boxed(),
@@ -96,7 +104,7 @@ fn chunk_without_repeated_points(
             tolerance,
             unique_z,
             unique_m,
-            drop_short_lines,
+            too_short,
         )
         .into_list_array()
         .boxed(),

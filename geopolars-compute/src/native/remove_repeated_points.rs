@@ -4,9 +4,8 @@
 //! Every kernel copies the kept coordinates once, a run of them at a time.
 //! No part is ever removed, so only the innermost list level gets new offsets.
 //! A missing row is processed like any other, as its value is masked anyway.
-//! A row with a ring that would be left with fewer than [MIN_RING_VERTICES] vertices becomes missing.
-//! That ring keeps no vertices.
-//! With `drop_short_lines`, a short linestring or ring becomes empty instead (see [Lists::short_below]).
+//! A linestring or ring left with fewer than [min_vertices](Lists::min_vertices) vertices is too short.
+//! [TooShort] says what happens to it.
 //!
 //! # Const generic flags
 //!
@@ -32,23 +31,31 @@ pub enum CollapsedLines {
     SingleVertex,
 }
 
-/// What happens to a linestring that collapses, or that has one vertex.
+/// See `too_short` of `remove_repeated_points` in Python.
+#[derive(Debug, Clone, Copy)]
+pub enum TooShort {
+    Invalid,
+    Keep,
+    Empty,
+}
+
+/// What happens to a linestring that collapses, or that is too short.
 /// See `remove_repeated_points` in Python.
 #[derive(Debug, Clone, Copy)]
 pub struct LineOptions {
     pub collapsed_lines: CollapsedLines,
-    pub drop_short_lines: bool,
+    pub too_short: TooShort,
 }
 
 /// What the lists of vertices handed to [push_kept_runs] are.
 #[derive(Clone, Copy)]
 enum Lists {
-    /// The points of a multipoint. These have no ends to keep.
+    /// The points of a multipoint. These have no ends to keep, and are never too short.
     Points,
     Lines(LineOptions),
     /// Rings always keep both ends, so they stay closed.
     Rings {
-        drop_short_lines: bool,
+        too_short: TooShort,
     },
 }
 
@@ -64,27 +71,44 @@ impl Lists {
         )
     }
 
-    /// A list left with fewer vertices than this becomes empty. `0` when none does.
-    /// That is a linestring of a single vertex, or a ring of at most two (one place, closed).
-    fn short_below(self) -> usize {
+    /// A list with some vertices, but fewer than this, is too short.
+    fn min_vertices(self) -> usize {
         match self {
-            Lists::Lines(LineOptions {
-                drop_short_lines: true,
-                ..
-            }) => 2,
-            Lists::Rings {
-                drop_short_lines: true,
-            } => 3,
-            Lists::Points | Lists::Lines(_) | Lists::Rings { .. } => 0,
+            Lists::Points => 0,
+            Lists::Lines(_) => 2,
+            Lists::Rings { .. } => MIN_RING_VERTICES,
         }
     }
 
-    /// A list that is not [short](Self::short_below) and has fewer vertices than this
-    /// makes its row missing.
-    fn min_vertices(self) -> usize {
+    fn too_short(self) -> TooShort {
         match self {
-            Lists::Rings { .. } => MIN_RING_VERTICES,
-            Lists::Points | Lists::Lines(_) => 0,
+            Lists::Points => TooShort::Keep,
+            Lists::Lines(options) => options.too_short,
+            Lists::Rings { too_short } => too_short,
+        }
+    }
+}
+
+/// What [push_kept_runs] returns for a list that keeps `kept` vertices,
+/// in the runs from `first_run` on.
+fn kept_or_too_short(
+    kept: usize,
+    lists: Lists,
+    runs: &mut Vec<Range<usize>>,
+    first_run: usize,
+) -> Option<usize> {
+    if kept == 0 || kept >= lists.min_vertices() {
+        return Some(kept);
+    }
+    match lists.too_short() {
+        TooShort::Keep => Some(kept),
+        TooShort::Empty => {
+            runs.truncate(first_run);
+            Some(0)
+        }
+        TooShort::Invalid => {
+            runs.truncate(first_run);
+            None
         }
     }
 }
@@ -94,9 +118,8 @@ impl Lists {
 ///
 /// Unless `lists` is [Lists::Points], the last vertex is always kept.
 /// If it coincides with the one kept before it, that one is dropped instead, unless it is the first.
-/// A [short](Lists::short_below) list keeps nothing.
-/// `None`, with nothing pushed, as soon as it is clear the list will be left with
-/// fewer than [min_vertices](Lists::min_vertices) without being short.
+/// A [too short](Lists::min_vertices) list keeps nothing, unless [TooShort::Keep].
+/// With [TooShort::Invalid], it returns `None`, as soon as it is clear the list will be too short.
 #[inline(always)]
 fn push_kept_runs<const TOLERANCE_COINCIDENCE: bool, const UNIQUE_Z: bool, const UNIQUE_M: bool>(
     coords: &ValidCoords,
@@ -106,24 +129,20 @@ fn push_kept_runs<const TOLERANCE_COINCIDENCE: bool, const UNIQUE_Z: bool, const
     runs: &mut Vec<Range<usize>>,
 ) -> Option<usize> {
     let Range { start, end } = vertices;
-    let (short_below, min_vertices) = (lists.short_below(), lists.min_vertices());
-    if end - start < 2 {
-        if end - start < short_below {
-            return Some(0);
-        }
-        runs.push(start..end);
-        return Some(end - start);
-    }
     let first_run = runs.len();
+    if end - start < 2 {
+        runs.push(start..end);
+        return kept_or_too_short(end - start, lists, runs, first_run);
+    }
+    let gives_up_early = !matches!(lists.too_short(), TooShort::Keep);
     let (mut kept, mut last_kept, mut run_start) = (end - start, start, start);
     for i in start + 1..end {
         if coincide::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(coords, last_kept, i, tolerance) {
             kept -= 1;
-            // The last vertex is only added back below when all others coincide with the first,
-            // which leaves 2. Only such a list can still end up short.
-            if kept < min_vertices && (short_below == 0 || last_kept != start) {
-                runs.truncate(first_run);
-                return None;
+            // The last vertex is only added back below when all others coincide with the first.
+            let added_back = usize::from(last_kept == start && lists.keeps_both_ends());
+            if gives_up_early && kept + added_back < lists.min_vertices() {
+                return kept_or_too_short(kept + added_back, lists, runs, first_run);
             }
             if run_start < i {
                 runs.push(run_start..i);
@@ -152,19 +171,11 @@ fn push_kept_runs<const TOLERANCE_COINCIDENCE: bool, const UNIQUE_Z: bool, const
         }
         runs.push(end - 1..end);
     }
-    if kept < short_below {
-        runs.truncate(first_run);
-        return Some(0);
-    }
-    if kept < min_vertices {
-        runs.truncate(first_run);
-        return None;
-    }
-    Some(kept)
+    kept_or_too_short(kept, lists, runs, first_run)
 }
 
 /// The offsets of what each of `lists` keeps by [push_kept_runs], and the coordinates it keeps.
-/// Last, the rings that collapsed, which keep none.
+/// Last, the lists that are too short with [TooShort::Invalid], which keep none.
 fn without_repeated_vertices<
     const TOLERANCE_COINCIDENCE: bool,
     const UNIQUE_Z: bool,
@@ -175,7 +186,7 @@ fn without_repeated_vertices<
     coords: &ValidCoords,
     tolerance: Tolerance,
 ) -> (OffsetsBuffer<i64>, ValidCoords, Vec<usize>) {
-    let (mut runs, mut collapsed) = (Vec::new(), Vec::new());
+    let (mut runs, mut too_short) = (Vec::new(), Vec::new());
     let lengths: Vec<usize> = lists
         .ranges()
         .enumerate()
@@ -184,7 +195,7 @@ fn without_repeated_vertices<
                 coords, list, tolerance, kind, &mut runs,
             )
             .unwrap_or_else(|| {
-                collapsed.push(j);
+                too_short.push(j);
                 0
             })
         })
@@ -192,7 +203,7 @@ fn without_repeated_vertices<
     (
         offsets_of(lengths.into_iter()),
         coords.copy_ranges(runs.into_iter()),
-        collapsed,
+        too_short,
     )
 }
 
@@ -220,14 +231,16 @@ fn line_strings_without_repeated_points_with<
     tolerance: Tolerance,
     options: LineOptions,
 ) -> LineStringArray {
-    let (rows, coords, _) = without_repeated_vertices::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(
-        array.rows.ignoring_validity(),
-        Lists::Lines(options),
-        &array.coords,
-        tolerance,
-    );
+    let (offsets, coords, too_short) =
+        without_repeated_vertices::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(
+            array.rows.ignoring_validity(),
+            Lists::Lines(options),
+            &array.coords,
+            tolerance,
+        );
+    let validity = validity_without(array.rows.validity(), array.rows.len(), &too_short);
     LineStringArray {
-        rows: List::from_offsets(rows, array.rows.validity().cloned()),
+        rows: List::from_offsets(offsets, validity),
         coords,
     }
 }
@@ -286,16 +299,16 @@ fn polygons_without_repeated_points_with<
 >(
     array: &PolygonArray,
     tolerance: Tolerance,
-    drop_short_lines: bool,
+    too_short: TooShort,
 ) -> PolygonArray {
-    let (rings, coords, collapsed) =
+    let (rings, coords, too_short) =
         without_repeated_vertices::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(
             &array.rings,
-            Lists::Rings { drop_short_lines },
+            Lists::Rings { too_short },
             &array.coords,
             tolerance,
         );
-    let failed: Vec<usize> = collapsed
+    let failed: Vec<usize> = too_short
         .into_iter()
         .filter_map(|ring| list_holding(array.rows.ignoring_validity(), ring))
         .collect();
@@ -311,11 +324,11 @@ pub fn polygons_without_repeated_points(
     tolerance: Option<Tolerance>,
     unique_z: bool,
     unique_m: bool,
-    drop_short_lines: bool,
+    too_short: TooShort,
 ) -> PolygonArray {
     let (unique_z, unique_m) = unique_axes(&array.coords, unique_z, unique_m);
     with_const_flags!(
-        polygons_without_repeated_points_with(array, tolerance.unwrap_or_default(), drop_short_lines);
+        polygons_without_repeated_points_with(array, tolerance.unwrap_or_default(), too_short);
         tolerance.is_some(), unique_z, unique_m
     )
 }
@@ -329,14 +342,19 @@ fn multi_line_strings_without_repeated_points_with<
     tolerance: Tolerance,
     options: LineOptions,
 ) -> MultiLineStringArray {
-    let (lines, coords, _) = without_repeated_vertices::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(
-        &array.lines,
-        Lists::Lines(options),
-        &array.coords,
-        tolerance,
-    );
+    let (lines, coords, too_short) =
+        without_repeated_vertices::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(
+            &array.lines,
+            Lists::Lines(options),
+            &array.coords,
+            tolerance,
+        );
+    let failed: Vec<usize> = too_short
+        .into_iter()
+        .filter_map(|line| list_holding(array.rows.ignoring_validity(), line))
+        .collect();
     MultiLineStringArray {
-        rows: array.rows.clone(),
+        rows: without_rows(&array.rows, &failed),
         lines: ValidList::from_offsets(lines),
         coords,
     }
@@ -363,16 +381,16 @@ fn multi_polygons_without_repeated_points_with<
 >(
     array: &MultiPolygonArray,
     tolerance: Tolerance,
-    drop_short_lines: bool,
+    too_short: TooShort,
 ) -> MultiPolygonArray {
-    let (rings, coords, collapsed) =
+    let (rings, coords, too_short) =
         without_repeated_vertices::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(
             &array.rings,
-            Lists::Rings { drop_short_lines },
+            Lists::Rings { too_short },
             &array.coords,
             tolerance,
         );
-    let failed: Vec<usize> = collapsed
+    let failed: Vec<usize> = too_short
         .into_iter()
         .filter_map(|ring| list_holding(&array.polygons, ring))
         .filter_map(|polygon| list_holding(array.rows.ignoring_validity(), polygon))
@@ -390,11 +408,11 @@ pub fn multi_polygons_without_repeated_points(
     tolerance: Option<Tolerance>,
     unique_z: bool,
     unique_m: bool,
-    drop_short_lines: bool,
+    too_short: TooShort,
 ) -> MultiPolygonArray {
     let (unique_z, unique_m) = unique_axes(&array.coords, unique_z, unique_m);
     with_const_flags!(
-        multi_polygons_without_repeated_points_with(array, tolerance.unwrap_or_default(), drop_short_lines);
+        multi_polygons_without_repeated_points_with(array, tolerance.unwrap_or_default(), too_short);
         tolerance.is_some(), unique_z, unique_m
     )
 }

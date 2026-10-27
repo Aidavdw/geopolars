@@ -498,7 +498,7 @@ class ExprGeoNameSpace:
         unique_z: bool = True,
         unique_m: bool = False,
         collapsed_lines: Literal["keep_ends", "single_vertex"] = "keep_ends",
-        drop_short_lines: bool = False,
+        too_short: Literal["invalid", "keep", "empty"] = "invalid",
     ) -> pl.Expr:
         from geopolars.geo.remove_repeated_points import remove_repeated_points
 
@@ -509,7 +509,7 @@ class ExprGeoNameSpace:
             unique_z=unique_z,
             unique_m=unique_m,
             collapsed_lines=collapsed_lines,
-            drop_short_lines=drop_short_lines,
+            too_short=too_short,
         )
 
     def distance(
