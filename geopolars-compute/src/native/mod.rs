@@ -80,5 +80,5 @@ pub use reverse::{
 };
 pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,
-    polygon_interiors,
+    polygon_interiors, polygons_from_exteriors_and_holes,
 };

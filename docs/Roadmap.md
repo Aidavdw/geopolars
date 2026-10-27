@@ -54,7 +54,7 @@ transfer transforms
 geometry editing
 
 - [ ] Linestring joining
-- [ ] polygon construction from linestrings
+- [x] polygon construction from linestrings
 - [ ] Adding additional holes to polygons from linestrings
 - [x] reverse lines
 - [ ] make lines cw/ccw

@@ -82,7 +82,7 @@ def test_the_coordinate_that_closes_a_ring_is_left_out() -> None:
     """A square's four corners average to its middle. Counting the repeat that
     closes the ring would pull the mean towards wherever it starts."""
     df = pl.DataFrame({"rings": [[_SQUARE]]}, schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings").alias("polygon")
+        geo.polygons_from_rings_in_single_column("rings").alias("polygon")
     )
     out = df.select(geo.mean_coordinate("polygon"))
 
@@ -243,7 +243,7 @@ def test_a_multipolygon_averages_the_vertices_of_all_its_polygons(
 
 def test_a_multipolygon_of_one_polygon_agrees_with_the_polygon() -> None:
     polygon = pl.DataFrame({"rings": [[_SQUARE]]}, schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings").alias("polygon")
+        geo.polygons_from_rings_in_single_column("rings").alias("polygon")
     )
     multipolygon = polygon.select(
         geo.multi_polygon(pl.col("polygon").implode()).alias("polygon")
@@ -347,7 +347,7 @@ def test_an_empty_or_missing_polygon_has_no_mean_coordinate(
                 pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
             )
         },
-    ).select(geo.polygon("rings").alias("polygon"))
+    ).select(geo.polygons_from_rings_in_single_column("rings").alias("polygon"))
 
     out = df.select(geo.mean_coordinate("polygon"))
 

@@ -219,7 +219,7 @@ _ZM_RINGS = [
     [
         (
             _column(PolygonXYZM(), 2, *([ring] for ring in _ZM_RINGS), axes="xyzm"),
-            geo.polygon,
+            geo.polygons_from_rings_in_single_column,
         ),
         (
             _column(

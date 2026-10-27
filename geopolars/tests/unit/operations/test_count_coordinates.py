@@ -182,7 +182,11 @@ def test_gives_a_u32_and_drops_the_crs(geometry: str) -> None:
     if geometry != "point":
         df = df.select(geo.line_string(pl.col("point").implode()).alias("line"))
     if geometry == "polygon":
-        df = df.select(geo.polygon(pl.col("line").implode()).alias("polygon"))
+        df = df.select(
+            geo.polygons_from_rings_in_single_column(pl.col("line").implode()).alias(
+                "polygon"
+            )
+        )
 
     lf = df.lazy().select(geo.count_coordinates(geometry))
 

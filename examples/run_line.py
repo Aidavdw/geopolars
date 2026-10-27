@@ -187,8 +187,7 @@ rings = pl.DataFrame(
         # The first ring of a polygon is its exterior; the rest are holes.
         "plot": ["field"] * 9 + ["yard"] * 4,
         "ring": ["outer"] * 5 + ["hole"] * 4 + ["outer"] * 4,
-        # Every ring repeats its first vertex last. `polygon` does not check
-        # that, nor close a ring for you.
+        # Every ring repeats its first vertex last, which the constructors check.
         "lon": [0.0, 4.0, 4.0, 0.0, 0.0, 1.0, 2.0, 1.0, 1.0, 10.0, 12.0, 11.0, 10.0],
         "lat": [0.0, 0.0, 3.0, 3.0, 0.0, 1.0, 1.0, 2.0, 1.0, 0.0, 0.0, 2.0, 0.0],
     }
@@ -202,7 +201,7 @@ boundaries = rings.group_by("plot", "ring", maintain_order=True).agg(
 print(f"The rings are ordinary linestrings: {boundaries}")
 
 plots = boundaries.group_by("plot", maintain_order=True).agg(
-    boundary=geo.polygon_from_rings(pl.col("boundary").implode())
+    boundary=geo.polygons_from_rings_in_single_column(pl.col("boundary").implode())
 )
 print(f"Which a second grouping turns into polygons: {plots}")
 print("A polygon stores `List<List<Coordinate>>`: the same coordinates, twice nested.")
@@ -221,14 +220,23 @@ print(
     )
 )
 
-print("\nCoordinate columns work a level deeper too: one list per polygon, of")
-print("one list per ring. The two groupings are the two levels of nesting.")
-direct_plots = (
-    rings.group_by("plot", "ring", maintain_order=True)
-    .agg("lon", "lat")
+print("\nThe exterior and the holes can also come from separate columns.")
+print("A plot without holes gets a missing `holes`, which means none.")
+exteriors = boundaries.filter(ring="outer").select("plot", exterior="boundary")
+holes = boundaries.filter(ring="hole").group_by("plot").agg(holes="boundary")
+separate_plots = exteriors.join(holes, on="plot", how="left").select(
+    "plot",
+    boundary=geo.polygons_from_rings_in_separate_columns("exterior", "holes"),
+)
+print(separate_plots)
+print("the same polygons:", separate_plots["boundary"].equals(plots["boundary"]))
+
+print("\nCoordinate columns hold one list per polygon: its exterior ring.")
+print("So polygons built from coordinates cannot have holes.")
+outlines = (
+    rings.filter(ring="outer")
     .group_by("plot", maintain_order=True)
     .agg("lon", "lat")
-    .select("plot", boundary=geo.polygon_from_columns("lon", "lat"))
+    .select("plot", boundary=geo.polygons_from_coordinates("lon", "lat"))
 )
-print(direct_plots)
-print("the same polygons:", direct_plots["boundary"].equals(plots["boundary"]))
+print(outlines)

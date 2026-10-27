@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
+    from geopolars.geo.close_rings import CloseRings
     from geopolars.geo.is_valid import CrsBounds
 
 
@@ -37,8 +38,23 @@ class ExprGeoNameSpace:
     def multi_line_string(self, *, crs: str | None = None) -> pl.Expr:
         return construct.multi_line_string_from_line_strings(self._expr, crs=crs)
 
-    def polygon(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.polygon_from_rings(self._expr, crs=crs)
+    def polygons_from_rings_in_single_column(
+        self, *, crs: str | None = None, close: CloseRings | None = None
+    ) -> pl.Expr:
+        return construct.polygons_from_rings_in_single_column(
+            self._expr, crs=crs, close=close
+        )
+
+    def polygons_from_rings_in_separate_columns(
+        self,
+        holes: IntoExprColumn | None = None,
+        *,
+        crs: str | None = None,
+        close: CloseRings | None = None,
+    ) -> pl.Expr:
+        return construct.polygons_from_rings_in_separate_columns(
+            self._expr, holes, crs=crs, close=close
+        )
 
     def multi_polygon(self, *, crs: str | None = None) -> pl.Expr:
         return construct.multi_polygon_from_polygons(self._expr, crs=crs)

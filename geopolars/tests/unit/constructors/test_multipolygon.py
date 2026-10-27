@@ -156,7 +156,7 @@ def test_rejects_polygons_that_are_not_coordinates() -> None:
 def test_rejects_a_column_that_is_not_a_list() -> None:
     """A polygon column is a part per row, not a multipolygon per row."""
     df = pl.DataFrame({"rings": _SQUARE}, schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings").alias("polygon")
+        geo.polygons_from_rings_in_single_column("rings").alias("polygon")
     )
 
     with pytest.raises(ComputeError, match="expected a list of"):
@@ -386,7 +386,9 @@ def test_close_does_not_reach_polygons_that_are_already_built() -> None:
     which leaves the multipolygon missing a polygon."""
     polygons = pl.DataFrame(
         {"rings": [_OPEN_POLYGON]}, schema={"rings": _XY_RINGS}
-    ).select(geo.polygon("rings").implode().alias("polygons"))
+    ).select(
+        geo.polygons_from_rings_in_single_column("rings").implode().alias("polygons")
+    )
 
     out = polygons.select(
         geo.multi_polygon("polygons", close=geo.CloseRings()).alias("m")

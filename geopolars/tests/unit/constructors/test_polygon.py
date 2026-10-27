@@ -1,4 +1,4 @@
-"""Building `geoarrow.polygon` columns with `geopolars.geo.polygon`."""
+"""Building `geoarrow.polygon` columns with the `geopolars.geo.polygons_from_*` constructors."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from geopolars import geo
 from geopolars.datatypes import (
     PolygonXY,
 )
-from tests.unit.conftest import Dimension, ring_coordinates
+from tests.unit.conftest import COORDS, Dimension, ring_coordinates
 
 # A list of bare coordinate structs: what a ring stores, before it is one.
 _XY_VERTICES = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
@@ -19,8 +19,11 @@ _XY_VERTICES = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
 # A list of those: what a polygon stores, before it is one.
 _XY_RINGS = pl.List(_XY_VERTICES)
 
+# One coordinate column per axis: one list per polygon, its exterior ring.
+_XY_COORDS = {"lon": pl.List(pl.Float64), "lat": pl.List(pl.Float64)}
+
 # One coordinate column per axis: one list per polygon, of one list per ring.
-_XY_COORDS = {
+_XY_NESTED_COORDS = {
     "lon": pl.List(pl.List(pl.Float64)),
     "lat": pl.List(pl.List(pl.Float64)),
 }
@@ -50,7 +53,7 @@ def test_accepts_bare_lists_of_coordinate_structs() -> None:
     a list of the vertex lists a linestring wraps is the same storage,
     and is read the same way."""
     df = pl.DataFrame({"rings": [_TRIANGLE]}, schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings").alias("polygon")
+        geo.polygons_from_rings_in_single_column("rings").alias("polygon")
     )
 
     assert df.schema["polygon"] == PolygonXY()
@@ -72,10 +75,10 @@ def test_rings_keep_their_order() -> None:
     ]
     df = pl.DataFrame(
         {"rings": [[*_TRIANGLE, hole]]}, schema={"rings": _XY_RINGS}
-    ).select(geo.polygon("rings").alias("polygon"))
+    ).select(geo.polygons_from_rings_in_single_column("rings").alias("polygon"))
     swapped = df.select(
         pl.col("polygon").ext.storage().list.reverse().alias("rings")
-    ).select(geo.polygon("rings").alias("polygon"))
+    ).select(geo.polygons_from_rings_in_single_column("rings").alias("polygon"))
 
     assert_frame_equal(
         ring_coordinates(swapped),
@@ -93,7 +96,7 @@ def test_an_empty_list_is_an_empty_polygon() -> None:
     and is not a missing polygon.
     See https://geoarrow.org/format.html#empty-geometries"""
     df = pl.DataFrame({"rings": [[]]}, schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings").alias("polygon")
+        geo.polygons_from_rings_in_single_column("rings").alias("polygon")
     )
 
     assert df.schema["polygon"] == PolygonXY()
@@ -110,7 +113,7 @@ def test_a_missing_ring_invalidates_the_whole_polygon() -> None:
     df = pl.DataFrame(
         {"rings": [[*_TRIANGLE, None], _TRIANGLE, None]},
         schema={"rings": _XY_RINGS},
-    ).select(geo.polygon("rings").alias("polygon"))
+    ).select(geo.polygons_from_rings_in_single_column("rings").alias("polygon"))
 
     assert df["polygon"].is_null().to_list() == [True, False, True]
 
@@ -122,7 +125,7 @@ def test_a_missing_vertex_invalidates_the_whole_polygon() -> None:
     df = pl.DataFrame(
         {"rings": [[[{"x": 1.0, "y": 2.0}, None]], _TRIANGLE]},
         schema={"rings": _XY_RINGS},
-    ).select(geo.polygon("rings").alias("polygon"))
+    ).select(geo.polygons_from_rings_in_single_column("rings").alias("polygon"))
 
     assert df["polygon"].is_null().to_list() == [True, False]
 
@@ -134,7 +137,7 @@ def test_a_missing_coordinate_invalidates_the_whole_polygon() -> None:
     df = pl.DataFrame(
         {"rings": [[[{"x": 1.0, "y": None}]], _TRIANGLE]},
         schema={"rings": _XY_RINGS},
-    ).select(geo.polygon("rings").alias("polygon"))
+    ).select(geo.polygons_from_rings_in_single_column("rings").alias("polygon"))
 
     assert df["polygon"].is_null().to_list() == [True, False]
 
@@ -143,7 +146,7 @@ def test_rejects_rings_that_are_not_coordinates() -> None:
     df = pl.DataFrame({"rings": [[[1.0, 2.0]]]})
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.polygon("rings"))
+        df.select(geo.polygons_from_rings_in_single_column("rings"))
 
 
 def test_rejects_a_column_that_is_not_a_list() -> None:
@@ -153,7 +156,7 @@ def test_rejects_a_column_that_is_not_a_list() -> None:
     ).select(geo.line_string("vertices").alias("line"))
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.polygon("line"))
+        df.select(geo.polygons_from_rings_in_single_column("line"))
 
 
 def test_rejects_a_list_of_vertices() -> None:
@@ -161,7 +164,7 @@ def test_rejects_a_list_of_vertices() -> None:
     df = pl.DataFrame({"vertices": _TRIANGLE}, schema={"vertices": _XY_VERTICES})
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.polygon("vertices"))
+        df.select(geo.polygons_from_rings_in_single_column("vertices"))
 
 
 def test_rejects_a_list_of_points() -> None:
@@ -173,13 +176,13 @@ def test_rejects_a_list_of_points() -> None:
     )
 
     with pytest.raises(ComputeError, match="expected a list of"):
-        df.select(geo.polygon("point"))
+        df.select(geo.polygons_from_rings_in_single_column("point"))
 
 
 def test_empty_frame_keeps_its_dtype() -> None:
     """A zero-row build still produces a polygon column, not a bare list."""
     df = pl.DataFrame(schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings").alias("polygon")
+        geo.polygons_from_rings_in_single_column("rings").alias("polygon")
     )
 
     assert df.height == 0
@@ -189,7 +192,9 @@ def test_empty_frame_keeps_its_dtype() -> None:
 def test_rejects_bad_rings_while_resolving_the_schema() -> None:
     """The dimension is read off the input's dtype,
     so rings that are not coordinates are a schema error."""
-    lf = pl.LazyFrame({"plot": ["north"]}).select(geo.polygon("plot"))
+    lf = pl.LazyFrame({"plot": ["north"]}).select(
+        geo.polygons_from_rings_in_single_column("plot")
+    )
 
     with pytest.raises(ComputeError, match="expected a list of"):
         lf.collect_schema()
@@ -207,19 +212,77 @@ def test_coordinate_columns_build_the_same_polygons(
     ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     """The two forms are two ways to spell one polygon, not two geometries."""
+    exteriors = ring_coords.filter(pl.col("ring") == 0)
     assert_frame_equal(
-        dimension.polygons_from_coords(ring_coords), dimension.polygons(ring_coords)
+        dimension.polygons_from_coords(ring_coords), dimension.polygons(exteriors)
     )
 
 
-def test_coordinate_columns_keep_their_rings_in_order() -> None:
+def test_a_missing_coordinate_invalidates_the_whole_polygon_of_coords() -> None:
+    """A vertex missing its `y` cannot stand, so neither can the ring around
+    it, nor the polygon around that."""
+    df = pl.DataFrame(
+        {
+            "lon": [[0.0, 1.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]],
+            "lat": [[0.0, None, 1.0, 0.0], [0.0, 0.0, 1.0, 0.0]],
+        },
+        schema=_XY_COORDS,
+    ).select(geo.polygons_from_coordinates("lon", "lat").alias("polygon"))
+
+    assert df["polygon"].is_null().to_list() == [True, False]
+
+
+def test_rejects_coordinate_columns_that_nest_differently() -> None:
+    df = pl.DataFrame({"lon": [[1.0, 3.0]], "lat": [[2.0]]}, schema=_XY_COORDS)
+
+    with pytest.raises(ComputeError, match="do not nest the same way"):
+        df.select(geo.polygons_from_coordinates("lon", "lat"))
+
+
+def test_rejects_coordinate_columns_of_rings() -> None:
+    """One list per ring is how holes would be spelled, which coordinate columns cannot."""
+    lf = pl.LazyFrame({"lon": [[[1.0]]], "lat": [[[2.0]]]}).select(
+        geo.polygons_from_coordinates("lon", "lat")
+    )
+
+    with pytest.raises(ComputeError, match="to hold lists of f64, got"):
+        lf.collect_schema()
+
+
+def test_empty_frame_of_coordinates_keeps_its_dtype() -> None:
+    df = pl.DataFrame(schema=_XY_COORDS).select(
+        geo.polygons_from_coordinates("lon", "lat").alias("polygon")
+    )
+
+    assert df.height == 0
+    assert df.schema["polygon"] == PolygonXY()
+
+
+def test_nested_coordinate_columns_build_the_same_polygons(
+    ring_coords: pl.DataFrame, dimension: Dimension
+) -> None:
+    """Holes included: grouping twice is what nests them one list deeper."""
+    nested = (
+        ring_coords.group_by("polygon", "ring", maintain_order=True)
+        .agg(COORDS)
+        .group_by("polygon", maintain_order=True)
+        .agg(COORDS)
+        .select(
+            dimension.of_coords(geo.polygons_from_nested_coordinates).alias("polygon")
+        )
+    )
+
+    assert_frame_equal(nested, dimension.polygons(ring_coords))
+
+
+def test_nested_coordinate_columns_keep_their_rings_in_order() -> None:
     """The nesting is the ring structure: the first list is the exterior ring."""
     df = pl.DataFrame(
         {
             "lon": [[[0.0, 1.0, 0.0, 0.0], [0.2, 0.4, 0.2, 0.2]]],
             "lat": [[[0.0, 0.0, 1.0, 0.0], [0.2, 0.2, 0.4, 0.2]]],
         }
-    ).select(geo.polygon("lon", "lat").alias("polygon"))
+    ).select(geo.polygons_from_nested_coordinates("lon", "lat").alias("polygon"))
 
     assert df.select(pl.col("polygon").ext.storage().list.len())[
         "polygon"
@@ -235,16 +298,14 @@ def test_coordinate_columns_keep_their_rings_in_order() -> None:
     )
 
 
-def test_a_missing_coordinate_invalidates_the_whole_polygon_of_coords() -> None:
-    """A vertex missing its `y` cannot stand, so neither can the ring around
-    it, nor the polygon around that."""
+def test_a_missing_coordinate_invalidates_the_whole_polygon_of_nested_coords() -> None:
     df = pl.DataFrame(
         {
             "lon": [[[0.0, 1.0, 0.0, 0.0]], [[0.0, 1.0, 0.0, 0.0]]],
             "lat": [[[0.0, None, 1.0, 0.0]], [[0.0, 0.0, 1.0, 0.0]]],
         },
-        schema=_XY_COORDS,
-    ).select(geo.polygon("lon", "lat").alias("polygon"))
+        schema=_XY_NESTED_COORDS,
+    ).select(geo.polygons_from_nested_coordinates("lon", "lat").alias("polygon"))
 
     assert df["polygon"].is_null().to_list() == [True, False]
 
@@ -258,59 +319,44 @@ def test_a_missing_coordinate_invalidates_the_whole_polygon_of_coords() -> None:
         ([[[1.0], [3.0]]], [[[2.0]]]),
     ],
 )
-def test_rejects_coordinate_columns_that_nest_differently(
+def test_rejects_nested_coordinate_columns_that_nest_differently(
     lon: list[list[list[float]]], lat: list[list[list[float]]]
 ) -> None:
-    df = pl.DataFrame({"lon": lon, "lat": lat}, schema=_XY_COORDS)
+    df = pl.DataFrame({"lon": lon, "lat": lat}, schema=_XY_NESTED_COORDS)
 
     with pytest.raises(ComputeError, match="do not nest the same way"):
-        df.select(geo.polygon("lon", "lat"))
+        df.select(geo.polygons_from_nested_coordinates("lon", "lat"))
 
 
-def test_rejects_coordinate_columns_nested_only_once() -> None:
-    """One list per geometry is a linestring's shape; a polygon needs the
-    rings inside it too."""
+def test_rejects_nested_coordinate_columns_nested_only_once() -> None:
     lf = pl.LazyFrame({"lon": [[1.0]], "lat": [[2.0]]}).select(
-        geo.polygon("lon", "lat")
+        geo.polygons_from_nested_coordinates("lon", "lat")
     )
 
     with pytest.raises(ComputeError, match="lists of lists of f64, one per polygon"):
         lf.collect_schema()
 
 
-def test_rejects_a_measure_without_a_y_coordinate() -> None:
-    with pytest.raises(TypeError, match="without a y coordinate"):
-        geo.polygon("lon", m="dist")
-
-
-def test_empty_frame_of_coordinates_keeps_its_dtype() -> None:
-    df = pl.DataFrame(schema=_XY_COORDS).select(
-        geo.polygon("lon", "lat").alias("polygon")
-    )
-
-    assert df.height == 0
-    assert df.schema["polygon"] == PolygonXY()
-
-
-def test_one_argument_dispatches_to_the_ring_form() -> None:
-    """`polygon` is a front door onto the two named constructors."""
-    df = pl.DataFrame({"rings": [_TRIANGLE]}, schema={"rings": _XY_RINGS})
-
-    assert_frame_equal(
-        df.select(geo.polygon("rings")),
-        df.select(geo.polygon_from_rings("rings")),
-    )
-
-
-def test_coordinate_columns_dispatch_to_the_column_form() -> None:
+def test_nested_coordinate_columns_are_checked_and_closed() -> None:
     df = pl.DataFrame(
-        {"lon": [[[0.0, 1.0, 0.0]]], "lat": [[[0.0, 0.0, 1.0]]]}, schema=_XY_COORDS
+        {
+            "lon": [[[0.0, 1.0, 0.0]], [[0.0, 1.0]]],
+            "lat": [[[0.0, 0.0, 1.0]], [[0.0, 0.0]]],
+        },
+        schema=_XY_NESTED_COORDS,
     )
 
-    assert_frame_equal(
-        df.select(geo.polygon("lon", "lat")),
-        df.select(geo.polygon_from_columns("lon", "lat")),
+    checked = df.select(
+        geo.polygons_from_nested_coordinates("lon", "lat").alias("polygon")
     )
+    closed = df.select(
+        geo.polygons_from_nested_coordinates(
+            "lon", "lat", close=geo.CloseRings()
+        ).alias("polygon")
+    )
+
+    assert checked["polygon"].is_null().to_list() == [True, True]
+    assert closed["polygon"].ext.storage().to_list() == [_TRIANGLE, None]
 
 
 def _ring_xy(*xy: tuple[float, float]) -> list[dict[str, float]]:
@@ -326,7 +372,11 @@ def _from_rings(
 ) -> pl.Series:
     return (
         pl.DataFrame({"rings": list(polygons)}, schema={"rings": _XY_RINGS})
-        .select(geo.polygon("rings", close=close).alias("polygon"))
+        .select(
+            geo.polygons_from_rings_in_single_column("rings", close=close).alias(
+                "polygon"
+            )
+        )
         .to_series()
     )
 
@@ -368,24 +418,171 @@ def test_close_on_a_sliced_column() -> None:
         {"rings": [[_OPEN], [_OPEN], _TRIANGLE]}, schema={"rings": _XY_RINGS}
     ).slice(1, 2)
 
-    out = df.select(geo.polygon("rings", close=geo.CloseRings()).alias("polygon"))
+    out = df.select(
+        geo.polygons_from_rings_in_single_column("rings", close=geo.CloseRings()).alias(
+            "polygon"
+        )
+    )
 
     assert out["polygon"].ext.storage().to_list() == [_TRIANGLE, _TRIANGLE]
 
 
 def test_coordinate_columns_are_checked_and_closed_too() -> None:
     df = pl.DataFrame(
-        {
-            "lon": [[[0.0, 1.0, 0.0]], [[0.0, 1.0]]],
-            "lat": [[[0.0, 0.0, 1.0]], [[0.0, 0.0]]],
-        },
+        {"lon": [[0.0, 1.0, 0.0], [0.0, 1.0]], "lat": [[0.0, 0.0, 1.0], [0.0, 0.0]]},
         schema=_XY_COORDS,
     )
 
-    checked = df.select(geo.polygon("lon", "lat").alias("polygon"))
+    checked = df.select(geo.polygons_from_coordinates("lon", "lat").alias("polygon"))
     closed = df.select(
-        geo.polygon("lon", "lat", close=geo.CloseRings()).alias("polygon")
+        geo.polygons_from_coordinates("lon", "lat", close=geo.CloseRings()).alias(
+            "polygon"
+        )
     )
 
     assert checked["polygon"].is_null().to_list() == [True, True]
     assert closed["polygon"].ext.storage().to_list() == [_TRIANGLE, None]
+
+
+# A hole inside `_TRIANGLE`.
+_HOLE = _ring_xy((0.2, 0.2), (0.4, 0.2), (0.2, 0.4), (0.2, 0.2))
+_EXTERIOR = _TRIANGLE[0]
+
+
+def _from_separate_rings(
+    exteriors: list,
+    holes: list | None = None,
+    holes_dtype: pl.DataType = _XY_RINGS,
+    close: geo.CloseRings | None = None,
+) -> pl.Series:
+    columns = {"exterior": exteriors}
+    schema = {"exterior": _XY_VERTICES}
+    if holes is not None:
+        columns["holes"] = holes
+        schema["holes"] = holes_dtype
+    return (
+        pl.DataFrame(columns, schema=schema)
+        .select(
+            geo.polygons_from_rings_in_separate_columns(
+                "exterior", "holes" if holes is not None else None, close=close
+            ).alias("polygon")
+        )
+        .to_series()
+    )
+
+
+def test_separate_columns_take_a_list_of_holes() -> None:
+    out = _from_separate_rings([_EXTERIOR, _EXTERIOR], [[_HOLE, _HOLE], []])
+
+    assert out.dtype == PolygonXY()
+    assert out.ext.storage().to_list() == [
+        [_EXTERIOR, _HOLE, _HOLE],
+        [_EXTERIOR],
+    ]
+
+
+def test_separate_columns_take_a_single_hole() -> None:
+    out = _from_separate_rings([_EXTERIOR], [_HOLE], holes_dtype=_XY_VERTICES)
+
+    assert out.ext.storage().to_list() == [[_EXTERIOR, _HOLE]]
+
+
+def test_separate_columns_take_linestrings() -> None:
+    df = pl.DataFrame(
+        {"exterior": [_EXTERIOR], "hole": [_HOLE]},
+        schema={"exterior": _XY_VERTICES, "hole": _XY_VERTICES},
+    ).select(
+        geo.line_string("exterior", crs="EPSG:4326"),
+        geo.line_string("hole", crs="EPSG:4326"),
+    )
+    single = df.select(
+        geo.polygons_from_rings_in_separate_columns("exterior", "hole").alias("polygon")
+    )
+    listed = df.select(
+        geo.polygons_from_rings_in_separate_columns(
+            "exterior", pl.col("hole").implode()
+        ).alias("polygon")
+    )
+
+    assert single.schema["polygon"] == PolygonXY(crs="EPSG:4326")
+    assert_frame_equal(single, listed)
+    assert single["polygon"].ext.storage().to_list() == [[_EXTERIOR, _HOLE]]
+
+
+def test_separate_columns_without_holes_build_the_exterior_alone() -> None:
+    out = _from_separate_rings([_EXTERIOR])
+
+    assert out.to_frame("polygon").equals(_from_rings(_TRIANGLE).to_frame("polygon"))
+
+
+def test_missing_holes_are_no_holes() -> None:
+    listed = _from_separate_rings([_EXTERIOR], [None])
+    single = _from_separate_rings([_EXTERIOR], [None], holes_dtype=_XY_VERTICES)
+
+    assert listed.ext.storage().to_list() == [[_EXTERIOR]]
+    assert single.ext.storage().to_list() == [[_EXTERIOR]]
+
+
+def test_a_missing_exterior_is_a_missing_polygon() -> None:
+    out = _from_separate_rings([None, _EXTERIOR], [[_HOLE], [_HOLE]])
+
+    assert out.is_null().to_list() == [True, False]
+
+
+def test_a_missing_ring_among_the_holes_invalidates_the_polygon() -> None:
+    out = _from_separate_rings([_EXTERIOR, _EXTERIOR], [[_HOLE, None], [_HOLE]])
+
+    assert out.is_null().to_list() == [True, False]
+
+
+def test_a_missing_vertex_in_a_hole_invalidates_the_polygon() -> None:
+    broken = [*_HOLE[:3], None]
+    listed = _from_separate_rings([_EXTERIOR], [[broken]])
+    single = _from_separate_rings([_EXTERIOR], [broken], holes_dtype=_XY_VERTICES)
+
+    assert listed.is_null().to_list() == [True]
+    assert single.is_null().to_list() == [True]
+
+
+def test_separate_columns_reject_holes_of_another_dimension() -> None:
+    lf = pl.LazyFrame(
+        {"exterior": [_EXTERIOR], "holes": [[]]},
+        schema={
+            "exterior": _XY_VERTICES,
+            "holes": pl.List(
+                pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64, "z": pl.Float64}))
+            ),
+        },
+    ).select(geo.polygons_from_rings_in_separate_columns("exterior", "holes"))
+
+    with pytest.raises(ComputeError, match="the exterior is xy but the holes are xyz"):
+        lf.collect_schema()
+
+
+def test_separate_columns_close_open_holes() -> None:
+    checked = _from_separate_rings([_EXTERIOR], [[_OPEN]])
+    closed = _from_separate_rings([_EXTERIOR], [[_OPEN]], close=geo.CloseRings())
+
+    assert checked.is_null().to_list() == [True]
+    assert closed.ext.storage().to_list() == [[_EXTERIOR, _EXTERIOR]]
+
+
+def test_separate_columns_on_sliced_columns() -> None:
+    df = pl.DataFrame(
+        {
+            "exterior": [_EXTERIOR, _EXTERIOR, _EXTERIOR],
+            "holes": [[_HOLE], None, [_HOLE, _HOLE]],
+        },
+        schema={"exterior": _XY_VERTICES, "holes": _XY_RINGS},
+    ).slice(1, 2)
+
+    out = df.select(
+        geo.polygons_from_rings_in_separate_columns("exterior", "holes").alias(
+            "polygon"
+        )
+    )
+
+    assert out["polygon"].ext.storage().to_list() == [
+        [_EXTERIOR],
+        [_EXTERIOR, _HOLE, _HOLE],
+    ]

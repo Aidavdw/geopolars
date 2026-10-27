@@ -33,9 +33,10 @@ from geopolars.geo.construct import (
     multi_polygon_from_columns,
     multi_polygon_from_polygons,
     point,
-    polygon,
-    polygon_from_columns,
-    polygon_from_rings,
+    polygons_from_coordinates,
+    polygons_from_nested_coordinates,
+    polygons_from_rings_in_separate_columns,
+    polygons_from_rings_in_single_column,
 )
 from geopolars.geo.convex_hull import convex_hull
 from geopolars.geo.coordinates import m, x, y, z
@@ -120,9 +121,10 @@ __all__ = [
     "null_out_invalid_ogc",
     "offset_curve",
     "point",
-    "polygon",
-    "polygon_from_columns",
-    "polygon_from_rings",
+    "polygons_from_coordinates",
+    "polygons_from_nested_coordinates",
+    "polygons_from_rings_in_separate_columns",
+    "polygons_from_rings_in_single_column",
     "remove_repeated_points",
     "reverse",
     "rings_overlap",

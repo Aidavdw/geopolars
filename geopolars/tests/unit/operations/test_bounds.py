@@ -216,7 +216,9 @@ def test_the_crs_is_carried_over() -> None:
 
 def test_a_rectangle_round_trips_through_its_box() -> None:
     ring = {"x": [0.0, 2.0, 2.0, 0.0, 0.0], "y": [1.0, 1.0, 3.0, 3.0, 1.0]}
-    df = pl.DataFrame({k: [[v]] for k, v in ring.items()}).select(geo.polygon("x", "y"))
+    df = pl.DataFrame({k: [v] for k, v in ring.items()}).select(
+        geo.polygons_from_coordinates("x", "y")
+    )
     out = df.select(geo.to_polygon(geo.bounds("x")))
 
     assert_frame_equal(out, df)
@@ -308,8 +310,8 @@ def test_an_empty_geographic_geometry_has_an_empty_box() -> None:
 
 def test_a_crossing_box_turns_back_into_the_polygon_past_the_antimeridian() -> None:
     ring = {"x": [170.0, 190.0, 190.0, 170.0, 170.0], "y": [0.0, 0.0, 1.0, 1.0, 0.0]}
-    df = pl.DataFrame({k: [[v]] for k, v in ring.items()}).select(
-        geo.polygon("x", "y", crs="EPSG:4326")
+    df = pl.DataFrame({k: [v] for k, v in ring.items()}).select(
+        geo.polygons_from_coordinates("x", "y", crs="EPSG:4326")
     )
 
     assert_frame_equal(df.select(geo.to_polygon(geo.bounds("x"))), df)

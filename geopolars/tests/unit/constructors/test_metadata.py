@@ -49,7 +49,7 @@ def _polygons(crs: str | None = None) -> pl.DataFrame:
     """One list of two polygons per row, ready to be gathered."""
     return (
         _lines(crs)
-        .select(polygon=geo.polygon("line"))
+        .select(polygon=geo.polygons_from_rings_in_single_column("line"))
         .select(pl.col("polygon").repeat_by(2))
     )
 
@@ -87,11 +87,19 @@ def test_point_declares_its_crs(coords: pl.DataFrame, dimension: Dimension) -> N
     [
         (geo.line_string_from_columns, 1, LineStringXY),
         (geo.multi_point_from_columns, 1, MultiPointXY),
-        (geo.polygon_from_columns, 2, PolygonXY),
+        (geo.polygons_from_coordinates, 1, PolygonXY),
+        (geo.polygons_from_nested_coordinates, 2, PolygonXY),
         (geo.multi_line_string_from_columns, 2, MultiLineStringXY),
         (geo.multi_polygon_from_columns, 3, MultiPolygonXY),
     ],
-    ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
+    ids=[
+        "linestring",
+        "multipoint",
+        "polygon",
+        "nested polygon",
+        "multilinestring",
+        "multipolygon",
+    ],
 )
 def test_coordinate_columns_declare_a_crs(
     ring_coords: pl.DataFrame,
@@ -116,7 +124,7 @@ def test_coordinate_columns_declare_a_crs(
     [
         (geo.line_string_from_vertices, _points, LineStringXY),
         (geo.multi_point_from_points, _points, MultiPointXY),
-        (geo.polygon_from_rings, _lines, PolygonXY),
+        (geo.polygons_from_rings_in_single_column, _lines, PolygonXY),
         (geo.multi_line_string_from_line_strings, _lines, MultiLineStringXY),
         (geo.multi_polygon_from_polygons, _polygons, MultiPolygonXY),
     ],

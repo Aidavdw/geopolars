@@ -17,10 +17,17 @@ use geopolars_compute::inner_nulls::{
     propagate_inner_nulls_of_polygons,
 };
 use geopolars_compute::native::{
-    close_open_rings, multi_polygons_have_only_rings, polygons_have_only_rings,
+    close_open_rings, multi_polygons_have_only_rings, polygons_from_exteriors_and_holes,
+    polygons_have_only_rings,
 };
 use geopolars_compute::with_const_flags;
-use geopolars_core::{UncheckedStorage, ValidCoords, ValidList};
+use geopolars_core::{
+    LineStringArray, List, MultiLineStringArray, PolygonArray, UncheckedStorage, ValidCoords,
+    ValidList,
+};
+use polars_arrow::bitmap::Bitmap;
+use polars_arrow::compute::utils::combine_validities_and;
+use polars_arrow::offset::Offsets;
 
 /// The keyword arguments of the constructors that build polygons:
 /// [`MetadataKwargs`], plus whether and how to close open rings.
@@ -49,8 +56,8 @@ fn shape_of(part: Kind) -> String {
 }
 
 /// Used in error messages, don't care about allocation
-fn coordinate_shape_of(kind: Kind) -> String {
-    let lists = "lists of ".repeat(kind.nesting() as usize);
+fn coordinate_shape_of(nesting: u8) -> String {
+    let lists = "lists of ".repeat(nesting as usize);
     format!("{lists}f64")
 }
 
@@ -173,6 +180,23 @@ pub(super) fn closed_rings(
     Some((closed.rows.ignoring_validity().clone(), closed.coords))
 }
 
+/// `array` with its open rings closed first if there is a `close`,
+/// and missing where it does not have only rings (see [polygons_have_only_rings]).
+fn validated_polygons(mut array: PolygonArray, close: Option<CloseRingsKwargs>) -> Box<dyn Array> {
+    if let Some((rings, coords)) =
+        close.and_then(|closing| closed_rings(&array.rings, &array.coords, closing))
+    {
+        (array.rings, array.coords) = (rings, coords);
+    }
+    // A missing row is `false` in the values too.
+    let z = array.coords.dim().has_z();
+    let valid = with_const_flags!(polygons_have_only_rings(&array); z)
+        .values()
+        .clone();
+    array.rows = array.rows.with_validity(Some(valid));
+    array.into_list_array().boxed()
+}
+
 /// One chunk of the storage of a `kind`, with every missing value below a row moved out to it.
 /// A polygon is also missing where it does not have only rings (see [polygons_have_only_rings]).
 /// With a `close`, the open rings of a polygon are closed first.
@@ -193,21 +217,7 @@ fn validated_chunk(
         Kind::MultiLineString => propagate_inner_nulls_of_multi_line_strings(storage)
             .into_list_array()
             .boxed(),
-        Kind::Polygon => {
-            let mut array = propagate_inner_nulls_of_polygons(storage);
-            if let Some((rings, coords)) =
-                close.and_then(|closing| closed_rings(&array.rings, &array.coords, closing))
-            {
-                (array.rings, array.coords) = (rings, coords);
-            }
-            // A missing row is `false` in the values too.
-            let z = array.coords.dim().has_z();
-            let valid = with_const_flags!(polygons_have_only_rings(&array); z)
-                .values()
-                .clone();
-            array.rows = array.rows.with_validity(Some(valid));
-            array.into_list_array().boxed()
-        }
+        Kind::Polygon => validated_polygons(propagate_inner_nulls_of_polygons(storage), close),
         Kind::MultiPolygon => {
             let mut array = propagate_inner_nulls_of_multi_polygons(storage);
             if let Some((rings, coords)) =
@@ -267,7 +277,7 @@ fn linestring(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<Series>
     gather(&inputs[0], &kwargs, None, Kind::LineString, Kind::Point)
 }
 
-/// See `polygon_from_rings`.
+/// See `polygons_from_rings_in_single_column`.
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon)]
 fn polygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     gather(
@@ -310,16 +320,17 @@ fn multipolygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series
     )
 }
 
-/// The dimension a set of separate coordinate columns spells out.
-fn coordinates_of(input_fields: &[Field], kind: Kind) -> PolarsResult<GeoDimension> {
+/// The dimension a set of separate coordinate columns spells out,
+/// for a `kind` whose coordinates they nest `nesting` `List` layers deep.
+fn coordinates_of(input_fields: &[Field], kind: Kind, nesting: u8) -> PolarsResult<GeoDimension> {
     let mut coordinates = Vec::with_capacity(input_fields.len());
     for field in input_fields {
         let mut dtype = field.dtype();
-        for _ in 0..kind.nesting() {
+        for _ in 0..nesting {
             let DataType::List(inner) = dtype else {
                 polars_bail!(
                     SchemaMismatch: "expected `{}` to hold {}, one per {}, got: {}",
-                    field.name(), coordinate_shape_of(kind), kind.display(), field.dtype()
+                    field.name(), coordinate_shape_of(nesting), kind.display(), field.dtype()
                 );
             };
             dtype = inner;
@@ -329,7 +340,7 @@ fn coordinates_of(input_fields: &[Field], kind: Kind) -> PolarsResult<GeoDimensi
         polars_ensure!(
             dtype.is_primitive_numeric(),
             SchemaMismatch: "expected `{}` to hold {}, got: {}",
-            field.name(), coordinate_shape_of(kind), field.dtype()
+            field.name(), coordinate_shape_of(nesting), field.dtype()
         );
         coordinates.push(Field::new(field.name().clone(), DataType::Float64));
     }
@@ -343,8 +354,19 @@ fn coordinates_of(input_fields: &[Field], kind: Kind) -> PolarsResult<GeoDimensi
 
 /// Small helper
 fn zipped(input_fields: &[Field], kwargs: &MetadataKwargs, kind: Kind) -> PolarsResult<Geo> {
-    let dim = coordinates_of(input_fields, kind)?;
+    let dim = coordinates_of(input_fields, kind, kind.nesting())?;
     Ok(Geo::new(kind, dim, kwargs.apply(Default::default())?))
+}
+
+/// The polygons `polygon_coords` zips:
+/// one ring per row, so nested as deep as a linestring.
+fn zipped_exteriors(input_fields: &[Field], kwargs: &MetadataKwargs) -> PolarsResult<Geo> {
+    let dim = coordinates_of(input_fields, Kind::Polygon, Kind::LineString.nesting())?;
+    Ok(Geo::new(
+        Kind::Polygon,
+        dim,
+        kwargs.apply(Default::default())?,
+    ))
 }
 
 /// For zipping coordinate columns into a `kind`.
@@ -365,6 +387,14 @@ fn kernel_output_type_linestring_coords(
 }
 
 fn kernel_output_type_polygon_coords(
+    input_fields: &[Field],
+    kwargs: PolygonKwargs,
+) -> PolarsResult<Field> {
+    let geo = zipped_exteriors(input_fields, &kwargs.metadata())?;
+    Ok(Field::new(input_fields[0].name().clone(), geo.dtype()))
+}
+
+fn kernel_output_type_polygon_nested_coords(
     input_fields: &[Field],
     kwargs: PolygonKwargs,
 ) -> PolarsResult<Field> {
@@ -417,6 +447,13 @@ fn interleave(columns: &[Series], nesting: u8) -> PolarsResult<Series> {
         .into_series())
 }
 
+fn fields_of(inputs: &[Series]) -> Vec<Field> {
+    inputs
+        .iter()
+        .map(|s| Field::new(s.name().clone(), s.dtype().clone()))
+        .collect()
+}
+
 /// Zip one coordinate column per axis into one geometry of `kind` per row.
 /// `close` says how to close open rings, and only means something for kinds that have them.
 fn zip(
@@ -425,12 +462,14 @@ fn zip(
     close: Option<CloseRingsKwargs>,
     kind: Kind,
 ) -> PolarsResult<Series> {
-    let input_fields: Vec<Field> = inputs
-        .iter()
-        .map(|s| Field::new(s.name().clone(), s.dtype().clone()))
-        .collect();
-    let geo = zipped(&input_fields, kwargs, kind)?;
+    let geo = zipped(&fields_of(inputs), kwargs, kind)?;
+    let storage = interleaved_columns(inputs, kind.nesting())?;
+    Ok(validated(storage, kind, close)?.into_extension(geo.instance()))
+}
 
+/// The storage one coordinate column per axis zips into,
+/// with the coordinates nested `nesting` `List` layers deep.
+fn interleaved_columns(inputs: &[Series], nesting: u8) -> PolarsResult<Series> {
     // `get_inner` reads the values array whole, so anything a slice left
     // outside the offsets has to go before the columns can be read in lockstep.
     let columns: Vec<Series> = inputs
@@ -454,8 +493,7 @@ fn zip(
         );
     }
 
-    let storage = interleave(&columns, kind.nesting())?;
-    Ok(validated(storage, kind, close)?.into_extension(geo.instance()))
+    interleave(&columns, nesting)
 }
 
 /// See `linestring_from_columns`.
@@ -464,9 +502,25 @@ fn linestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<
     zip(inputs, &kwargs, None, Kind::LineString)
 }
 
-/// See `polygon_from_columns`.
+/// See `polygons_from_coordinates`.
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon_coords)]
 fn polygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
+    let geo = zipped_exteriors(&fields_of(inputs), &kwargs.metadata())?;
+    let exteriors = trimmed(&interleaved_columns(inputs, Kind::LineString.nesting())?);
+    let chunks = exteriors
+        .chunks()
+        .iter()
+        .map(|chunk| assembled_polygons(chunk.as_ref(), None, kwargs.close))
+        .collect::<PolarsResult<Vec<_>>>()?;
+    // SAFETY: every chunk is the storage of a polygon of `geo`'s dimension.
+    Ok(unsafe {
+        Series::from_chunks_and_dtype_unchecked(exteriors.name().clone(), chunks, &geo.dtype())
+    })
+}
+
+/// See `polygons_from_nested_coordinates`.
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon_nested_coords)]
+fn polygon_nested_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs.metadata(), kwargs.close, Kind::Polygon)
 }
 
@@ -486,4 +540,161 @@ fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsRe
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipolygon_coords)]
 fn multipolygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     zip(inputs, &kwargs.metadata(), kwargs.close, Kind::MultiPolygon)
+}
+
+fn ring_of(dtype: &DataType) -> PolarsResult<(GeoDimension, Arc<ExtensionMetadata>)> {
+    if !matches!(dtype, DataType::Extension(..)) {
+        return parts_of(dtype, Kind::Point);
+    }
+    match describe(dtype) {
+        Ok(geo) if geo.kind == Kind::LineString => Ok((geo.dim, geo.metadata.clone())),
+        _ => polars_bail!(
+            SchemaMismatch: "expected a ring, as a `linestring` or a list of vertices, got: {}",
+            dtype
+        ),
+    }
+}
+
+fn is_list_of_rings(dtype: &DataType) -> bool {
+    let DataType::List(inner) = dtype else {
+        return false;
+    };
+    match inner.as_ref() {
+        DataType::List(_) => true,
+        DataType::Extension(..) => describe(inner).is_ok_and(|geo| geo.kind == Kind::LineString),
+        _ => false,
+    }
+}
+
+/// The polygons `polygon_rings_in_separate_columns` builds,
+/// and whether the holes (if passed) are a list of rings per row.
+fn separate_rings(input_fields: &[Field], kwargs: &MetadataKwargs) -> PolarsResult<(Geo, bool)> {
+    let (dim, metadata) = ring_of(input_fields[0].dtype())?;
+    let Some(holes) = input_fields.get(1) else {
+        return Ok((Geo::new(Kind::Polygon, dim, kwargs.apply(metadata)?), false));
+    };
+
+    let listed = is_list_of_rings(holes.dtype());
+    let (hole_dim, hole_metadata) = match holes.dtype() {
+        DataType::List(inner) if listed => ring_of(inner)?,
+        dtype => ring_of(dtype)?,
+    };
+    polars_ensure!(
+        hole_dim == dim,
+        SchemaMismatch: "the exterior is {} but the holes are {}", dim.tag(), hole_dim.tag()
+    );
+    if metadata.declares_crs() && hole_metadata.declares_crs() {
+        let (crs, hole_crs) = (metadata.crs()?, hole_metadata.crs()?);
+        polars_ensure!(
+            crs == hole_crs,
+            SchemaMismatch: "the exterior and the holes declare different CRSs, {crs} and {hole_crs}; \
+            use `to_crs` to bring one onto the other first"
+        );
+    }
+    Ok((
+        Geo::new(Kind::Polygon, dim, kwargs.apply(metadata)?),
+        listed,
+    ))
+}
+
+fn kernel_output_type_polygon_rings_in_separate_columns(
+    input_fields: &[Field],
+    kwargs: PolygonKwargs,
+) -> PolarsResult<Field> {
+    let (geo, _) = separate_rings(input_fields, &kwargs.metadata())?;
+    Ok(Field::new(input_fields[0].name().clone(), geo.dtype()))
+}
+
+fn storage_of(series: &Series) -> PolarsResult<Series> {
+    Ok(match series.dtype() {
+        DataType::Extension(..) => series.ext()?.storage().clone(),
+        DataType::List(_) => series
+            .list()?
+            .apply_to_inner(&|inner| storage_of(&inner))?
+            .into_series(),
+        _ => series.clone(),
+    })
+}
+
+fn one_hole_per_row(holes: LineStringArray) -> MultiLineStringArray {
+    let lengths = std::iter::repeat_n(1, holes.rows.len());
+    let offsets = Offsets::try_from_lengths(lengths).expect("one per row");
+    MultiLineStringArray {
+        rows: List::from_offsets(offsets.into(), holes.rows.validity().cloned()),
+        lines: holes.rows.ignoring_validity().clone(),
+        coords: holes.coords,
+    }
+}
+
+/// Which polygons are there: missing where the exterior is,
+/// or where the holes of the row were given but something in them was missing.
+/// `given` is the validity of the rows of holes before inner nulls moved out to them.
+fn assembled_validity(
+    exteriors: &LineStringArray,
+    holes: &MultiLineStringArray,
+    given: Option<&Bitmap>,
+) -> Option<Bitmap> {
+    let lost = holes.rows.validity().map(|kept| match given {
+        Some(given) => given & &!kept,
+        None => !kept,
+    });
+    let not_lost = lost.map(|lost| !&lost);
+    combine_validities_and(exteriors.rows.validity(), not_lost.as_ref())
+}
+
+/// One chunk of polygons out of one chunk of exterior rings, and of holes.
+/// `holes` holds one ring per row, or with `listed=true` a list of them.
+/// See `polygons_from_rings_in_separate_columns` for the missing values.
+fn assembled_polygons(
+    exteriors: &dyn Array,
+    holes: Option<(&dyn Array, bool)>,
+    close: Option<CloseRingsKwargs>,
+) -> PolarsResult<Box<dyn Array>> {
+    let exteriors = propagate_inner_nulls_of_line_strings(UncheckedStorage::new(exteriors)?);
+    let Some((holes, listed)) = holes else {
+        let validity = exteriors.rows.validity().cloned();
+        let polygons = polygons_from_exteriors_and_holes(&exteriors, None, validity);
+        return Ok(validated_polygons(polygons, close));
+    };
+
+    let storage = UncheckedStorage::new(holes)?;
+    let given = storage.lists[0].validity().cloned();
+    let holes = if listed {
+        propagate_inner_nulls_of_multi_line_strings(storage)
+    } else {
+        one_hole_per_row(propagate_inner_nulls_of_line_strings(storage))
+    };
+    let validity = assembled_validity(&exteriors, &holes, given.as_ref());
+    let polygons = polygons_from_exteriors_and_holes(&exteriors, Some(&holes), validity);
+    Ok(validated_polygons(polygons, close))
+}
+
+/// See `polygons_from_rings_in_separate_columns`.
+#[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon_rings_in_separate_columns)]
+fn polygon_rings_in_separate_columns(
+    inputs: &[Series],
+    kwargs: PolygonKwargs,
+) -> PolarsResult<Series> {
+    let (geo, listed) = separate_rings(&fields_of(inputs), &kwargs.metadata())?;
+    let exteriors = storage_of(&inputs[0])?.rechunk();
+    let holes = inputs
+        .get(1)
+        .map(|holes| Ok::<_, PolarsError>(storage_of(holes)?.rechunk()))
+        .transpose()?;
+    if let Some(holes) = &holes {
+        polars_ensure!(
+            holes.len() == exteriors.len(),
+            ShapeMismatch: "the exterior has {} rows but the holes have {}",
+            exteriors.len(), holes.len()
+        );
+    }
+
+    let holes_chunk = holes
+        .as_ref()
+        .map(|holes| (holes.chunks()[0].as_ref(), listed));
+    let chunk = assembled_polygons(exteriors.chunks()[0].as_ref(), holes_chunk, kwargs.close)?;
+    // SAFETY: the chunk is the storage of a polygon of `geo`'s dimension.
+    Ok(unsafe {
+        Series::from_chunks_and_dtype_unchecked(inputs[0].name().clone(), vec![chunk], &geo.dtype())
+    })
 }

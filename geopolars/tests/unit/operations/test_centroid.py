@@ -43,7 +43,7 @@ _L = _ring((0, 0), (2, 0), (2, 1), (1, 1), (1, 2), (0, 2))
 def _polygons(*polygons: list[Ring] | None, crs: str | None = None) -> pl.DataFrame:
     """A polygon column, one row per list of XY rings."""
     return pl.DataFrame({"rings": list(polygons)}, schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings", crs=crs).alias("polygon")
+        geo.polygons_from_rings_in_single_column("rings", crs=crs).alias("polygon")
     )
 
 

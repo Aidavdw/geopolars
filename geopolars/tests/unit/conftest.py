@@ -88,7 +88,7 @@ class Dimension(NamedTuple):
 
     def polygon(self) -> pl.Expr:
         """Build a polygon of this dimension from a `line` list column."""
-        return geo.polygon("line").alias("polygon")
+        return geo.polygons_from_rings_in_single_column("line").alias("polygon")
 
     def multipoint(self) -> pl.Expr:
         """Build a multipoint of this dimension from a `point` list column."""
@@ -168,14 +168,13 @@ class Dimension(NamedTuple):
         )
 
     def polygons_from_coords(self, vertices: pl.DataFrame) -> pl.DataFrame:
-        """The same polygons as `polygons`, out of one coordinate column per
-        axis. Grouping twice is what nests them one list deeper."""
+        """The exterior rings of `polygons`, out of one coordinate column per
+        axis. Coordinate columns cannot spell holes, so ring 0 is all there is."""
         return (
-            vertices.group_by("polygon", "ring", maintain_order=True)
-            .agg(COORDS)
+            vertices.filter(pl.col("ring") == 0)
             .group_by("polygon", maintain_order=True)
             .agg(COORDS)
-            .select(self.of_coords(geo.polygon).alias("polygon"))
+            .select(self.of_coords(geo.polygons_from_coordinates).alias("polygon"))
         )
 
     def multipoints_from_coords(self, vertices: pl.DataFrame) -> pl.DataFrame:

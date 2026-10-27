@@ -38,7 +38,7 @@ _XY_RINGS = pl.List(_XY_VERTICES)
 def _rings(rings: list[list[dict[str, float]]], crs: str | None = None) -> pl.DataFrame:
     """A one-row polygon column, built straight from XY rings."""
     return pl.DataFrame({"rings": [rings]}, schema={"rings": _XY_RINGS}).select(
-        geo.polygon("rings", crs=crs).alias("polygon")
+        geo.polygons_from_rings_in_single_column("rings", crs=crs).alias("polygon")
     )
 
 

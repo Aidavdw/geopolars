@@ -98,10 +98,16 @@ def test_every_ring_of_a_polygon_counts() -> None:
     """The exterior is past the antimeridian, the hole is not: crossing."""
     polygons = pl.LazyFrame(
         {
-            "x": [[[190.0, 200.0, 200.0, 190.0], [170.0, 175.0, 175.0, 170.0]]],
-            "y": [[[0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 1.0, 0.0]]],
+            "exterior_x": [[190.0, 200.0, 200.0, 190.0]],
+            "hole_x": [[170.0, 175.0, 175.0, 170.0]],
+            "y": [[0.0, 0.0, 1.0, 0.0]],
         }
-    ).select(geo.polygon_from_columns("x", "y", crs=WGS84).alias("polygon"))
+    ).select(
+        geo.polygons_from_rings_in_separate_columns(
+            geo.line_string_from_columns("exterior_x", "y", crs=WGS84),
+            geo.line_string_from_columns("hole_x", "y"),
+        ).alias("polygon")
+    )
 
     assert _x(polygons, skip_crossing=True) == [
         [[190.0, 200.0, 200.0, 190.0], [170.0, 175.0, 175.0, 170.0]]

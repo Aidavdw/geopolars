@@ -414,7 +414,7 @@ def multi_line_string(
 
 
 @doc()
-def polygon_from_rings(
+def polygons_from_rings_in_single_column(
     rings: IntoExprColumn,
     *,
     crs: str | None = None,
@@ -446,17 +446,70 @@ def polygon_from_rings(
             ).alias("ring")
         )
         .group_by("plot", maintain_order=True)
-        .agg(geo.polygon_from_rings(pl.col("ring").implode()).alias("plot"))
+        .agg(
+            geo.polygons_from_rings_in_single_column(
+                pl.col("ring").implode()
+            ).alias("plot")
+        )
     )
     ```
-
-    {constructed_geoarrow_valid}
     """
     return _gather("polygon", rings, _polygon_kwargs(crs, close))
 
 
-@doc()
-def polygon_from_columns(
+def polygons_from_rings_in_separate_columns(
+    exterior: IntoExprColumn,
+    holes: IntoExprColumn | None = None,
+    *,
+    crs: str | None = None,
+    close: CloseRings | None = None,
+) -> pl.Expr:
+    """Build a `geoarrow.polygon` column out of an exterior ring and its holes.
+
+    `exterior` holds one ring per polygon,
+    as a `geoarrow.linestring` or as a bare vertex list.
+    `holes` holds either one ring per polygon, or a list of them.
+    Without `holes`, no polygon has holes.
+
+    A missing exterior gives a missing polygon.
+    A missing `holes` value means the polygon has no holes.
+    A missing ring in a list of holes, or a missing vertex, makes the polygon missing.
+    The CRS is the exterior's.
+    Rings are checked (and closed with `close`)
+    as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
+
+    ```python
+    outer = ways.filter(role="outer").group_by("relation").agg(
+        geo.line_string_from_vertices(
+            geo.point("lon", "lat").implode()
+        ).alias("outer")
+    )
+    inner = (
+        ways.filter(role="inner")
+        .group_by("relation", "way")
+        .agg(
+            geo.line_string_from_vertices(
+                geo.point("lon", "lat").implode()
+            ).alias("inner")
+        )
+        .group_by("relation")
+        .agg("inner")
+    )
+    outer.join(inner, on="relation", how="left").select(
+        geo.polygons_from_rings_in_separate_columns("outer", "inner")
+    )
+    ```
+    """
+    return register_plugin_function(
+        plugin_path=LIB,
+        args=[exterior] if holes is None else [exterior, holes],
+        function_name="polygon_rings_in_separate_columns",
+        is_elementwise=True,
+        kwargs=_polygon_kwargs(crs, close),
+    )
+
+
+def polygons_from_coordinates(
     x: IntoExprColumn,
     y: IntoExprColumn,
     z: IntoExprColumn | None = None,
@@ -466,49 +519,48 @@ def polygon_from_columns(
     close: CloseRings | None = None,
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column from one coordinate column per axis.
-    Each is a `List[List[Float64]]`.
+    Each is a `List[Float64]`, holding the exterior ring of one polygon per row.
+    Polygons created by this expression can therefore not have any holes.
+    For those, use [`polygons_from_nested_coordinates`][geopolars.geo.polygons_from_nested_coordinates]
+    or [`polygons_from_rings_in_separate_columns`][geopolars.geo.polygons_from_rings_in_separate_columns].
 
     ```python
-    df.select(geo.polygon_from_columns("lon", "lat"))
+    df.select(geo.polygons_from_coordinates("lon", "lat"))
     ```
 
-    The first ring of a polygon is its exterior ring,
-    and the rest are its holes.
     Rings are checked (and closed with `close`)
-    as in [`polygon_from_rings`][geopolars.geo.polygon_from_rings].
-
-    {constructed_geoarrow_valid}
+    as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
     """
     return _from_columns("polygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
 
 
-def polygon(
+def polygons_from_nested_coordinates(
     x: IntoExprColumn,
-    y: IntoExprColumn | None = None,
+    y: IntoExprColumn,
     z: IntoExprColumn | None = None,
     m: IntoExprColumn | None = None,
     *,
     crs: str | None = None,
     close: CloseRings | None = None,
 ) -> pl.Expr:
-    """Build a `geoarrow.polygon` column, from rings or from coordinates.
-    Dispatches to either:
-    - [`polygon_from_rings`][geopolars.geo.polygon_from_rings]
-    - [`polygon_from_columns`][geopolars.geo.polygon_from_columns]
+    """Build a `geoarrow.polygon` column from one coordinate column per axis.
+    Each is a `List[List[Float64]]`: one list per polygon, of one list per ring.
+    The first ring of a polygon is its exterior ring, and the rest are its holes.
+    See [`polygons_from_coordinates`][geopolars.geo.polygons_from_coordinates]
+    for polygons without holes, one ring per row.
+
+    ```python
+    df.select(geo.polygons_from_nested_coordinates("lon", "lat"))
+    ```
+
+    Rings are checked (and closed with `close`)
+    as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
     """
-    if y is None:
-        if z is not None or m is not None:
-            msg = (
-                "polygon() got a z or m coordinate without a y coordinate; "
-                "pass x and y as columns, or call polygon_from_rings()"
-            )
-            raise TypeError(msg)
-        return polygon_from_rings(x, crs=crs, close=close)
-
-    return polygon_from_columns(x, y, z, m, crs=crs, close=close)
+    return _from_columns(
+        "polygon_nested_coords", x, y, z, m, _polygon_kwargs(crs, close)
+    )
 
 
-@doc()
 def multi_polygon_from_polygons(
     polygons: IntoExprColumn,
     *,
@@ -527,7 +579,11 @@ def multi_polygon_from_polygons(
             ).alias("ring")
         )
         .group_by("country", "island", maintain_order=True)
-        .agg(geo.polygon_from_rings(pl.col("ring").implode()).alias("island"))
+        .agg(
+            geo.polygons_from_rings_in_single_column(
+                pl.col("ring").implode()
+            ).alias("island")
+        )
         .group_by("country", maintain_order=True)
         .agg(
             geo.multi_polygon_from_polygons(
@@ -537,7 +593,7 @@ def multi_polygon_from_polygons(
     )
     ```
 
-    As for `polygon_from_rings`, every ring has to be a ring, or be closed with `close`.
+    As for `polygons_from_rings_in_single_column`, every ring has to be a ring, or be closed with `close`.
     A multipolygon with a polygon that fails this is missing in the result.
 
     {constructed_geoarrow_valid}

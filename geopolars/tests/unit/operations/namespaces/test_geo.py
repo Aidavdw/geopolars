@@ -288,7 +288,7 @@ def test_translate_keeps_empty_and_missing_polygons(dimension: Dimension) -> Non
                 pl.List(pl.Struct(dict.fromkeys(dimension.coords, pl.Float64)))
             )
         },
-    ).select(geo.polygon("rings").alias("polygon"))
+    ).select(geo.polygons_from_rings_in_single_column("rings").alias("polygon"))
     out = df.select(geo.translate("polygon", (1.0, 1.0)).alias("polygon"))
 
     assert_frame_equal(out, df)
@@ -382,8 +382,36 @@ def test_polygon_namespace_matches_the_functional_api(
     )
 
     assert_frame_equal(
-        rings.select(gpl.col("line").geo.polygon().alias("polygon")),
-        rings.select(geo.polygon("line").alias("polygon")),
+        rings.select(
+            gpl.col("line").geo.polygons_from_rings_in_single_column().alias("polygon")
+        ),
+        rings.select(geo.polygons_from_rings_in_single_column("line").alias("polygon")),
+    )
+
+
+def test_separate_rings_namespace_matches_the_functional_api(
+    ring_coords: pl.DataFrame,
+) -> None:
+    lines = (
+        ring_coords.group_by("polygon", "ring", maintain_order=True)
+        .agg(XYZ.point())
+        .select("polygon", "ring", XYZ.linestring())
+    )
+    exteriors = lines.filter(pl.col("ring") == 0).select("polygon", exterior="line")
+    holes = lines.filter(pl.col("ring") > 0).group_by("polygon").agg(holes="line")
+    rings = exteriors.join(holes, on="polygon", how="left")
+
+    assert_frame_equal(
+        rings.select(
+            gpl.col("exterior")
+            .geo.polygons_from_rings_in_separate_columns("holes")
+            .alias("polygon")
+        ),
+        rings.select(
+            geo.polygons_from_rings_in_separate_columns("exterior", "holes").alias(
+                "polygon"
+            )
+        ),
     )
 
 
