@@ -45,6 +45,9 @@ For a ring with the first vertex as F and the last as L:
 If `snap_z=True` and `snap_m=True`, a snapped L gets both the z and the m of F.
 An appended F brings its own z and m, so the ring is closed in every axis.
 A flag for an axis the column does not have does nothing.""",
+    "constructed_geoarrow_valid": """\
+Every geometry this functions builds is valid by `is_valid_geoarrow`,
+but it might not be valid by `is_valid_ogc`, nor simple (see `is_simple`).""",
     "empty_and_missing": """\
 An empty geometry gives an empty {output}, and a missing one a missing {output}.""",
     "keeps_type_dimension_and_crs": """\

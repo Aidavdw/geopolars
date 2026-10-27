@@ -111,6 +111,7 @@ def _gather(
     )
 
 
+@doc()
 def point(
     x: IntoExprColumn,
     y: IntoExprColumn,
@@ -136,6 +137,8 @@ def point(
     ```python
     df.select(geo.point("lon", "lat", crs="EPSG:4326"))
     ```
+
+    {constructed_geoarrow_valid}
     """
     given = _given(x, y, z, m)
     dimension = tuple(given)
@@ -199,6 +202,7 @@ def box(
     return pl.when(complete).then(pl.struct(bounds)).ext.to(dtype(crs=crs))
 
 
+@doc()
 def line_string_from_vertices(
     vertices: IntoExprColumn, *, crs: str | None = None
 ) -> pl.Expr:
@@ -216,10 +220,13 @@ def line_string_from_vertices(
         ).alias("route")
     )
     ```
+
+    {constructed_geoarrow_valid}
     """
     return _gather("linestring", vertices, _metadata(crs))
 
 
+@doc()
 def line_string_from_columns(
     x: IntoExprColumn,
     y: IntoExprColumn,
@@ -234,6 +241,8 @@ def line_string_from_columns(
     ```python
     df.select(geo.line_string_from_columns("lon", "lat", z="elevation"))
     ```
+
+    {constructed_geoarrow_valid}
     """
     return _from_columns("linestring_coords", x, y, z, m, _metadata(crs))
 
@@ -263,6 +272,7 @@ def line_string(
     return line_string_from_columns(x, y, z, m, crs=crs)
 
 
+@doc()
 def multi_point_from_points(
     points: IntoExprColumn, *, crs: str | None = None
 ) -> pl.Expr:
@@ -275,10 +285,13 @@ def multi_point_from_points(
         ).alias("sightings")
     )
     ```
+
+    {constructed_geoarrow_valid}
     """
     return _gather("multipoint", points, _metadata(crs))
 
 
+@doc()
 def multi_point_from_columns(
     x: IntoExprColumn,
     y: IntoExprColumn,
@@ -293,6 +306,8 @@ def multi_point_from_columns(
     ```python
     df.select(geo.multi_point_from_columns("lon", "lat", m="seen_at"))
     ```
+
+    {constructed_geoarrow_valid}
     """
     return _from_columns("multipoint_coords", x, y, z, m, _metadata(crs))
 
@@ -322,6 +337,7 @@ def multi_point(
     return multi_point_from_columns(x, y, z, m, crs=crs)
 
 
+@doc()
 def multi_line_string_from_line_strings(
     line_strings: IntoExprColumn, *, crs: str | None = None
 ) -> pl.Expr:
@@ -344,10 +360,13 @@ def multi_line_string_from_line_strings(
         )
     )
     ```
+
+    {constructed_geoarrow_valid}
     """
     return _gather("multilinestring", line_strings, _metadata(crs))
 
 
+@doc()
 def multi_line_string_from_columns(
     x: IntoExprColumn,
     y: IntoExprColumn,
@@ -362,6 +381,8 @@ def multi_line_string_from_columns(
     ```python
     df.select(geo.multi_line_string_from_columns("lon", "lat"))
     ```
+
+    {constructed_geoarrow_valid}
     """
     return _from_columns("multilinestring_coords", x, y, z, m, _metadata(crs))
 
@@ -428,10 +449,13 @@ def polygon_from_rings(
         .agg(geo.polygon_from_rings(pl.col("ring").implode()).alias("plot"))
     )
     ```
+
+    {constructed_geoarrow_valid}
     """
     return _gather("polygon", rings, _polygon_kwargs(crs, close))
 
 
+@doc()
 def polygon_from_columns(
     x: IntoExprColumn,
     y: IntoExprColumn,
@@ -452,6 +476,8 @@ def polygon_from_columns(
     and the rest are its holes.
     Rings are checked (and closed with `close`)
     as in [`polygon_from_rings`][geopolars.geo.polygon_from_rings].
+
+    {constructed_geoarrow_valid}
     """
     return _from_columns("polygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
 
@@ -482,6 +508,7 @@ def polygon(
     return polygon_from_columns(x, y, z, m, crs=crs, close=close)
 
 
+@doc()
 def multi_polygon_from_polygons(
     polygons: IntoExprColumn,
     *,
@@ -512,10 +539,13 @@ def multi_polygon_from_polygons(
 
     As for `polygon_from_rings`, every ring has to be a ring, or be closed with `close`.
     A multipolygon with a polygon that fails this is missing in the result.
+
+    {constructed_geoarrow_valid}
     """
     return _gather("multipolygon", polygons, _polygon_kwargs(crs, close))
 
 
+@doc()
 def multi_polygon_from_columns(
     x: IntoExprColumn,
     y: IntoExprColumn,
@@ -536,6 +566,8 @@ def multi_polygon_from_columns(
     and the rest are its holes.
     Rings are checked (and closed with `close`)
     as in [`multi_polygon_from_polygons`][geopolars.geo.multi_polygon_from_polygons].
+
+    {constructed_geoarrow_valid}
     """
     return _from_columns("multipolygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
 
