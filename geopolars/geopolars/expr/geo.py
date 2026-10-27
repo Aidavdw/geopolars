@@ -8,12 +8,12 @@ import polars as pl
 
 from geopolars.geo import (
     affine,
-    construct,
     coordinates,
     force_dimension,
     wkb,
     wkt,
 )
+from geopolars.geo.construct import linestring, point, polygon
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -30,18 +30,18 @@ class ExprGeoNameSpace:
         self._expr = expr
 
     def line_string(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.line_string_from_vertices(self._expr, crs=crs)
+        return linestring.line_string_from_vertices(self._expr, crs=crs)
 
     def multi_point(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.multi_point_from_points(self._expr, crs=crs)
+        return point.multi_point_from_points(self._expr, crs=crs)
 
     def multi_line_string(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.multi_line_string_from_line_strings(self._expr, crs=crs)
+        return linestring.multi_line_string_from_line_strings(self._expr, crs=crs)
 
     def polygons_from_rings_in_single_column(
         self, *, crs: str | None = None, close: CloseRings | None = None
     ) -> pl.Expr:
-        return construct.polygons_from_rings_in_single_column(
+        return polygon.polygons_from_rings_in_single_column(
             self._expr, crs=crs, close=close
         )
 
@@ -52,14 +52,14 @@ class ExprGeoNameSpace:
         crs: str | None = None,
         close: CloseRings | None = None,
     ) -> pl.Expr:
-        return construct.polygons_from_rings_in_separate_columns(
+        return polygon.polygons_from_rings_in_separate_columns(
             self._expr, holes, crs=crs, close=close
         )
 
     def multi_polygon(
         self, *, crs: str | None = None, close: CloseRings | None = None
     ) -> pl.Expr:
-        return construct.multi_polygon_from_polygons(self._expr, crs=crs, close=close)
+        return polygon.multi_polygon_from_polygons(self._expr, crs=crs, close=close)
 
     def translate(self, offset: affine.Offset | IntoExprColumn) -> pl.Expr:
         return affine.translate(self._expr, offset)

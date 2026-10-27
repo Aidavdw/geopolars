@@ -9,7 +9,7 @@ from polars.plugins import register_plugin_function
 
 from geopolars._docs import doc
 from geopolars._utils import LIB
-from geopolars.geo.construct import _decode_kwargs
+from geopolars.geo.construct._common import _decode_kwargs
 
 if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn

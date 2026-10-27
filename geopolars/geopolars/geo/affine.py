@@ -14,7 +14,7 @@ from geopolars._utils import LIB
 from geopolars.datatypes import LineStringType, PointType, PolygonType
 from geopolars.geo._dispatch import on_geometry, on_geometry_pair
 from geopolars.geo.centroid import _centroid
-from geopolars.geo.construct import point
+from geopolars.geo.construct.point import point
 
 # TODO: maybe merge 'rotate' and 'rotate_about_centroid'?
 # also the other ones.
