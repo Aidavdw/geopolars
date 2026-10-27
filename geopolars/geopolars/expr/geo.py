@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
     from geopolars.geo.close_rings import CloseRings
+    from geopolars.geo.filter_coordinates import NonFiniteAction
     from geopolars.geo.is_valid import CrsBounds
 
 
@@ -399,6 +400,28 @@ class ExprGeoNameSpace:
         from geopolars.geo.close_rings import close_rings
 
         return close_rings(self._expr, snap_z=snap_z, snap_m=snap_m)
+
+    def filter_coordinates(
+        self,
+        *,
+        select_non_finite: bool = True,
+        select_empty: bool = True,
+        ignore_z: bool = False,
+        ignore_m: bool = False,
+        action: NonFiniteAction = "drop",
+        too_short: Literal["invalid", "keep", "empty"] = "invalid",
+    ) -> pl.Expr:
+        from geopolars.geo.filter_coordinates import filter_coordinates
+
+        return filter_coordinates(
+            self._expr,
+            select_non_finite=select_non_finite,
+            select_empty=select_empty,
+            ignore_z=ignore_z,
+            ignore_m=ignore_m,
+            action=action,
+            too_short=too_short,
+        )
 
     def is_valid_geoarrow(
         self,

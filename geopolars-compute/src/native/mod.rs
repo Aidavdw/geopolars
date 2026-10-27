@@ -6,6 +6,7 @@ mod bounds;
 mod centroid;
 mod count_coordinates;
 pub mod distance;
+mod filter_coordinates;
 mod has_repeated_points;
 mod is_ccw;
 mod is_close;
@@ -18,6 +19,7 @@ mod length;
 mod remove_repeated_points;
 mod reverse;
 mod rings;
+mod too_short;
 
 pub use affine::{
     affine_line_strings, affine_multi_line_strings, affine_multi_points, affine_multi_polygons,
@@ -40,6 +42,12 @@ pub use count_coordinates::{
     polygon_coordinate_counts,
 };
 pub use distance::{against_one, pairwise, DistanceMetric};
+pub use filter_coordinates::{
+    line_strings_with_filtered_coordinates, multi_line_strings_with_filtered_coordinates,
+    multi_points_with_filtered_coordinates, multi_polygons_with_filtered_coordinates,
+    points_with_filtered_coordinates, polygons_with_filtered_coordinates, NonFinite,
+    NonFiniteAction,
+};
 pub use has_repeated_points::{
     line_strings_have_repeated_points, multi_line_strings_have_repeated_points,
     multi_points_have_repeated_points, multi_polygons_have_repeated_points,
@@ -72,7 +80,7 @@ pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use remove_repeated_points::{
     line_strings_without_repeated_points, multi_line_strings_without_repeated_points,
     multi_points_without_repeated_points, multi_polygons_without_repeated_points,
-    polygons_without_repeated_points, CollapsedLines, LineOptions, TooShort,
+    polygons_without_repeated_points, CollapsedLines, LineOptions,
 };
 pub use reverse::{
     reverse_line_strings, reverse_multi_line_strings, reverse_multi_points, reverse_multi_polygons,
@@ -82,3 +90,4 @@ pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,
     polygon_interiors, polygons_from_exteriors_and_holes,
 };
+pub use too_short::TooShort;

@@ -20,6 +20,7 @@ pub mod coords;
 pub mod count_coordinates;
 pub mod crs;
 pub mod distance;
+pub mod filter_coordinates;
 pub mod has_repeated_points;
 pub mod is_ccw;
 pub mod is_close;

@@ -60,22 +60,10 @@ def remove_repeated_points(
     This argument is not considered for polygon rings.
     A ring always keeps both ends in order to stay closed (and therefore valid GeoArrow).
 
-    This operation removes coordinates, which can leave a linestring or ring too short.
-    A linestring is too short with a single vertex, and a ring with fewer than 4.
-    This also holds for input that was too short already.
-    What is done with these is determined by `too_short`:
-
-    | `too_short` | a too-short linestring or ring |
-    | - | - |
-    | `"invalid"` | makes its row missing |
-    | `"keep"` | stays as it is, e.g. `[A]`, or a ring `[A, B, A]` |
-    | `"empty"` | becomes empty |
+    {too_short}
 
     For a linestring `A A A`, `"keep_ends"` gives `[A, A]`, which is not too short.
     `"single_vertex"` gives `[A]`, which is.
-
-    Note that an empty exterior ring makes a polygon invalid by OGC,
-    unless every hole of it is empty too (the empty polygon).
 
     {ignores_empty_and_invalid}
 
@@ -91,7 +79,9 @@ def remove_repeated_points(
         )
         raise ValueError(msg)
     if too_short not in get_args(TooShort):
-        msg = f"`too_short` must be one of {list(get_args(TooShort))}, got {too_short!r}"
+        msg = (
+            f"`too_short` must be one of {list(get_args(TooShort))}, got {too_short!r}"
+        )
         raise ValueError(msg)
 
     def build(column: pl.Expr, _geometry: GeoArrowType) -> pl.Expr:

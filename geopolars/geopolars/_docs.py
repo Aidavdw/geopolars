@@ -45,6 +45,20 @@ For a ring with the first vertex as F and the last as L:
 If `snap_z=True` and `snap_m=True`, a snapped L gets both the z and the m of F.
 An appended F brings its own z and m, so the ring is closed in every axis.
 A flag for an axis the column does not have does nothing.""",
+    "too_short": """\
+This operation removes coordinates, which can leave a linestring or ring too short.
+A linestring is too short with a single vertex, and a ring with fewer than 4.
+This also holds for input that was too short already.
+What is done with these is determined by `too_short`:
+
+| `too_short` | a too-short linestring or ring |
+| - | - |
+| `"invalid"` | makes its row missing |
+| `"keep"` | stays as it is, e.g. `[A]`, or a ring `[A, B, A]` |
+| `"empty"` | becomes empty |
+
+Note that an empty exterior ring makes a polygon invalid by OGC,
+unless every hole of it is empty too (the empty polygon).""",
     "constructed_geoarrow_valid": """\
 Every geometry this functions builds is valid by `is_valid_geoarrow`,
 but it might not be valid by `is_valid_ogc`, nor simple (see `is_simple`).""",

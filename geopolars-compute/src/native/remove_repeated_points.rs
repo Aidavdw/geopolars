@@ -23,20 +23,13 @@ use polars_arrow::offset::OffsetsBuffer;
 
 use super::has_repeated_points::{coincide, unique_axes};
 use super::rings::offsets_of;
+use super::too_short::{list_holding, without_rows, TooShort};
 
 /// See `collapsed_lines` of `remove_repeated_points` in Python.
 #[derive(Debug, Clone, Copy)]
 pub enum CollapsedLines {
     KeepEnds,
     SingleVertex,
-}
-
-/// See `too_short` of `remove_repeated_points` in Python.
-#[derive(Debug, Clone, Copy)]
-pub enum TooShort {
-    Invalid,
-    Keep,
-    Empty,
 }
 
 /// What happens to a linestring that collapses, or that is too short.
@@ -205,21 +198,6 @@ fn without_repeated_vertices<
         coords.copy_ranges(runs.into_iter()),
         too_short,
     )
-}
-
-/// The list of `lists` that holds item `item`, `None` if none does.
-fn list_holding(lists: &ValidList, item: usize) -> Option<usize> {
-    let offsets = lists.offsets().buffer();
-    let i = offsets
-        .partition_point(|&offset| offset as usize <= item)
-        .checked_sub(1)?;
-    (i < lists.len() && item < offsets[i + 1] as usize).then_some(i)
-}
-
-/// `rows`, with the rows in `failed` missing too.
-fn without_rows(rows: &List, failed: &[usize]) -> List {
-    let validity = validity_without(rows.validity(), rows.len(), failed);
-    rows.clone().with_validity(validity)
 }
 
 fn line_strings_without_repeated_points_with<
