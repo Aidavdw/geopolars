@@ -30,23 +30,11 @@ use geopolars_core::{UncheckedStorage, ValidCoords, ValidList};
 pub struct PolygonKwargs {
     /// The CRS the coordinates are in, in any form PROJ accepts.
     pub crs: Option<String>,
-    /// Close every open ring, as `close_rings` does.
-    pub close: bool,
-    /// See [`CloseRingsKwargs`]. Only used with `close=true`.
-    pub snap_z: bool,
-    /// See [`CloseRingsKwargs`]. Only used with `close=true`.
-    pub snap_m: bool,
+    /// How to close every open ring, as `close_rings` does. `None` closes nothing.
+    pub close: Option<CloseRingsKwargs>,
 }
 
 impl PolygonKwargs {
-    /// How to close open rings, if at all.
-    fn closing(&self) -> Option<CloseRingsKwargs> {
-        self.close.then_some(CloseRingsKwargs {
-            snap_z: self.snap_z,
-            snap_m: self.snap_m,
-        })
-    }
-
     fn metadata(&self) -> MetadataKwargs {
         MetadataKwargs {
             crs: self.crs.clone(),
@@ -285,7 +273,7 @@ fn polygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     gather(
         &inputs[0],
         &kwargs.metadata(),
-        kwargs.closing(),
+        kwargs.close,
         Kind::Polygon,
         Kind::LineString,
     )
@@ -316,7 +304,7 @@ fn multipolygon(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series
     gather(
         &inputs[0],
         &kwargs.metadata(),
-        kwargs.closing(),
+        kwargs.close,
         Kind::MultiPolygon,
         Kind::Polygon,
     )
@@ -479,7 +467,7 @@ fn linestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<
 /// See `polygon_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon_coords)]
 fn polygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
-    zip(inputs, &kwargs.metadata(), kwargs.closing(), Kind::Polygon)
+    zip(inputs, &kwargs.metadata(), kwargs.close, Kind::Polygon)
 }
 
 /// See `multipoint_from_columns`.
@@ -497,10 +485,5 @@ fn multilinestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsRe
 /// See `multipolygon_from_columns`.
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipolygon_coords)]
 fn multipolygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
-    zip(
-        inputs,
-        &kwargs.metadata(),
-        kwargs.closing(),
-        Kind::MultiPolygon,
-    )
+    zip(inputs, &kwargs.metadata(), kwargs.close, Kind::MultiPolygon)
 }

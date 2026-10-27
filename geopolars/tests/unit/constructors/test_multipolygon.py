@@ -343,7 +343,9 @@ _SQUARE_POLYGON = _SQUARE[0]
 _OPEN_POLYGON = [_SQUARE_POLYGON[0][:-1]]
 
 
-def _from_polygons(*multis: list | None, close: bool = False) -> pl.Series:
+def _from_polygons(
+    *multis: list | None, close: geo.CloseRings | None = None
+) -> pl.Series:
     return (
         pl.DataFrame({"polygons": list(multis)}, schema={"polygons": _XY_POLYGONS})
         .select(geo.multi_polygon("polygons", close=close).alias("multipolygon"))
@@ -372,7 +374,9 @@ def test_a_ring_that_is_no_ring_leaves_no_null_inside_the_multipolygon() -> None
 
 
 def test_close_closes_the_rings_of_every_polygon() -> None:
-    out = _from_polygons([_OPEN_POLYGON, _SQUARE_POLYGON, _OPEN_POLYGON], close=True)
+    out = _from_polygons(
+        [_OPEN_POLYGON, _SQUARE_POLYGON, _OPEN_POLYGON], close=geo.CloseRings()
+    )
 
     assert out.ext.storage().to_list() == [[_SQUARE_POLYGON] * 3]
 
@@ -384,7 +388,9 @@ def test_close_does_not_reach_polygons_that_are_already_built() -> None:
         {"rings": [_OPEN_POLYGON]}, schema={"rings": _XY_RINGS}
     ).select(geo.polygon("rings").implode().alias("polygons"))
 
-    out = polygons.select(geo.multi_polygon("polygons", close=True).alias("m"))
+    out = polygons.select(
+        geo.multi_polygon("polygons", close=geo.CloseRings()).alias("m")
+    )
 
     assert out["m"].to_list() == [None]
 
@@ -397,7 +403,7 @@ def test_multipolygon_coordinate_columns_are_checked_and_closed_too() -> None:
 
     checked = df.select(geo.multi_polygon("lon", "lat").alias("multipolygon"))
     closed = df.select(
-        geo.multi_polygon("lon", "lat", close=True).alias("multipolygon")
+        geo.multi_polygon("lon", "lat", close=geo.CloseRings()).alias("multipolygon")
     )
 
     assert checked["multipolygon"].to_list() == [None]

@@ -233,9 +233,8 @@ _ZM_RINGS = [
 def test_the_constructors_close_as_close_rings_does(
     df: pl.DataFrame, constructor: Callable[..., pl.Expr], snap_z: bool, snap_m: bool
 ) -> None:
-    built = constructor(
-        pl.col("geometry").ext.storage(), close=True, snap_z=snap_z, snap_m=snap_m
-    )
+    closing = geo.CloseRings(snap_z=snap_z, snap_m=snap_m)
+    built = constructor(pl.col("geometry").ext.storage(), close=closing)
 
     assert _storage(df, built) == _storage(
         df, geo.close_rings("geometry", snap_z=snap_z, snap_m=snap_m)

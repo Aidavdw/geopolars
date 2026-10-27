@@ -321,7 +321,9 @@ def _ring_xy(*xy: tuple[float, float]) -> list[dict[str, float]]:
 _OPEN = _ring_xy((0, 0), (1, 0), (0, 1))
 
 
-def _from_rings(*polygons: list | None, close: bool = False) -> pl.Series:
+def _from_rings(
+    *polygons: list | None, close: geo.CloseRings | None = None
+) -> pl.Series:
     return (
         pl.DataFrame({"rings": list(polygons)}, schema={"rings": _XY_RINGS})
         .select(geo.polygon("rings", close=close).alias("polygon"))
@@ -341,7 +343,7 @@ def test_a_ring_that_is_no_ring_invalidates_the_polygon() -> None:
 
 
 def test_close_closes_the_open_rings() -> None:
-    out = _from_rings([_OPEN], [*_TRIANGLE, _OPEN], close=True)
+    out = _from_rings([_OPEN], [*_TRIANGLE, _OPEN], close=geo.CloseRings())
 
     assert out.is_null().to_list() == [False, False]
     assert out.ext.storage().to_list() == [_TRIANGLE, [*_TRIANGLE, *_TRIANGLE]]
@@ -350,21 +352,15 @@ def test_close_closes_the_open_rings() -> None:
 def test_close_closes_a_ring_that_is_almost_closed() -> None:
     almost = _ring_xy((1e6, 0), (2e6, 0), (2e6, 1), (1e6 + 1e-4, 0))
 
-    closed = _from_rings([almost], close=True).ext.storage().to_list()
+    closed = _from_rings([almost], close=geo.CloseRings()).ext.storage().to_list()
     assert closed == [[[*almost, almost[0]]]]
 
 
 def test_close_cannot_save_a_ring_that_is_too_short() -> None:
     """A polygon of only an empty ring is the empty polygon, so it is kept."""
-    out = _from_rings([_ring_xy((0, 0), (1, 0))], [[]], close=True)
+    out = _from_rings([_ring_xy((0, 0), (1, 0))], [[]], close=geo.CloseRings())
 
     assert out.is_null().to_list() == [True, False]
-
-
-@pytest.mark.parametrize("flag", ["snap_z", "snap_m"])
-def test_snapping_without_close_is_refused(flag: str) -> None:
-    with pytest.raises(ValueError, match="only apply with `close=True`"):
-        geo.polygon("rings", **{flag: True})
 
 
 def test_close_on_a_sliced_column() -> None:
@@ -372,7 +368,7 @@ def test_close_on_a_sliced_column() -> None:
         {"rings": [[_OPEN], [_OPEN], _TRIANGLE]}, schema={"rings": _XY_RINGS}
     ).slice(1, 2)
 
-    out = df.select(geo.polygon("rings", close=True).alias("polygon"))
+    out = df.select(geo.polygon("rings", close=geo.CloseRings()).alias("polygon"))
 
     assert out["polygon"].ext.storage().to_list() == [_TRIANGLE, _TRIANGLE]
 
@@ -387,7 +383,9 @@ def test_coordinate_columns_are_checked_and_closed_too() -> None:
     )
 
     checked = df.select(geo.polygon("lon", "lat").alias("polygon"))
-    closed = df.select(geo.polygon("lon", "lat", close=True).alias("polygon"))
+    closed = df.select(
+        geo.polygon("lon", "lat", close=geo.CloseRings()).alias("polygon")
+    )
 
     assert checked["polygon"].is_null().to_list() == [True, True]
     assert closed["polygon"].ext.storage().to_list() == [_TRIANGLE, None]

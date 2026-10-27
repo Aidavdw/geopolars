@@ -17,7 +17,7 @@ from geopolars.geo.boundary import boundary
 from geopolars.geo.bounds import bounds, total_bounds
 from geopolars.geo.buffer import buffer
 from geopolars.geo.centroid import centroid
-from geopolars.geo.close_rings import close_rings
+from geopolars.geo.close_rings import CloseRings, close_rings
 from geopolars.geo.construct import (
     box,
     line_string,
@@ -71,6 +71,7 @@ from geopolars.geo.wkt import from_wkt, to_wkt
 from geopolars.geo.wrap_longitude import wrap_longitude
 
 __all__ = [
+    "CloseRings",
     "affine_transform",
     "area",
     "area_geodesic",

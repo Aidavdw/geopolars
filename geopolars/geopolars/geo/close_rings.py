@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -24,8 +25,18 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 
+@dataclass(frozen=True, kw_only=True)
+class CloseRings:
+    """How the polygon constructors close open rings: as `close_rings` does, with its flags.
+    Mirrors `CloseRingsKwargs` in `src/expr/close_rings.rs`.
+    """
+
+    snap_z: bool = False
+    snap_m: bool = False
+
+
 def _close_rings(
-    column: pl.Expr, geometry: GeoArrowType, *, snap_z: bool, snap_m: bool
+    column: pl.Expr, geometry: GeoArrowType, *, closing: CloseRings
 ) -> pl.Expr:
     if not isinstance(
         geometry,
@@ -40,7 +51,7 @@ def _close_rings(
         plugin_path=LIB,
         args=[column],
         function_name="close_rings",
-        kwargs={"snap_z": snap_z, "snap_m": snap_m},
+        kwargs=asdict(closing),
         is_elementwise=True,
     )
 
@@ -67,4 +78,7 @@ def close_rings(
 
     This expression leaves rings that are already closed as-is.
     """
-    return on_geometry(geometry, partial(_close_rings, snap_z=snap_z, snap_m=snap_m))
+    return on_geometry(
+        geometry,
+        partial(_close_rings, closing=CloseRings(snap_z=snap_z, snap_m=snap_m)),
+    )
