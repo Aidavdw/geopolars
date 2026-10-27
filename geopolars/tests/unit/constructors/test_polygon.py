@@ -361,6 +361,12 @@ def test_close_cannot_save_a_ring_that_is_too_short() -> None:
     assert out.is_null().to_list() == [True, False]
 
 
+@pytest.mark.parametrize("flag", ["snap_z", "snap_m"])
+def test_snapping_without_close_is_refused(flag: str) -> None:
+    with pytest.raises(ValueError, match="only apply with `close=True`"):
+        geo.polygon("rings", **{flag: True})
+
+
 def test_close_on_a_sliced_column() -> None:
     df = pl.DataFrame(
         {"rings": [[_OPEN], [_OPEN], _TRIANGLE]}, schema={"rings": _XY_RINGS}

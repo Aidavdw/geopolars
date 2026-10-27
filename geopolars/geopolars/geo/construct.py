@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 import polars as pl
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.datatypes import BoxType, PointType
 
@@ -51,9 +52,16 @@ def _metadata(crs: str | None) -> dict[str, str | None]:
     return {"crs": crs}
 
 
-def _polygon_kwargs(crs: str | None, close: bool) -> dict[str, str | bool | None]:
+def _polygon_kwargs(
+    crs: str | None, close: bool, snap_z: bool, snap_m: bool
+) -> dict[str, str | bool | None]:
     """Mirrors `PolygonKwargs` in `src/expr/construct.rs`."""
-    return {**_metadata(crs), "close": close}
+    if (snap_z or snap_m) and not close:
+        # Normally we prefer to not have invalid combinations,
+        # but this keeps the arguments consistent with close_rings.
+        msg = "`snap_z` and `snap_m` only apply with `close=True`"
+        raise ValueError(msg)
+    return {**_metadata(crs), "close": close, "snap_z": snap_z, "snap_m": snap_m}
 
 
 def _decode_kwargs(dtype: type[GeoArrowType], crs: str | None) -> dict[str, str | None]:
@@ -389,8 +397,14 @@ def multi_line_string(
     return multi_line_string_from_columns(x, y, z, m, crs=crs)
 
 
+@doc()
 def polygon_from_rings(
-    rings: IntoExprColumn, *, crs: str | None = None, close: bool = False
+    rings: IntoExprColumn,
+    *,
+    crs: str | None = None,
+    close: bool = False,
+    snap_z: bool = False,
+    snap_m: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column out of lists of rings.
 
@@ -402,8 +416,11 @@ def polygon_from_rings(
     at least 4 vertices, the last one repeating the first.
     A polygon with a ring that is not one is missing in the result.
     The exception is a polygon whose rings are all empty, which is the empty polygon.
-    With `close=True`, an open ring is first closed by repeating its first vertex
-    at its end. A ring that is still too short after that stays refused.
+    With `close=True`, an open ring is first closed as `close_rings` does.
+    A ring that is still too short after that stays refused.
+    Passing `snap_z` or `snap_m` without `close=True` raises a `ValueError`.
+
+    {closing_rings}
 
     Rings normally arrive grouped, one linestring at a time:
 
@@ -420,7 +437,7 @@ def polygon_from_rings(
     )
     ```
     """
-    return _gather("polygon", rings, _polygon_kwargs(crs, close))
+    return _gather("polygon", rings, _polygon_kwargs(crs, close, snap_z, snap_m))
 
 
 def polygon_from_columns(
@@ -431,6 +448,8 @@ def polygon_from_columns(
     *,
     crs: str | None = None,
     close: bool = False,
+    snap_z: bool = False,
+    snap_m: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column from one coordinate column per axis.
     Each is a `List[List[Float64]]`.
@@ -444,7 +463,9 @@ def polygon_from_columns(
     Rings are checked (and closed with `close=True`)
     as in [`polygon_from_rings`][geopolars.geo.polygon_from_rings].
     """
-    return _from_columns("polygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
+    return _from_columns(
+        "polygon_coords", x, y, z, m, _polygon_kwargs(crs, close, snap_z, snap_m)
+    )
 
 
 def polygon(
@@ -455,6 +476,8 @@ def polygon(
     *,
     crs: str | None = None,
     close: bool = False,
+    snap_z: bool = False,
+    snap_m: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.polygon` column, from rings or from coordinates.
     Dispatches to either:
@@ -468,13 +491,20 @@ def polygon(
                 "pass x and y as columns, or call polygon_from_rings()"
             )
             raise TypeError(msg)
-        return polygon_from_rings(x, crs=crs, close=close)
+        return polygon_from_rings(x, crs=crs, close=close, snap_z=snap_z, snap_m=snap_m)
 
-    return polygon_from_columns(x, y, z, m, crs=crs, close=close)
+    return polygon_from_columns(
+        x, y, z, m, crs=crs, close=close, snap_z=snap_z, snap_m=snap_m
+    )
 
 
 def multi_polygon_from_polygons(
-    polygons: IntoExprColumn, *, crs: str | None = None, close: bool = False
+    polygons: IntoExprColumn,
+    *,
+    crs: str | None = None,
+    close: bool = False,
+    snap_z: bool = False,
+    snap_m: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.multipolygon` column out of lists of polygons.
     Takes either a list of polygons, or bare lists of rings.
@@ -501,7 +531,9 @@ def multi_polygon_from_polygons(
     As for `polygon_from_rings`, every ring has to be a ring, or be closed with `close=True`.
     A multipolygon with a polygon that fails this is missing in the result.
     """
-    return _gather("multipolygon", polygons, _polygon_kwargs(crs, close))
+    return _gather(
+        "multipolygon", polygons, _polygon_kwargs(crs, close, snap_z, snap_m)
+    )
 
 
 def multi_polygon_from_columns(
@@ -512,6 +544,8 @@ def multi_polygon_from_columns(
     *,
     crs: str | None = None,
     close: bool = False,
+    snap_z: bool = False,
+    snap_m: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.multipolygon` column from one column per axis.
     Each is a `List[List[List[Float64]]]`: polygons, then rings, then coordinates.
@@ -525,7 +559,9 @@ def multi_polygon_from_columns(
     Rings are checked (and closed with `close=True`)
     as in [`multi_polygon_from_polygons`][geopolars.geo.multi_polygon_from_polygons].
     """
-    return _from_columns("multipolygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
+    return _from_columns(
+        "multipolygon_coords", x, y, z, m, _polygon_kwargs(crs, close, snap_z, snap_m)
+    )
 
 
 def multi_polygon(
@@ -536,6 +572,8 @@ def multi_polygon(
     *,
     crs: str | None = None,
     close: bool = False,
+    snap_z: bool = False,
+    snap_m: bool = False,
 ) -> pl.Expr:
     """Build a `geoarrow.multipolygon` column, from polygons or from coordinates.
     Dispatches to either:
@@ -550,6 +588,10 @@ def multi_polygon(
                 "multi_polygon_from_polygons()"
             )
             raise TypeError(msg)
-        return multi_polygon_from_polygons(x, crs=crs, close=close)
+        return multi_polygon_from_polygons(
+            x, crs=crs, close=close, snap_z=snap_z, snap_m=snap_m
+        )
 
-    return multi_polygon_from_columns(x, y, z, m, crs=crs, close=close)
+    return multi_polygon_from_columns(
+        x, y, z, m, crs=crs, close=close, snap_z=snap_z, snap_m=snap_m
+    )

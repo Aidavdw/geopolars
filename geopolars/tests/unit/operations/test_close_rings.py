@@ -13,6 +13,7 @@ from geopolars.datatypes import (
     MultiLineStringXY,
     MultiPointXY,
     MultiPolygonXY,
+    MultiPolygonXYZM,
     PointXY,
     PolygonXY,
     PolygonXYM,
@@ -21,6 +22,8 @@ from geopolars.datatypes import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from geopolars.datatypes import GeoArrowType
 
 Vertices = list[dict[str, float]]
@@ -197,3 +200,43 @@ def test_snap_m_alone_appends_where_z_differs() -> None:
 
     out = geo.close_rings("geometry", snap_m=True)
     assert _storage(df, out) == [[_closed(_ZM_OPEN)]]
+
+
+# One ring per row, each long enough to be a ring once closed.
+_ZM_RINGS = [
+    _vertices("xyzm", (0, 0, 0, 0), (4, 0, 0, 1), (4, 4, 0, 2)),
+    _ZM_OPEN,
+    _vertices("xyzm", (0, 0, 0, 0), (4, 0, 0, 1), (4, 4, 0, 2), (0, 0, 0, 3)),
+    _vertices("xyzm", (0, 0, 0, 0), (4, 0, 0, 1), (4, 4, 0, 2), (0, 0, 1, 0)),
+    _closed(_vertices("xyzm", (0, 0, 0, 0), (4, 0, 0, 1), (4, 4, 0, 2))),
+]
+
+
+@pytest.mark.parametrize("snap_z", [False, True])
+@pytest.mark.parametrize("snap_m", [False, True])
+@pytest.mark.parametrize(
+    ("df", "constructor"),
+    [
+        (
+            _column(PolygonXYZM(), 2, *([ring] for ring in _ZM_RINGS), axes="xyzm"),
+            geo.polygon,
+        ),
+        (
+            _column(
+                MultiPolygonXYZM(), 3, *([[ring]] for ring in _ZM_RINGS), axes="xyzm"
+            ),
+            geo.multi_polygon,
+        ),
+    ],
+    ids=["polygon", "multipolygon"],
+)
+def test_the_constructors_close_as_close_rings_does(
+    df: pl.DataFrame, constructor: Callable[..., pl.Expr], snap_z: bool, snap_m: bool
+) -> None:
+    built = constructor(
+        pl.col("geometry").ext.storage(), close=True, snap_z=snap_z, snap_m=snap_m
+    )
+
+    assert _storage(df, built) == _storage(
+        df, geo.close_rings("geometry", snap_z=snap_z, snap_m=snap_m)
+    )

@@ -16,11 +16,11 @@ use super::coords::{kernel_output_type_same_geometry, trimmed};
 use crate::geoarrow::{describe, Kind};
 
 /// See python
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CloseRingsKwargs {
-    snap_z: bool,
-    snap_m: bool,
+    pub(super) snap_z: bool,
+    pub(super) snap_m: bool,
 }
 
 /// The kernel of `kind` on one chunk of the storage.
@@ -52,21 +52,21 @@ fn chunk_with_closed_rings(
         }
         Kind::Polygon => {
             let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            closed_rings(&array.rings, &array.coords, snap_z, snap_m).map(|(rings, coords)| {
+            closed_rings(&array.rings, &array.coords, *kwargs).map(|(rings, coords)| {
                 (array.rings, array.coords) = (rings, coords);
                 array.into_list_array().boxed()
             })
         }
         Kind::MultiLineString => {
             let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            closed_rings(&array.lines, &array.coords, snap_z, snap_m).map(|(lines, coords)| {
+            closed_rings(&array.lines, &array.coords, *kwargs).map(|(lines, coords)| {
                 (array.lines, array.coords) = (lines, coords);
                 array.into_list_array().boxed()
             })
         }
         Kind::MultiPolygon => {
             let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            closed_rings(&array.rings, &array.coords, snap_z, snap_m).map(|(rings, coords)| {
+            closed_rings(&array.rings, &array.coords, *kwargs).map(|(rings, coords)| {
                 (array.rings, array.coords) = (rings, coords);
                 array.into_list_array().boxed()
             })

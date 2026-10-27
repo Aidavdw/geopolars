@@ -33,6 +33,18 @@ Either flag is ignored for a geometry without that axis.""",
 With `abs_tol=None` and `rel_tol=None`, the default, the coordinates have to be exactly equal.
 Otherwise they only have to be close on every compared axis, as in `pl.Expr.is_close` (see `geo.is_close`).
 A tolerance that is not given then counts as `0.0`.""",
+    "closing_rings": """\
+For a ring with the first vertex as F and the last as L:
+
+| ends | result |
+| - | - |
+| x or y differ | F is appended |
+| x and y the same, z differs | F is appended, or with `snap_z=True`, L gets the z of F |
+| x, y and z the same, m differs | left as it is, or with `snap_m=True`, L gets the m of F |
+
+If `snap_z=True` and `snap_m=True`, a snapped L gets both the z and the m of F.
+An appended F brings its own z and m, so the ring is closed in every axis.
+A flag for an axis the column does not have does nothing.""",
     "empty_and_missing": """\
 An empty geometry gives an empty {output}, and a missing one a missing {output}.""",
     "keeps_type_dimension_and_crs": """\

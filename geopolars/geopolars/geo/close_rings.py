@@ -59,17 +59,7 @@ def close_rings(
     {keeps_type_dimension_and_crs}
     {ignores_empty_and_invalid}
 
-    For a geometry with the first vertex as F and the last as L:
-
-    | ends | result |
-    | - | - |
-    | x or y differ | F is appended |
-    | x and y the same, z differs | F is appended, or with `snap_z=True`, L gets the z of F |
-    | x, y and z the same, m differs | left as it is, or with `snap_m=True`, L gets the m of F |
-
-    If `snap_z=True` and `snap_m=True`, a snapped L gets both the z and the m of F.
-    An appended F brings its own z and m, so the ring is closed in every axis.
-    A flag for an axis the column does not have does nothing.
+    {closing_rings}
 
     ```python
     pl.scan_parquet("parcels.parquet").select(geo.close_rings("parcel"))
