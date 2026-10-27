@@ -56,8 +56,10 @@ class ExprGeoNameSpace:
             self._expr, holes, crs=crs, close=close
         )
 
-    def multi_polygon(self, *, crs: str | None = None) -> pl.Expr:
-        return construct.multi_polygon_from_polygons(self._expr, crs=crs)
+    def multi_polygon(
+        self, *, crs: str | None = None, close: CloseRings | None = None
+    ) -> pl.Expr:
+        return construct.multi_polygon_from_polygons(self._expr, crs=crs, close=close)
 
     def translate(self, offset: affine.Offset | IntoExprColumn) -> pl.Expr:
         return affine.translate(self._expr, offset)

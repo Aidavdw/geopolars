@@ -454,6 +454,22 @@ def test_multipolygon_namespace_matches_the_functional_api(
     )
 
 
+def test_multipolygon_namespace_forwards_close() -> None:
+    """An open ring is only kept when `close` reaches the constructor."""
+    open_ring = [{"x": 0.0, "y": 0.0}, {"x": 1.0, "y": 0.0}, {"x": 0.0, "y": 1.0}]
+    vertices = pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))
+    df = pl.DataFrame(
+        {"polygons": [[[open_ring]]]}, schema={"polygons": pl.List(pl.List(vertices))}
+    )
+    close = geo.CloseRings()
+
+    namespaced = df.select(gpl.col("polygons").geo.multi_polygon(close=close))
+    functional = df.select(geo.multi_polygon("polygons", close=close))
+
+    assert namespaced["polygons"].is_null().to_list() == [False]
+    assert_frame_equal(namespaced, functional)
+
+
 def test_set_crs_namespace_matches_the_functional_api() -> None:
     points = pl.DataFrame({"x": [4.9], "y": [52.4]}).select(
         geo.point("x", "y", crs="EPSG:4326").alias("point")
