@@ -55,11 +55,7 @@ pub fn multi_line_strings_are_rings<const Z: bool>(array: &MultiLineStringArray)
 /// Whether every ring of `polygon` is a ring, or every one is empty (the empty polygon).
 #[inline(always)]
 fn has_only_rings<const Z: bool>(polygon: &ScalarPolygon) -> bool {
-    if polygon
-        .rings()
-        .next()
-        .is_some_and(|exterior| exterior.vertices.is_empty())
-    {
+    if polygon.has_empty_exterior() {
         return polygon.rings().all(|ring| ring.vertices.is_empty());
     }
     polygon

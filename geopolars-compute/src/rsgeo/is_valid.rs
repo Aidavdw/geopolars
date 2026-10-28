@@ -97,11 +97,7 @@ fn check_polygon_topology(
     keep: bool,
 ) -> Result<Option<Polygon<f64>>, ()> {
     // A valid shape has either every ring empty, or none.
-    if polygon
-        .rings()
-        .next()
-        .is_none_or(|exterior| exterior.vertices.is_empty())
-    {
+    if polygon.has_empty_exterior() {
         return Ok(None);
     }
     if !polygon.rings().all(|ring| xy_is_finite(&ring)) {

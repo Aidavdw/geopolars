@@ -84,13 +84,6 @@ fn finite_selection(bounds: Option<Bounds>, select_empty: bool) -> CoordinateSel
     }
 }
 
-fn is_empty_polygon(polygon: &ScalarPolygon) -> bool {
-    polygon
-        .rings()
-        .next()
-        .is_none_or(|exterior| exterior.vertices.is_empty())
-}
-
 fn needs_whole_polygon_in_geos(checks: &PolygonTopologyChecks) -> bool {
     checks.checks_everything() || checks.check_ring_self_intersect
 }
@@ -121,7 +114,7 @@ fn polygon_topology_is_valid(
     polygon: &ScalarPolygon,
     checks: &PolygonTopologyChecks,
 ) -> GeoComputeResult<bool> {
-    if is_empty_polygon(polygon) {
+    if polygon.has_empty_exterior() {
         return Ok(true);
     }
     if needs_whole_polygon_in_geos(checks) && !whole_polygon_passes(&polygon.to_geos()?, checks)? {
@@ -141,7 +134,7 @@ fn multi_polygon_topology_is_valid(
     }
     let polygons = multi
         .polygons()
-        .filter(|polygon| !is_empty_polygon(polygon));
+        .filter(|polygon| !polygon.has_empty_exterior());
     if !checks.check_multi_polygon_self_overlap {
         for polygon in polygons {
             if !polygon_topology_is_valid(&polygon, &checks.polygons)? {

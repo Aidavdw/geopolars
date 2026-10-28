@@ -53,12 +53,7 @@ pub(crate) fn line_string_shape_is_valid(coords: &ValidCoords, vertices: Range<u
 #[cfg(feature = "geos")]
 #[inline(always)]
 pub(crate) fn polygon_shape_is_valid(polygon: &ScalarPolygon) -> bool {
-    // An empty exterior makes the empty polygon, so every other ring has to be empty too.
-    if polygon
-        .rings()
-        .next()
-        .is_some_and(|exterior| exterior.vertices.is_empty())
-    {
+    if polygon.has_empty_exterior() {
         return polygon.rings().all(|ring| ring.vertices.is_empty());
     }
     polygon

@@ -25,6 +25,15 @@ impl<'a> ScalarPolygon<'a> {
             vertices: rings.range(j),
         })
     }
+
+    /// Whether it has no exterior, or an empty one.
+    /// Either makes it the empty polygon, whose holes GeoArrow also requires to be empty.
+    #[inline(always)]
+    pub fn has_empty_exterior(&self) -> bool {
+        self.rings()
+            .next()
+            .is_none_or(|exterior| exterior.vertices.is_empty())
+    }
 }
 
 /// A column of polygons: rows of rings of coordinates.
