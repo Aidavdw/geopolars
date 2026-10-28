@@ -149,8 +149,8 @@ impl GeosGeometries {
         reversed: bool,
     ) -> GeoComputeResult<PolygonArray> {
         with_const_flags!(
-            into_polygon_array_with(self, ignore_per_row_errors);
-            z, reversed
+            Z = z, REVERSED = reversed;
+            into_polygon_array_with::<Z, REVERSED>(self, ignore_per_row_errors)
         )
     }
 
@@ -165,8 +165,8 @@ impl GeosGeometries {
         reversed: bool,
     ) -> GeoComputeResult<MultiPolygonArray> {
         with_const_flags!(
-            into_multi_polygon_array_with(self, ignore_per_row_errors);
-            z, reversed
+            Z = z, REVERSED = reversed;
+            into_multi_polygon_array_with::<Z, REVERSED>(self, ignore_per_row_errors)
         )
     }
 }

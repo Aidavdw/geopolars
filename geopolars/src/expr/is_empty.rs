@@ -41,23 +41,38 @@ fn chunk_emptiness(
         Kind::Point => points_are_empty(&PointArray::new(Coords::new(chunk)?)),
         Kind::LineString => {
             let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            with_const_flags!(line_strings_are_empty(&array); check_nested)
+            with_const_flags!(
+                CHECK_NESTED = check_nested;
+                line_strings_are_empty::<CHECK_NESTED>(&array)
+            )
         }
         Kind::MultiPoint => {
             let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
-            with_const_flags!(multi_points_are_empty(&array); check_nested)
+            with_const_flags!(
+                CHECK_NESTED = check_nested;
+                multi_points_are_empty::<CHECK_NESTED>(&array)
+            )
         }
         Kind::Polygon => {
             let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            with_const_flags!(polygons_are_empty(&array); check_nested)
+            with_const_flags!(
+                CHECK_NESTED = check_nested;
+                polygons_are_empty::<CHECK_NESTED>(&array)
+            )
         }
         Kind::MultiLineString => {
             let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            with_const_flags!(multi_line_strings_are_empty(&array); check_nested)
+            with_const_flags!(
+                CHECK_NESTED = check_nested;
+                multi_line_strings_are_empty::<CHECK_NESTED>(&array)
+            )
         }
         Kind::MultiPolygon => {
             let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            with_const_flags!(multi_polygons_are_empty(&array); check_nested)
+            with_const_flags!(
+                CHECK_NESTED = check_nested;
+                multi_polygons_are_empty::<CHECK_NESTED>(&array)
+            )
         }
     })
 }

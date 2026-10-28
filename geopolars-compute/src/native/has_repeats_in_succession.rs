@@ -111,8 +111,12 @@ pub(super) fn repeats_in_succession(
 ) -> MutableBitmap {
     let (unique_z, unique_m) = unique_axes(coords, unique_z, unique_m);
     with_const_flags!(
-        repeats_in_succession_with(lists, coords, tolerance.unwrap_or_default());
-        tolerance.is_some(), unique_z, unique_m
+        TOLERANCE_COINCIDENCE = tolerance.is_some(), UNIQUE_Z = unique_z, UNIQUE_M = unique_m;
+        repeats_in_succession_with::<TOLERANCE_COINCIDENCE, UNIQUE_Z, UNIQUE_M>(
+            lists,
+            coords,
+            tolerance.unwrap_or_default(),
+        )
     )
 }
 

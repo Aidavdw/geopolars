@@ -39,7 +39,7 @@ fn chunk_to_ccw(
         }
         Kind::Polygon => {
             let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            with_const_flags!(polygons_to_ccw(&array); kwargs.holes_cw)
+            with_const_flags!(HOLES_CW = kwargs.holes_cw; polygons_to_ccw::<HOLES_CW>(&array))
                 .into_list_array()
                 .boxed()
         }
@@ -49,7 +49,7 @@ fn chunk_to_ccw(
         }
         Kind::MultiPolygon => {
             let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            with_const_flags!(multi_polygons_to_ccw(&array); kwargs.holes_cw)
+            with_const_flags!(HOLES_CW = kwargs.holes_cw; multi_polygons_to_ccw::<HOLES_CW>(&array))
                 .into_list_array()
                 .boxed()
         }

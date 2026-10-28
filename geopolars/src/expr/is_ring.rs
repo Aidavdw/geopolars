@@ -40,14 +40,14 @@ fn is_ring(inputs: &[Series]) -> PolarsResult<Series> {
         let chunks = chunks.map(|rows| {
             let array = LineStringArray::new(rows)?;
             let z = array.coords.dim().has_z();
-            PolarsResult::Ok(with_const_flags!(line_strings_are_rings(&array); z))
+            PolarsResult::Ok(with_const_flags!(Z = z; line_strings_are_rings::<Z>(&array)))
         });
         return Ok(BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series());
     }
     let chunks = chunks.map(|rows| {
         let array = MultiLineStringArray::new(rows)?;
         let z = array.coords.dim().has_z();
-        PolarsResult::Ok(with_const_flags!(multi_line_strings_are_rings(&array); z))
+        PolarsResult::Ok(with_const_flags!(Z = z; multi_line_strings_are_rings::<Z>(&array)))
     });
     Ok(BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series())
 }

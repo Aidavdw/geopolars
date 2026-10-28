@@ -261,8 +261,10 @@ macro_rules! are_close {
     ($kernel:ident, $a:expr, $b:expr, $tolerance:expr, $unique_z:expr, $unique_m:expr, $nans_equal:expr) => {{
         let dim = $a.coords.dim();
         with_const_flags!(
-            $kernel($a, $b, $tolerance);
-            $unique_z && dim.has_z(), $unique_m && dim.has_m(), $nans_equal
+            UNIQUE_Z = $unique_z && dim.has_z(),
+            UNIQUE_M = $unique_m && dim.has_m(),
+            NANS_EQUAL = $nans_equal;
+            $kernel::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>($a, $b, $tolerance)
         )
     }};
 }

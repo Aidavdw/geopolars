@@ -169,8 +169,11 @@ pub fn selected_coords(coords: &ValidCoords, selection: &CoordinateSelection) ->
     let check_non_finite = selection.non_finite.is_some();
     let check_bounds = selection.bounds.is_some();
     Some(with_const_flags!(
-        selected_coords_with(coords, filter, &bounds);
-        check_non_finite, check_bounds, dim.has_z(), dim.has_m()
+        CHECK_NON_FINITE = check_non_finite,
+        CHECK_BOUNDS = check_bounds,
+        Z = dim.has_z(),
+        M = dim.has_m();
+        selected_coords_with::<CHECK_NON_FINITE, CHECK_BOUNDS, Z, M>(coords, filter, &bounds)
     ))
 }
 

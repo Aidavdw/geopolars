@@ -153,7 +153,6 @@ fn kernel_output_type_distance(
 }
 
 /// [geopolars_compute::native::pairwise], into a polars array.
-/// `with_const_flags!` cannot name the metric type itself, so it calls this.
 fn pairwise<const Z: bool>(
     metric: &impl DistanceMetric<Error: Display>,
     a: &PointArray,
@@ -164,7 +163,6 @@ fn pairwise<const Z: bool>(
 }
 
 /// [geopolars_compute::native::against_one], into a polars array.
-/// `with_const_flags!` cannot name the metric type itself, so it calls this.
 fn against_one<const Z: bool>(
     metric: &impl DistanceMetric<Error: Display>,
     one: [f64; 3],
@@ -220,12 +218,12 @@ fn measure(
                 .map(|(a, b)| {
                     let a = PointArray::new(Coords::new(a)?);
                     let b = PointArray::new(Coords::new(b)?);
-                    with_const_flags!(pairwise(metric, &a, &b); z)
+                    with_const_flags!(Z = z; pairwise::<Z>(metric, &a, &b))
                 })
                 .collect::<PolarsResult<Vec<_>>>()?
         }
-        (1, _) => with_const_flags!(every_against_one(metric, a, b); z)?,
-        (_, 1) => with_const_flags!(every_against_one(metric, b, a); z)?,
+        (1, _) => with_const_flags!(Z = z; every_against_one::<Z>(metric, a, b))?,
+        (_, 1) => with_const_flags!(Z = z; every_against_one::<Z>(metric, b, a))?,
         (n, m) => polars_bail!(ShapeMismatch: "cannot measure {n} points against {m}"),
     };
     Ok(Float64Chunked::from_chunk_iter(inputs[0].name().clone(), chunks).into_series())

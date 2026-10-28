@@ -44,21 +44,27 @@ fn chunk_reversed(
         }
         Kind::Polygon => {
             let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            with_const_flags!(reverse_polygons(&array); kwargs.reverse_holes)
-                .into_list_array()
-                .boxed()
+            with_const_flags!(
+                REVERSE_HOLES = kwargs.reverse_holes;
+                reverse_polygons::<REVERSE_HOLES>(&array)
+            )
+            .into_list_array()
+            .boxed()
         }
         Kind::MultiLineString => {
             let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            with_const_flags!(reverse_multi_line_strings(&array); kwargs.nested)
+            with_const_flags!(NESTED = kwargs.nested; reverse_multi_line_strings::<NESTED>(&array))
                 .into_list_array()
                 .boxed()
         }
         Kind::MultiPolygon => {
             let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            with_const_flags!(reverse_multi_polygons(&array); kwargs.reverse_holes, kwargs.nested)
-                .into_list_array()
-                .boxed()
+            with_const_flags!(
+                REVERSE_HOLES = kwargs.reverse_holes, NESTED = kwargs.nested;
+                reverse_multi_polygons::<REVERSE_HOLES, NESTED>(&array)
+            )
+            .into_list_array()
+            .boxed()
         }
     })
 }

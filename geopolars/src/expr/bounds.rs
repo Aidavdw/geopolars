@@ -70,39 +70,66 @@ fn chunk_bounds(
     Ok(match kind {
         Kind::Point => {
             let array = PointArray::new(Coords::new(chunk)?);
-            with_const_flags!(point_bounds(&array, options); has_z, has_m).boxed()
+            with_const_flags!(Z = has_z, M = has_m; point_bounds::<Z, M>(&array, options)).boxed()
         }
         Kind::LineString => {
             let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            with_const_flags!(line_string_bounds(&array, options); has_z, has_m).boxed()
+            with_const_flags!(
+                Z = has_z, M = has_m;
+                line_string_bounds::<Z, M>(&array, options)
+            )
+            .boxed()
         }
         Kind::Polygon => {
             let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            with_const_flags!(polygon_bounds(&array, options); has_z, has_m).boxed()
+            with_const_flags!(Z = has_z, M = has_m; polygon_bounds::<Z, M>(&array, options)).boxed()
         }
         Kind::MultiPoint => {
             let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
             if per_part {
-                with_const_flags!(multi_point_part_bounds(&array, options); has_z, has_m).boxed()
+                with_const_flags!(
+                    Z = has_z, M = has_m;
+                    multi_point_part_bounds::<Z, M>(&array, options)
+                )
+                .boxed()
             } else {
-                with_const_flags!(multi_point_bounds(&array, options); has_z, has_m).boxed()
+                with_const_flags!(
+                    Z = has_z, M = has_m;
+                    multi_point_bounds::<Z, M>(&array, options)
+                )
+                .boxed()
             }
         }
         Kind::MultiLineString => {
             let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
             if per_part {
-                with_const_flags!(multi_line_string_part_bounds(&array, options); has_z, has_m)
-                    .boxed()
+                with_const_flags!(
+                    Z = has_z, M = has_m;
+                    multi_line_string_part_bounds::<Z, M>(&array, options)
+                )
+                .boxed()
             } else {
-                with_const_flags!(multi_line_string_bounds(&array, options); has_z, has_m).boxed()
+                with_const_flags!(
+                    Z = has_z, M = has_m;
+                    multi_line_string_bounds::<Z, M>(&array, options)
+                )
+                .boxed()
             }
         }
         Kind::MultiPolygon => {
             let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
             if per_part {
-                with_const_flags!(multi_polygon_part_bounds(&array, options); has_z, has_m).boxed()
+                with_const_flags!(
+                    Z = has_z, M = has_m;
+                    multi_polygon_part_bounds::<Z, M>(&array, options)
+                )
+                .boxed()
             } else {
-                with_const_flags!(multi_polygon_bounds(&array, options); has_z, has_m).boxed()
+                with_const_flags!(
+                    Z = has_z, M = has_m;
+                    multi_polygon_bounds::<Z, M>(&array, options)
+                )
+                .boxed()
             }
         }
     })
@@ -219,8 +246,8 @@ fn total_bounds(inputs: &[Series], kwargs: TotalBoundsKwargs) -> PolarsResult<Se
     };
     let storage = inputs[0].ext()?.storage();
     let chunk = with_const_flags!(
-        total_box(storage, kind, dim, &options);
-        dim.has_z(), dim.has_m(), kwargs.ignore_nulls
+        Z = dim.has_z(), M = dim.has_m(), IGNORE_NULLS = kwargs.ignore_nulls;
+        total_box::<Z, M, IGNORE_NULLS>(storage, kind, dim, &options)
     )?;
     // SAFETY: the chunk is the storage of `dtype`.
     Ok(unsafe { Series::from_chunks_and_dtype_unchecked(name, vec![chunk], &dtype) })

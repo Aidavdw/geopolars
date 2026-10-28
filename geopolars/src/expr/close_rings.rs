@@ -39,16 +39,18 @@ fn chunk_with_closed_rings(
             let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
             let z = array.coords.dim().has_z();
             let rows = array.rows.ignoring_validity();
-            with_const_flags!(close_open_rings(rows, &array.coords, snap_z, snap_m); z).map(
-                |closed| {
-                    LineStringArray {
-                        rows: closed.rows.with_validity(array.rows.validity().cloned()),
-                        coords: closed.coords,
-                    }
-                    .into_list_array()
-                    .boxed()
-                },
+            with_const_flags!(
+                Z = z;
+                close_open_rings::<Z>(rows, &array.coords, snap_z, snap_m)
             )
+            .map(|closed| {
+                LineStringArray {
+                    rows: closed.rows.with_validity(array.rows.validity().cloned()),
+                    coords: closed.coords,
+                }
+                .into_list_array()
+                .boxed()
+            })
         }
         Kind::Polygon => {
             let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;

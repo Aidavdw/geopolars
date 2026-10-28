@@ -129,8 +129,8 @@ impl ToGeosRows for PointArray {
         early_finite_check: bool,
     ) -> GeoComputeResult<GeosGeometries> {
         let geometries = with_const_flags!(
-            points_to_geos(&self.coords, ignore_per_row_errors);
-            early_finite_check
+            EARLY_FINITE_CHECK = early_finite_check;
+            points_to_geos::<EARLY_FINITE_CHECK>(&self.coords, ignore_per_row_errors)
         )?;
         Ok(GeosGeometries {
             geometries,
@@ -232,8 +232,14 @@ fn rows_to_geos(
     to_geos: impl Fn(Range<usize>) -> GeoComputeResult<Geometry>,
 ) -> GeoComputeResult<GeosGeometries> {
     let geometries = with_const_flags!(
-        rows_to_geos_with(rows, axes, ignore_per_row_errors, span, to_geos);
-        rows.is_all_valid(), early_finite_check
+        ALL_VALID = rows.is_all_valid(), EARLY_FINITE_CHECK = early_finite_check;
+        rows_to_geos_with::<ALL_VALID, EARLY_FINITE_CHECK>(
+            rows,
+            axes,
+            ignore_per_row_errors,
+            span,
+            to_geos,
+        )
     )?;
     Ok(GeosGeometries {
         geometries,

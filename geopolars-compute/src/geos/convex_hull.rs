@@ -182,8 +182,15 @@ fn hulls(
 ) -> GeoComputeResult<PolygonArray> {
     let has_z = coords.dim().has_z();
     let hulls = with_const_flags!(
-        hulls_with(rows, coords, ignore_per_row_errors, coord_ranges);
-        has_z, rows.is_all_valid(), early_finite_check
+        Z = has_z,
+        ALL_VALID = rows.is_all_valid(),
+        EARLY_FINITE_CHECK = early_finite_check;
+        hulls_with::<Z, ALL_VALID, EARLY_FINITE_CHECK>(
+            rows,
+            coords,
+            ignore_per_row_errors,
+            coord_ranges,
+        )
     )?;
     // GEOS gives the exterior as running clockwise.
     hulls.into_polygon_array(has_z, ignore_per_row_errors, ccw_outer)

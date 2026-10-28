@@ -53,7 +53,10 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
         Kind::Polygon => {
             let chunks = chunks.map(|rows| {
                 let array = PolygonArray::new(rows)?;
-                PolarsResult::Ok(with_const_flags!(polygons_are_ccw(&array); holes_cw))
+                PolarsResult::Ok(with_const_flags!(
+                    HOLES_CW = holes_cw;
+                    polygons_are_ccw::<HOLES_CW>(&array)
+                ))
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
@@ -67,7 +70,10 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
         Kind::MultiPolygon => {
             let chunks = chunks.map(|rows| {
                 let array = MultiPolygonArray::new(rows)?;
-                PolarsResult::Ok(with_const_flags!(multi_polygons_are_ccw(&array); holes_cw))
+                PolarsResult::Ok(with_const_flags!(
+                    HOLES_CW = holes_cw;
+                    multi_polygons_are_ccw::<HOLES_CW>(&array)
+                ))
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }

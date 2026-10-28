@@ -176,7 +176,7 @@ pub(super) fn closed_rings(
 ) -> Option<(ValidList, ValidCoords)> {
     let CloseRingsKwargs { snap_z, snap_m } = closing;
     let z = coords.dim().has_z();
-    let closed = with_const_flags!(close_open_rings(rings, coords, snap_z, snap_m); z)?;
+    let closed = with_const_flags!(Z = z; close_open_rings::<Z>(rings, coords, snap_z, snap_m))?;
     Some((closed.rows.ignoring_validity().clone(), closed.coords))
 }
 
@@ -190,7 +190,7 @@ fn validated_polygons(mut array: PolygonArray, close: Option<CloseRingsKwargs>) 
     }
     // A null row is `false` in the values too.
     let z = array.coords.dim().has_z();
-    let valid = with_const_flags!(polygons_have_only_rings(&array); z)
+    let valid = with_const_flags!(Z = z; polygons_have_only_rings::<Z>(&array))
         .values()
         .clone();
     array.rows = array.rows.with_validity(Some(valid));
@@ -227,7 +227,7 @@ fn validated_chunk(
             }
             // A null row is `false` in the values too.
             let z = array.coords.dim().has_z();
-            let valid = with_const_flags!(multi_polygons_have_only_rings(&array); z)
+            let valid = with_const_flags!(Z = z; multi_polygons_have_only_rings::<Z>(&array))
                 .values()
                 .clone();
             array.rows = array.rows.with_validity(Some(valid));

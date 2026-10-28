@@ -126,8 +126,12 @@ fn simplify_via_geos(
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<GeosGeometries> {
     with_const_flags!(
-        simplify_via_geos_with(&mut geometries.geometries, tolerance, ignore_per_row_errors);
-        preserve_topology
+        PRESERVE_TOPOLOGY = preserve_topology;
+        simplify_via_geos_with::<PRESERVE_TOPOLOGY>(
+            &mut geometries.geometries,
+            tolerance,
+            ignore_per_row_errors,
+        )
     )?;
     Ok(geometries)
 }

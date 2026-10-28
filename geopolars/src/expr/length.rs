@@ -68,7 +68,6 @@ fn kernel_output_type_length(input_fields: &[Field], kwargs: LengthKwargs) -> Po
 }
 
 /// [geopolars_compute::native::line_string_lengths], into a polars array.
-/// `with_const_flags!` cannot name the metric type itself, so it calls this.
 fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl LengthMetric<Error: Display>,
     array: &LineStringArray,
@@ -78,7 +77,6 @@ fn line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
 }
 
 /// [geopolars_compute::native::multi_line_string_lengths], into a polars array.
-/// `with_const_flags!` cannot name the metric type itself, so it calls this.
 fn multi_line_string_lengths<const Z: bool, const IGNORE_NAN: bool>(
     metric: &impl LengthMetric<Error: Display>,
     array: &MultiLineStringArray,
@@ -105,11 +103,17 @@ fn measure(
         if multi {
             let array = MultiLineStringArray::new(rows)?;
             let z = array.coords.dim().has_z();
-            with_const_flags!(multi_line_string_lengths(metric, &array); z, ignore_nan)
+            with_const_flags!(
+                Z = z, IGNORE_NAN = ignore_nan;
+                multi_line_string_lengths::<Z, IGNORE_NAN>(metric, &array)
+            )
         } else {
             let array = LineStringArray::new(rows)?;
             let z = array.coords.dim().has_z();
-            with_const_flags!(line_string_lengths(metric, &array); z, ignore_nan)
+            with_const_flags!(
+                Z = z, IGNORE_NAN = ignore_nan;
+                line_string_lengths::<Z, IGNORE_NAN>(metric, &array)
+            )
         }
     });
     Ok(Float64Chunked::try_from_chunk_iter(geometries.name().clone(), chunks)?.into_series())

@@ -94,10 +94,19 @@ fn rings_overlap(inputs: &[Series], kwargs: RingsOverlapKwargs) -> PolarsResult<
                 LineStringArray::new(a.downcast_as_array())?,
                 LineStringArray::new(b.downcast_as_array())?,
             );
-            vec![with_const_flags!(pairwise(&a, &b, ignore_errors); touching)?]
+            vec![with_const_flags!(
+                TOUCHING = touching;
+                pairwise::<TOUCHING>(&a, &b, ignore_errors)
+            )?]
         }
-        (1, _) => with_const_flags!(every_against_one(a, b, ignore_errors); touching)?,
-        (_, 1) => with_const_flags!(every_against_one(b, a, ignore_errors); touching)?,
+        (1, _) => with_const_flags!(
+            TOUCHING = touching;
+            every_against_one::<TOUCHING>(a, b, ignore_errors)
+        )?,
+        (_, 1) => with_const_flags!(
+            TOUCHING = touching;
+            every_against_one::<TOUCHING>(b, a, ignore_errors)
+        )?,
         (n, m) => polars_bail!(ShapeMismatch: "cannot compare {n} rings against {m}"),
     };
     Ok(BooleanChunked::from_chunk_iter(a.name().clone(), chunks).into_series())

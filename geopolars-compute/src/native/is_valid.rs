@@ -29,7 +29,7 @@ fn rings_are_closed_with<const Z: bool>(rings: &ValidList, coords: &ValidCoords)
 /// Whether each of `rings` is empty or closed, as GeoArrow asks.
 pub(crate) fn rings_are_closed(rings: &ValidList, coords: &ValidCoords) -> Bitmap {
     let z = coords.dim().has_z();
-    with_const_flags!(rings_are_closed_with(rings, coords); z)
+    with_const_flags!(Z = z; rings_are_closed_with::<Z>(rings, coords))
 }
 
 /// Whether `vertices` hold at least `min` vertices that lie elsewhere in x and y than the one before.

@@ -41,27 +41,45 @@ fn chunk_coordinate_counts(
     Ok(match kind {
         Kind::Point => {
             let array = PointArray::new(Coords::new(chunk)?);
-            with_const_flags!(point_coordinate_counts(&array); include_empty)
+            with_const_flags!(
+                INCLUDE_EMPTY = include_empty;
+                point_coordinate_counts::<INCLUDE_EMPTY>(&array)
+            )
         }
         Kind::LineString => {
             let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            with_const_flags!(line_string_coordinate_counts(&array); include_empty)
+            with_const_flags!(
+                INCLUDE_EMPTY = include_empty;
+                line_string_coordinate_counts::<INCLUDE_EMPTY>(&array)
+            )
         }
         Kind::MultiPoint => {
             let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
-            with_const_flags!(multi_point_coordinate_counts(&array); include_empty)
+            with_const_flags!(
+                INCLUDE_EMPTY = include_empty;
+                multi_point_coordinate_counts::<INCLUDE_EMPTY>(&array)
+            )
         }
         Kind::Polygon => {
             let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            with_const_flags!(polygon_coordinate_counts(&array); include_empty)
+            with_const_flags!(
+                INCLUDE_EMPTY = include_empty;
+                polygon_coordinate_counts::<INCLUDE_EMPTY>(&array)
+            )
         }
         Kind::MultiLineString => {
             let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            with_const_flags!(multi_line_string_coordinate_counts(&array); include_empty)
+            with_const_flags!(
+                INCLUDE_EMPTY = include_empty;
+                multi_line_string_coordinate_counts::<INCLUDE_EMPTY>(&array)
+            )
         }
         Kind::MultiPolygon => {
             let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            with_const_flags!(multi_polygon_coordinate_counts(&array); include_empty)
+            with_const_flags!(
+                INCLUDE_EMPTY = include_empty;
+                multi_polygon_coordinate_counts::<INCLUDE_EMPTY>(&array)
+            )
         }
     })
 }

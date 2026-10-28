@@ -189,10 +189,13 @@ fn without_selected_in_rings(
 ) -> (OffsetsBuffer<i64>, ValidCoords, Vec<usize>) {
     let kind = Lists::Rings;
     // `Z` only matters for the closure check, so it is not dispatched on without it.
-    match (check_closed, coords.dim().has_z()) {
-        (false, _) => without_selected::<false, false>(rings, kind, coords, selected, too_short),
-        (true, false) => without_selected::<true, false>(rings, kind, coords, selected, too_short),
-        (true, true) => without_selected::<true, true>(rings, kind, coords, selected, too_short),
+    if check_closed {
+        with_const_flags!(
+            Z = coords.dim().has_z();
+            without_selected::<true, Z>(rings, kind, coords, selected, too_short)
+        )
+    } else {
+        without_selected::<false, false>(rings, kind, coords, selected, too_short)
     }
 }
 

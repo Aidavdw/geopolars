@@ -7,23 +7,24 @@
 
 /// Dispatches runtime `bool` flags into generic implementations,
 /// so that the hot path never branches on them.
-/// `with_const_flags!(f(args); a, b)` calls `f::<A, B>(args)`,
-/// with each runtime flag turned into a const `bool`, in order.
+/// `with_const_flags!(A = a, B = b; f::<A, B>(args))` calls `f::<A, B>(args)`,
+/// with each runtime flag turned into a const `bool` of the name it is bound to.
 #[macro_export]
 macro_rules! with_const_flags {
-    // `done` holds the flags already turned into consts.
-    (@ $f:ident [$($done:tt)*] ($($arg:expr),*)) => {
-        $f::<$($done)*>($($arg),*)
+    (@ $call:expr;) => {
+        $call
     };
-    (@ $f:ident [$($done:tt)*] ($($arg:expr),*) $flag:expr $(, $rest:expr)*) => {
+    (@ $call:expr; $name:ident = $flag:expr $(, $rest_name:ident = $rest_flag:expr)*) => {
         if $flag {
-            $crate::with_const_flags!(@ $f [$($done)* true,] ($($arg),*) $($rest),*)
+            const $name: bool = true;
+            $crate::with_const_flags!(@ $call; $($rest_name = $rest_flag),*)
         } else {
-            $crate::with_const_flags!(@ $f [$($done)* false,] ($($arg),*) $($rest),*)
+            const $name: bool = false;
+            $crate::with_const_flags!(@ $call; $($rest_name = $rest_flag),*)
         }
     };
-    ($f:ident($($arg:expr),*); $($flag:expr),+) => {
-        $crate::with_const_flags!(@ $f [] ($($arg),*) $($flag),+)
+    ($($name:ident = $flag:expr),+; $call:expr) => {
+        $crate::with_const_flags!(@ $call; $($name = $flag),+)
     };
 }
 

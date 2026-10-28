@@ -113,9 +113,8 @@ pub fn reproject_coords(
         "a z for coordinates without one"
     );
     let positions = with_const_flags!(
-        reprojected_points(transformation, coords);
-        !coords.is_all_valid(),
-        z
+        NULLS = !coords.is_all_valid(), Z = z;
+        reprojected_points::<NULLS, Z>(transformation, coords)
     )?;
     let axes = coords.ignoring_validity().with_positions(positions);
     Ok(Coords::from_valid(axes, coords.validity().cloned()))
@@ -131,7 +130,7 @@ pub fn reproject_valid_coords(
         !z || coords.dim().has_z(),
         "a z for coordinates without one"
     );
-    let positions = with_const_flags!(reprojected_valid(transformation, coords); z)?;
+    let positions = with_const_flags!(Z = z; reprojected_valid::<Z>(transformation, coords))?;
     Ok(coords.with_positions(positions))
 }
 
