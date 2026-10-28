@@ -122,6 +122,30 @@ See `is_valid_geoarrow` and `is_valid_ogc` for all the rules.
 df.select(geo.null_out_invalid_ogc("parcel"))
 ```
 
+The table below lists every check, the geometries it applies to,
+and the expressions that check or repair it.
+`null_out_invalid_geoarrow` and `null_out_invalid_ogc` run the same checks as `is_valid_geoarrow`
+and `is_valid_ogc`.
+A flag next to an x turns that check off.
+Without an x, the check only runs when that argument is given.
+
+| Check | Point | LineString | Polygon | MultiPoint | MultiLineString | MultiPolygon | Standalone | `is_valid_geoarrow` | `is_valid_ogc` | Repair |
+| - | - | - | - | - | - | - | - | - | - | - |
+| Nulls only exist at the outer level (no part, ring, coordinate or axis) | only its axes | x | x | x | x | x | | x (`check_null_coordinates`) | x (`check_null_coordinates`) | |
+| Every ring is closed: its last vertex is its first, in x, y and z | | | x | | | x | | x | x | `close_rings` |
+| x and y lie inside the bounds of the CRS | x | x | x | x | x | x | | `out_of_bounds` | `out_of_bounds` | `fix_out_of_bounds` |
+| There are no NaN/inf values in the coordinates (except 'empty', see geoarrow) | x | x | x | x | x | x | | `check_finite_coordinates=True` | x | `filter_coordinates` |
+| There are no empty coordinates | | x | x | | x | x | | | only allowed in multipoints | `filter_coordinates` |
+| A linestring's vertices do not all lie at one place in x and y (`[A, A]` is invalid) (exception: empty) | | x | | | every part | | | | x | |
+| Every ring is empty, or every ring has at least 4 vertices that lie elsewhere in x and y than the vertex before (`[A, B, B, A]` is invalid) | | | x | | | every part | | | x | |
+| Holes lie inside the exterior and outside each other, and rings touch only at points | | | x | | | every part | | | x (`check_polygon_self_overlap`) | |
+| Rings that touch at points do not cut the area into separate pieces (e.g. a hole touching the exterior twice) | | | x | | | every part | | | only with every topology check on | |
+| Parts share no area, and touch only at points | | | | | | x | | | x (`check_multi_polygon_self_overlap`) | |
+| Does not cross or touch itself (simple) | trivial | its ends may meet | every ring | no two points at the same place | every part, and parts only meet at their ends | every ring | `is_simple` | | polygons and multipolygons only (`check_ring_self_intersect`) | |
+| Is not empty on the outside: has at least one vertex | not the empty point | x | x | x | x | x | `is_empty` | | | |
+| Is not empty on the inside: not every point is the empty point | | x | x | x | x | x | `is_empty(check_nested=True)` | | | |
+| No two vertices in a row lie at the same place | always | x | within a ring | no two points at all | within a part | within a ring | `has_repeated_points` | | | `remove_repeated_points` (multipoints: only points in a row) |
+
 ## CRS awareness
 
 ### Geometries crossing the antimeridian
