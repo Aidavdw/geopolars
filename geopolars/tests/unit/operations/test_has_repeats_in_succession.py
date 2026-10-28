@@ -48,15 +48,15 @@ def _frame(dtype: GeoArrowType, *rows: object) -> pl.DataFrame:
     return pl.DataFrame(storage.ext.to(dtype))
 
 
-def _has_repeated_points(
+def _has_repeats_in_succession(
     dtype: GeoArrowType, *rows: object, **kwargs: float | bool | None
 ) -> list[bool | None]:
-    out = _frame(dtype, *rows).select(geo.has_repeated_points("g", **kwargs))
+    out = _frame(dtype, *rows).select(geo.has_repeats_in_succession("g", **kwargs))
     return out["g"].to_list()
 
 
 def test_two_vertices_in_a_row_at_the_same_place_are_repeated() -> None:
-    assert _has_repeated_points(LineStringXY(), _REPEATED) == [True]
+    assert _has_repeats_in_succession(LineStringXY(), _REPEATED) == [True]
 
 
 @pytest.mark.parametrize(
@@ -69,7 +69,7 @@ def test_vertices_in_a_row_that_are_almost_the_same_need_a_tolerance(
 ) -> None:
     line = _line((0, 0), (1, 1), (1 + 1e-12, 1), (2, 0))
 
-    assert _has_repeated_points(LineStringXY(), line, **tolerance) == [repeated]
+    assert _has_repeats_in_succession(LineStringXY(), line, **tolerance) == [repeated]
 
 
 def test_vertices_in_a_row_that_differ_only_in_m_are_repeated_unless_m_is_unique() -> (
@@ -79,8 +79,10 @@ def test_vertices_in_a_row_that_differ_only_in_m_are_repeated_unless_m_is_unique
     a = {"x": 1.0, "y": 1.0, "z": 0.0, "m": 0.0}
     b = a | {"m": 1.0}
 
-    assert _has_repeated_points(LineStringXYZM(), [a, b]) == [True]
-    assert _has_repeated_points(LineStringXYZM(), [a, b], unique_m=True) == [False]
+    assert _has_repeats_in_succession(LineStringXYZM(), [a, b]) == [True]
+    assert _has_repeats_in_succession(LineStringXYZM(), [a, b], unique_m=True) == [
+        False
+    ]
 
 
 def test_vertices_in_a_row_that_differ_in_z_are_not_repeated_unless_z_is_ignored() -> (
@@ -89,35 +91,40 @@ def test_vertices_in_a_row_that_differ_in_z_are_not_repeated_unless_z_is_ignored
     a = {"x": 1.0, "y": 1.0, "z": 0.0, "m": 0.0}
     b = a | {"z": 1.0}
 
-    assert _has_repeated_points(LineStringXYZM(), [a, b]) == [False]
-    assert _has_repeated_points(LineStringXYZM(), [a, b], unique_z=False) == [True]
+    assert _has_repeats_in_succession(LineStringXYZM(), [a, b]) == [False]
+    assert _has_repeats_in_succession(LineStringXYZM(), [a, b], unique_z=False) == [
+        True
+    ]
 
 
 def test_a_vertex_repeated_further_on_is_not_repeated() -> None:
     line = _line((0, 0), (1, 1), (0, 0))
 
-    assert _has_repeated_points(LineStringXY(), line) == [False]
+    assert _has_repeats_in_succession(LineStringXY(), line) == [False]
 
 
 def test_the_ends_of_a_ring_are_not_in_a_row() -> None:
-    assert _has_repeated_points(PolygonXY(), [_SQUARE]) == [False]
+    assert _has_repeats_in_succession(PolygonXY(), [_SQUARE]) == [False]
 
 
 def test_a_ring_with_vertices_in_a_row_at_the_same_place_is_repeated() -> None:
     ring = _line((0, 0), (4, 0), (4, 0), (4, 4), (0, 0))
 
-    assert _has_repeated_points(PolygonXY(), [ring]) == [True]
+    assert _has_repeats_in_succession(PolygonXY(), [ring]) == [True]
 
 
-def test_a_multipoint_with_a_repeated_point_is_repeated() -> None:
-    """Its points have no order, so any two count, not only two in a row."""
+def test_a_multipoint_with_two_points_in_a_row_at_the_same_place_is_repeated() -> None:
+    """Only two points in a row count, as for a linestring."""
     a, b = {"x": 0.0, "y": 0.0}, {"x": 1.0, "y": 0.0}
 
-    assert _has_repeated_points(MultiPointXY(), [a, b, a], [a, b]) == [True, False]
+    assert _has_repeats_in_succession(MultiPointXY(), [a, a, b], [a, b, a]) == [
+        True,
+        False,
+    ]
 
 
 def test_a_point_is_never_repeated() -> None:
-    assert _has_repeated_points(PointXY(), {"x": 0.0, "y": 0.0}) == [False]
+    assert _has_repeats_in_succession(PointXY(), {"x": 0.0, "y": 0.0}) == [False]
 
 
 @pytest.mark.parametrize(
@@ -131,20 +138,20 @@ def test_a_point_is_never_repeated() -> None:
 def test_a_multi_geometry_is_repeated_when_a_part_is(
     dtype: GeoArrowType, repeated: object, other: object
 ) -> None:
-    assert _has_repeated_points(dtype, repeated, other) == [True, False]
+    assert _has_repeats_in_succession(dtype, repeated, other) == [True, False]
 
 
 @pytest.mark.parametrize(
     "dtype", [PointXY(), LineStringXY(), PolygonXY(), MultiPolygonXY()]
 )
 def test_a_null_geometry_gives_a_null_result(dtype: GeoArrowType) -> None:
-    assert _has_repeated_points(dtype, None) == [None]
+    assert _has_repeats_in_succession(dtype, None) == [None]
 
 
 def test_namespace_matches_the_functional_api() -> None:
     df = _frame(LineStringXY(), _REPEATED, _SQUARE)
 
     assert_frame_equal(
-        df.select(gpl.col("g").geo.has_repeated_points(abs_tol=1.0)),
-        df.select(geo.has_repeated_points("g", abs_tol=1.0)),
+        df.select(gpl.col("g").geo.has_repeats_in_succession(abs_tol=1.0)),
+        df.select(geo.has_repeats_in_succession("g", abs_tol=1.0)),
     )

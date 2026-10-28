@@ -17,7 +17,7 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::coords::{kernel_output_type_same_geometry, trimmed};
-use super::remove_repeated_points::TooShortDef;
+use super::remove_repeats_in_succession::TooShortDef;
 use crate::geoarrow::{describe, Kind};
 
 #[derive(Deserialize)]

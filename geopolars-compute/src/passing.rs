@@ -6,6 +6,8 @@
 //! [rows_passing] folds the masks up to the rows.
 //! A list passes when it passes itself, and every item in it does.
 
+#[cfg(feature = "native")]
+use geopolars_core::List;
 use geopolars_core::ValidList;
 #[cfg(feature = "native")]
 use polars_arrow::array::BooleanArray;
@@ -43,6 +45,26 @@ pub(crate) fn rows_passing(lists: &[&ValidList], passing: Vec<Option<Bitmap>>) -
             let parts = items.map(|items| lists_passing(lists, &items));
             unless_all_set(combine_validities_and(own.as_ref(), parts.as_ref()))
         })
+}
+
+/// The valid rows of `rows` whose coordinates all pass `coords` (see [rows_passing]).
+/// `inner_lists` are the list levels below the rows, outermost first.
+#[cfg(feature = "native")]
+pub(crate) fn valid_rows_passing(
+    rows: &List,
+    inner_lists: &[&ValidList],
+    coords: Option<Bitmap>,
+) -> Option<Bitmap> {
+    let lists: Vec<&ValidList> = [rows.ignoring_validity()]
+        .into_iter()
+        .chain(inner_lists.iter().copied())
+        .collect();
+    let passing = [rows.validity().cloned()]
+        .into_iter()
+        .chain(inner_lists.iter().map(|_| None))
+        .chain([coords])
+        .collect();
+    rows_passing(&lists, passing)
 }
 
 /// A `bool` per row, `true` where the row is set in `passing` (see [rows_passing]).

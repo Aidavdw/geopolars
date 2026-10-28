@@ -9,7 +9,7 @@ from polars.plugins import register_plugin_function
 from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
-from geopolars.geo.remove_repeated_points import TooShort
+from geopolars.geo.remove_repeats_in_succession import TooShort
 
 if TYPE_CHECKING:
     import polars as pl
@@ -127,7 +127,7 @@ def fix_out_of_bounds(
     `"drop"` is the default.
     With `action="clamp"`, `x` and `y` are moved onto the nearest bound, and `too_short` is ignored.
     A ring's ends move alike, so a closed ring stays closed.
-    Clamping can leave the same vertex twice in a row (see `remove_repeated_points`).
+    Clamping can leave the same vertex twice in a row (see `remove_repeats_in_succession`).
     A NaN in `x` or `y` stays NaN (see `filter_coordinates`).
 
     {too_short}

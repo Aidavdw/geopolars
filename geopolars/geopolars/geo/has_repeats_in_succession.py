@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 @doc()
-def has_repeated_points(
+def has_repeats_in_succession(
     geometry: IntoExprColumn,
     *,
     abs_tol: float | None = None,
@@ -26,7 +26,7 @@ def has_repeated_points(
     unique_z: bool = True,
     unique_m: bool = False,
 ) -> pl.Expr:
-    """Whether each geometry has two points that lie at the same place.
+    """Whether each geometry has two points in a row that lie at the same place.
     One `bool` per row, a multi-geometry included. A null geometry gives a null result.
 
     The geometries have to be valid by `is_valid_geoarrow` already. This trusts its input.
@@ -34,8 +34,7 @@ def has_repeated_points(
     | geometry | has repeated points when |
     | - | - |
     | `PointXY[ZM]` | never |
-    | `MultiPointXY[ZM]` | any two points lie at the same place |
-    | `LineStringXY[ZM]` | two vertices in a row lie at the same place |
+    | `LineStringXY[ZM]`, `MultiPointXY[ZM]` | two vertices in a row lie at the same place |
     | `PolygonXY[ZM]` | two vertices in a row of one ring lie at the same place |
     | `MultiLineStringXY[ZM]`, `MultiPolygonXY[ZM]` | one of its parts has repeated points |
 
@@ -47,7 +46,7 @@ def has_repeated_points(
     Repeated points are valid, also by OGC (see `is_valid_ogc`), but some tools may stumble over them.
 
     ```python
-    df.filter(~geo.has_repeated_points("route"))
+    df.filter(~geo.has_repeats_in_succession("route"))
     ```
     """
 
@@ -55,7 +54,7 @@ def has_repeated_points(
         return register_plugin_function(
             plugin_path=LIB,
             args=[column],
-            function_name="has_repeated_points",
+            function_name="has_repeats_in_succession",
             is_elementwise=True,
             kwargs={
                 "abs_tol": abs_tol,

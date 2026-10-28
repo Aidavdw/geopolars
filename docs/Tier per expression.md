@@ -36,8 +36,8 @@ the comment says when one without a CRS takes a different tier.
 | `null_out_invalid_geoarrow` | A | nulls what `is_valid_geoarrow` rejects | A | | A | | A | | A | | A | |
 | `is_valid_ogc` | A | bounds from PROJ (plan-time) | A | | A/B | topology through GEOS | A | EP | A | EP | A/B | EP and GEOS |
 | `null_out_invalid_ogc` | A | nulls what `is_valid_ogc` rejects | A | | A/B | | A | | A | | A/B | |
-| `has_repeated_points` | A | always `False` | A | | A | | A | | A | EP | A | EP |
-| `remove_repeated_points` | A | returns the input | A | | A | | A | | A | | A | |
+| `has_repeats_in_succession` | A | always `False` | A | | A | | A | | A | EP | A | EP |
+| `remove_repeats_in_succession` | A | returns the input | A | | A | | A | | A | | A | |
 | `filter_coordinates` | A | | A | | A | | A | | A | | A | |
 | `fix_out_of_bounds` | A | bounds from PROJ (plan-time) | A | | A | | A | | A | | A | |
 | `distance` | A/B | [^2] | - | | - | | - | | - | | - | |

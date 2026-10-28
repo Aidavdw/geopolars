@@ -113,7 +113,7 @@ Checking OGC validity is much more expensive, as it has to compare pairs of segm
 
 OGC allows some geometries that might still surprise you!
 An empty geometry is valid by OGC (find them with `geo.is_empty`),
-and so is the same vertex twice in a row (`geo.has_repeated_points`).
+and so is the same vertex twice in a row (`geo.has_repeats_in_succession`).
 
 `geo.null_out_invalid_geoarrow` and `geo.null_out_invalid_ogc` replace invalid geometries with nulls.
 See `is_valid_geoarrow` and `is_valid_ogc` for all the rules.
@@ -144,7 +144,7 @@ Without an x, the check only runs when that argument is given.
 | Does not cross or touch itself (simple) | trivial | its ends may meet | every ring | no two points at the same place | every part, and parts only meet at their ends | every ring | `is_simple` | | polygons and multipolygons only (`check_ring_self_intersect`) | |
 | Is not empty on the outside: has at least one vertex | not the empty point | x | x | x | x | x | `is_empty` | | | |
 | Is not empty on the inside: not every point is the empty point | | x | x | x | x | x | `is_empty(check_nested=True)` | | | |
-| No two vertices in a row lie at the same place | always | x | within a ring | no two points at all | within a part | within a ring | `has_repeated_points` | | | `remove_repeated_points` (multipoints: only points in a row) |
+| No two vertices in a row lie at the same place | always | x | within a ring | x | within a part | within a ring | `has_repeats_in_succession` | | | `remove_repeats_in_succession` |
 
 ## CRS awareness
 

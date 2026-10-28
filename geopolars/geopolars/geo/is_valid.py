@@ -179,7 +179,7 @@ def is_valid_ogc(
     so its cost grows quickly with their number.
 
     An empty geometry is valid by OGC, as it is for GEOS.
-    Use `is_empty` to find those, and `has_repeated_points` to find the same vertex twice in a row.
+    Use `is_empty` to find those, and `has_repeats_in_succession` to find the same vertex twice in a row.
 
     ```python
     df.filter(geo.is_valid_ogc("parcel"))

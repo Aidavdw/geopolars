@@ -21,7 +21,7 @@ TooShort = Literal["null", "keep", "empty"]
 
 
 @doc()
-def remove_repeated_points(
+def remove_repeats_in_succession(
     geometry: IntoExprColumn,
     *,
     abs_tol: float | None = None,
@@ -68,7 +68,7 @@ def remove_repeated_points(
     {ignores_empty_and_invalid}
 
     ```python
-    df.select(geo.remove_repeated_points("route", abs_tol=0.01))
+    df.select(geo.remove_repeats_in_succession("route", abs_tol=0.01))
     ```
     """
 
@@ -88,7 +88,7 @@ def remove_repeated_points(
         return register_plugin_function(
             plugin_path=LIB,
             args=[column],
-            function_name="remove_repeated_points",
+            function_name="remove_repeats_in_succession",
             is_elementwise=True,
             kwargs={
                 "abs_tol": abs_tol,

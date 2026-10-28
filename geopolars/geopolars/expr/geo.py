@@ -512,7 +512,7 @@ class ExprGeoNameSpace:
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
         )
 
-    def has_repeated_points(
+    def has_repeats_in_succession(
         self,
         *,
         abs_tol: float | None = None,
@@ -520,9 +520,9 @@ class ExprGeoNameSpace:
         unique_z: bool = True,
         unique_m: bool = False,
     ) -> pl.Expr:
-        from geopolars.geo.has_repeated_points import has_repeated_points
+        from geopolars.geo.has_repeats_in_succession import has_repeats_in_succession
 
-        return has_repeated_points(
+        return has_repeats_in_succession(
             self._expr,
             abs_tol=abs_tol,
             rel_tol=rel_tol,
@@ -530,7 +530,7 @@ class ExprGeoNameSpace:
             unique_m=unique_m,
         )
 
-    def remove_repeated_points(
+    def remove_repeats_in_succession(
         self,
         *,
         abs_tol: float | None = None,
@@ -540,9 +540,11 @@ class ExprGeoNameSpace:
         collapsed_lines: Literal["keep_ends", "single_vertex"] = "keep_ends",
         too_short: Literal["null", "keep", "empty"] = "null",
     ) -> pl.Expr:
-        from geopolars.geo.remove_repeated_points import remove_repeated_points
+        from geopolars.geo.remove_repeats_in_succession import (
+            remove_repeats_in_succession,
+        )
 
-        return remove_repeated_points(
+        return remove_repeats_in_succession(
             self._expr,
             abs_tol=abs_tol,
             rel_tol=rel_tol,

@@ -8,7 +8,7 @@ mod coordinate_selection;
 mod count_coordinates;
 pub mod distance;
 mod fix_out_of_bounds;
-mod has_repeated_points;
+mod has_repeats_in_succession;
 mod is_ccw;
 mod is_close;
 mod is_empty;
@@ -17,7 +17,7 @@ mod is_simple;
 // For `geoarrow_validity` and `ogc_validity`.
 mod is_valid;
 mod length;
-mod remove_repeated_points;
+mod remove_repeats_in_succession;
 mod reverse;
 mod rings;
 mod selected_coords;
@@ -51,10 +51,10 @@ pub use fix_out_of_bounds::{
     multi_points_with_clamped_coords, multi_polygons_with_clamped_coords,
     points_with_clamped_coords, polygons_with_clamped_coords, OutOfBoundsAction,
 };
-pub use has_repeated_points::{
-    line_strings_have_repeated_points, multi_line_strings_have_repeated_points,
-    multi_points_have_repeated_points, multi_polygons_have_repeated_points,
-    points_have_repeated_points, polygons_have_repeated_points,
+pub use has_repeats_in_succession::{
+    line_strings_have_repeats_in_succession, multi_line_strings_have_repeats_in_succession,
+    multi_points_have_repeats_in_succession, multi_polygons_have_repeats_in_succession,
+    points_have_repeats_in_succession, polygons_have_repeats_in_succession,
 };
 pub use is_ccw::{
     line_strings_are_ccw, line_strings_to_ccw, multi_line_strings_are_ccw,
@@ -79,10 +79,10 @@ pub(crate) use is_valid::rings_are_closed;
 #[cfg(feature = "geos")]
 pub(crate) use is_valid::{line_shapes_are_valid, polygon_shapes_are_valid};
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
-pub use remove_repeated_points::{
-    line_strings_without_repeated_points, multi_line_strings_without_repeated_points,
-    multi_points_without_repeated_points, multi_polygons_without_repeated_points,
-    polygons_without_repeated_points, CollapsedLines, LineOptions,
+pub use remove_repeats_in_succession::{
+    line_strings_without_repeats_in_succession, multi_line_strings_without_repeats_in_succession,
+    multi_points_without_repeats_in_succession, multi_polygons_without_repeats_in_succession,
+    polygons_without_repeats_in_succession, CollapsedLines, LineOptions,
 };
 pub use reverse::{
     reverse_line_strings, reverse_multi_line_strings, reverse_multi_points, reverse_multi_polygons,

@@ -50,7 +50,7 @@ def _frame(dtype: GeoArrowType, *rows: object) -> pl.DataFrame:
 
 
 def _remove(dtype: GeoArrowType, *rows: object, **kwargs: object) -> list:
-    out = _frame(dtype, *rows).select(geo.remove_repeated_points("g", **kwargs))
+    out = _frame(dtype, *rows).select(geo.remove_repeats_in_succession("g", **kwargs))
     return out.select(pl.col("g").ext.storage())["g"].to_list()
 
 
@@ -116,7 +116,7 @@ def test_a_collapsed_ring_in_a_sliced_column_misses_its_own_row() -> None:
     hole = _line((1, 1), (1, 1), (2, 2), (1, 1))
     df = _frame(MultiPolygonXY(), [[_SQUARE]], [[_SQUARE, hole]], [[_SQUARE]]).slice(1)
 
-    out = df.select(geo.remove_repeated_points("g").ext.storage())
+    out = df.select(geo.remove_repeats_in_succession("g").ext.storage())
 
     assert out["g"].to_list() == [None, [[_SQUARE]]]
 
@@ -219,12 +219,12 @@ def test_a_short_exterior_or_hole_becomes_empty_in_place() -> None:
 
 def test_an_unknown_collapsed_lines_is_refused() -> None:
     with pytest.raises(ValueError, match="collapsed_lines"):
-        geo.remove_repeated_points("g", collapsed_lines="first")  # type: ignore[arg-type]
+        geo.remove_repeats_in_succession("g", collapsed_lines="first")  # type: ignore[arg-type]
 
 
 def test_an_unknown_too_short_is_refused() -> None:
     with pytest.raises(ValueError, match="too_short"):
-        geo.remove_repeated_points("g", too_short="drop")  # type: ignore[arg-type]
+        geo.remove_repeats_in_succession("g", too_short="drop")  # type: ignore[arg-type]
 
 
 def test_only_a_multipoint_point_in_a_row_is_removed() -> None:
@@ -320,7 +320,7 @@ def test_null_and_empty_geometries_stay_so() -> None:
 def test_a_sliced_column() -> None:
     df = _frame(MultiLineStringXY(), [_REPEATED], [_SQUARE, _REPEATED]).slice(1)
 
-    out = df.select(geo.remove_repeated_points("g").ext.storage())
+    out = df.select(geo.remove_repeats_in_succession("g").ext.storage())
 
     assert out["g"].to_list() == [[_SQUARE, _REMOVED]]
 
@@ -337,7 +337,7 @@ def test_a_sliced_column() -> None:
 )
 def test_no_repeated_points_are_left(dtype: GeoArrowType, row: object) -> None:
     out = _frame(dtype, row).select(
-        geo.remove_repeated_points("g").geo.has_repeated_points()
+        geo.remove_repeats_in_succession("g").geo.has_repeats_in_succession()
     )
 
     assert out["g"].to_list() == [False]
@@ -346,7 +346,7 @@ def test_no_repeated_points_are_left(dtype: GeoArrowType, row: object) -> None:
 def test_the_crs_is_carried_over() -> None:
     df = _frame(LineStringXY(crs="EPSG:28992"), _REPEATED)
 
-    out = df.select(geo.remove_repeated_points("g"))
+    out = df.select(geo.remove_repeats_in_succession("g"))
 
     assert out.schema == df.schema
 
@@ -355,6 +355,6 @@ def test_namespace_matches_the_functional_api() -> None:
     df = _frame(LineStringXY(), _REPEATED, _SQUARE)
 
     assert_frame_equal(
-        df.select(gpl.col("g").geo.remove_repeated_points(abs_tol=0.1)),
-        df.select(geo.remove_repeated_points("g", abs_tol=0.1)),
+        df.select(gpl.col("g").geo.remove_repeats_in_succession(abs_tol=0.1)),
+        df.select(geo.remove_repeats_in_succession("g", abs_tol=0.1)),
     )

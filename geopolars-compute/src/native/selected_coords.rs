@@ -12,11 +12,19 @@
 //!
 //! # Const generic flags
 //!
+//! ## `CHECK_CLOSED`
+//!
+//! [without_selected] is generic over `CHECK_CLOSED`.
+//! If `CHECK_CLOSED=true`, a ring that is not closed after the drop is too short.
+//! If `CHECK_CLOSED=false`, the caller guarantees each ring keeps both its ends,
+//! so it is as closed as it came in.
+//! Only the kernels of rings dispatch on it.
+//!
 //! ## `Z`
 //!
 //! [without_selected] is generic over `Z`, to check whether a ring is still closed.
 //! See [same_place] for `Z`.
-//! Only the kernels of rings dispatch on it.
+//! Only the kernels of rings with `CHECK_CLOSED=true` dispatch on it.
 
 use std::ops::Range;
 
@@ -32,7 +40,7 @@ use polars_arrow::offset::OffsetsBuffer;
 use super::coordinate_selection::{selected_coords, which_are_not_selected, CoordinateSelection};
 use super::rings::offsets_of;
 use super::too_short::{list_holding, without_rows, TooShort};
-use crate::passing::rows_passing;
+use crate::passing::valid_rows_passing;
 
 /// See `action` of `NonFinite` and `OutOfBounds` in Python.
 #[derive(Debug, Clone, Copy)]
@@ -83,6 +91,13 @@ fn push_kept_runs(
     vertices: Range<usize>,
     runs: &mut Vec<Range<usize>>,
 ) -> usize {
+    // Selected vertices are rare, so most lists are kept whole.
+    if selected.null_count_range(vertices.start, vertices.len()) == vertices.len() {
+        if !vertices.is_empty() {
+            runs.push(vertices.clone());
+        }
+        return vertices.len();
+    }
     let (mut kept, mut run_start) = (0, vertices.start);
     for i in vertices.clone() {
         if selected.get_bit(i) {
@@ -102,9 +117,9 @@ fn push_kept_runs(
 
 /// Whether the `kept` vertices in `runs` are too short for `lists`:
 /// a linestring of a single vertex,
-/// or a ring with vertices that is not closed or has fewer than [MIN_RING_VERTICES].
+/// or a ring with vertices that has fewer than [MIN_RING_VERTICES], or is not closed.
 #[inline(always)]
-fn is_too_short<const Z: bool>(
+fn is_too_short<const CHECK_CLOSED: bool, const Z: bool>(
     coords: &ValidCoords,
     lists: Lists,
     runs: &[Range<usize>],
@@ -115,7 +130,8 @@ fn is_too_short<const Z: bool>(
         Lists::Lines => kept == 1,
         Lists::Rings => match (runs.first(), runs.last()) {
             (Some(first), Some(last)) => {
-                kept < MIN_RING_VERTICES || !same_place::<Z>(coords, first.start, last.end - 1)
+                kept < MIN_RING_VERTICES
+                    || (CHECK_CLOSED && !same_place::<Z>(coords, first.start, last.end - 1))
             }
             _ => false,
         },
@@ -125,7 +141,7 @@ fn is_too_short<const Z: bool>(
 /// The offsets of what each of `lists` keeps, and the coordinates it keeps.
 /// A list keeps the vertices that are not `selected`, unless it is then [too short](is_too_short).
 /// Last, the lists that are too short with [TooShort::Null], which keep none.
-fn without_selected<const Z: bool>(
+fn without_selected<const CHECK_CLOSED: bool, const Z: bool>(
     lists: &ValidList,
     kind: Lists,
     coords: &ValidCoords,
@@ -139,7 +155,7 @@ fn without_selected<const Z: bool>(
         .map(|(j, list)| {
             let first_run = runs.len();
             let kept = push_kept_runs(selected, list, &mut runs);
-            if !is_too_short::<Z>(coords, kind, &runs[first_run..], kept) {
+            if !is_too_short::<CHECK_CLOSED, Z>(coords, kind, &runs[first_run..], kept) {
                 return kept;
             }
             match too_short {
@@ -169,17 +185,23 @@ fn without_selected_in_rings(
     coords: &ValidCoords,
     selected: &Bitmap,
     too_short: TooShort,
+    check_closed: bool,
 ) -> (OffsetsBuffer<i64>, ValidCoords, Vec<usize>) {
-    let z = coords.dim().has_z();
-    with_const_flags!(without_selected(rings, Lists::Rings, coords, selected, too_short); z)
+    let kind = Lists::Rings;
+    // `Z` only matters for the closure check, so it is not dispatched on without it.
+    match (check_closed, coords.dim().has_z()) {
+        (false, _) => without_selected::<false, false>(rings, kind, coords, selected, too_short),
+        (true, false) => without_selected::<true, false>(rings, kind, coords, selected, too_short),
+        (true, true) => without_selected::<true, true>(rings, kind, coords, selected, too_short),
+    }
 }
 
-fn line_strings_without_selected(
+pub(super) fn line_strings_without_selected(
     array: &LineStringArray,
     selected: &Bitmap,
     too_short: TooShort,
 ) -> LineStringArray {
-    let (offsets, coords, nulled) = without_selected::<false>(
+    let (offsets, coords, nulled) = without_selected::<false, false>(
         array.rows.ignoring_validity(),
         Lists::Lines,
         &array.coords,
@@ -193,12 +215,12 @@ fn line_strings_without_selected(
     }
 }
 
-fn multi_points_without_selected(
+pub(super) fn multi_points_without_selected(
     array: &MultiPointArray,
     selected: &Bitmap,
     too_short: TooShort,
 ) -> MultiPointArray {
-    let (offsets, coords, _) = without_selected::<false>(
+    let (offsets, coords, _) = without_selected::<false, false>(
         array.rows.ignoring_validity(),
         Lists::Points,
         &array.coords,
@@ -211,13 +233,19 @@ fn multi_points_without_selected(
     }
 }
 
-fn polygons_without_selected(
+pub(super) fn polygons_without_selected(
     array: &PolygonArray,
     selected: &Bitmap,
     too_short: TooShort,
+    check_closed: bool,
 ) -> PolygonArray {
-    let (rings, coords, nulled) =
-        without_selected_in_rings(&array.rings, &array.coords, selected, too_short);
+    let (rings, coords, nulled) = without_selected_in_rings(
+        &array.rings,
+        &array.coords,
+        selected,
+        too_short,
+        check_closed,
+    );
     let failed: Vec<usize> = nulled
         .into_iter()
         .filter_map(|ring| list_holding(array.rows.ignoring_validity(), ring))
@@ -229,12 +257,12 @@ fn polygons_without_selected(
     }
 }
 
-fn multi_line_strings_without_selected(
+pub(super) fn multi_line_strings_without_selected(
     array: &MultiLineStringArray,
     selected: &Bitmap,
     too_short: TooShort,
 ) -> MultiLineStringArray {
-    let (lines, coords, nulled) = without_selected::<false>(
+    let (lines, coords, nulled) = without_selected::<false, false>(
         &array.lines,
         Lists::Lines,
         &array.coords,
@@ -252,13 +280,19 @@ fn multi_line_strings_without_selected(
     }
 }
 
-fn multi_polygons_without_selected(
+pub(super) fn multi_polygons_without_selected(
     array: &MultiPolygonArray,
     selected: &Bitmap,
     too_short: TooShort,
+    check_closed: bool,
 ) -> MultiPolygonArray {
-    let (rings, coords, nulled) =
-        without_selected_in_rings(&array.rings, &array.coords, selected, too_short);
+    let (rings, coords, nulled) = without_selected_in_rings(
+        &array.rings,
+        &array.coords,
+        selected,
+        too_short,
+        check_closed,
+    );
     let failed: Vec<usize> = nulled
         .into_iter()
         .filter_map(|ring| list_holding(&array.polygons, ring))
@@ -280,16 +314,9 @@ fn rows_nulled_where_selected(
     coords: &ValidCoords,
     selection: &CoordinateSelection,
 ) -> List {
-    let lists: Vec<&ValidList> = [rows.ignoring_validity()]
-        .into_iter()
-        .chain(inner_lists.iter().copied())
-        .collect();
-    let passing = [rows.validity().cloned()]
-        .into_iter()
-        .chain(inner_lists.iter().map(|_| None))
-        .chain([which_are_not_selected(coords, selection)])
-        .collect();
-    rows.clone().with_validity(rows_passing(&lists, passing))
+    let not_selected = which_are_not_selected(coords, selection);
+    rows.clone()
+        .with_validity(valid_rows_passing(rows, inner_lists, not_selected))
 }
 
 /// [SelectedAction::Drop] leaves the empty point, as a point cannot lose its coordinate.
@@ -365,7 +392,7 @@ pub fn polygons_with_selected(
             rings: array.rings.clone(),
             coords: emptied(&array.coords, &selected()),
         },
-        SelectedAction::Drop => polygons_without_selected(array, &selected(), too_short),
+        SelectedAction::Drop => polygons_without_selected(array, &selected(), too_short, true),
         SelectedAction::SetNull => PolygonArray {
             rows: rows_nulled_where_selected(
                 &array.rows,
@@ -420,7 +447,9 @@ pub fn multi_polygons_with_selected(
             rings: array.rings.clone(),
             coords: emptied(&array.coords, &selected()),
         },
-        SelectedAction::Drop => multi_polygons_without_selected(array, &selected(), too_short),
+        SelectedAction::Drop => {
+            multi_polygons_without_selected(array, &selected(), too_short, true)
+        }
         SelectedAction::SetNull => MultiPolygonArray {
             rows: rows_nulled_where_selected(
                 &array.rows,

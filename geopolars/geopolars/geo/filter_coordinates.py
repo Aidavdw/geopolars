@@ -11,7 +11,7 @@ from polars.plugins import register_plugin_function
 from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
-from geopolars.geo.remove_repeated_points import TooShort
+from geopolars.geo.remove_repeats_in_succession import TooShort
 
 if TYPE_CHECKING:
     import polars as pl

@@ -51,7 +51,7 @@ from geopolars.geo.exterior import exterior
 from geopolars.geo.filter_coordinates import NonFinite, filter_coordinates
 from geopolars.geo.fix_out_of_bounds import OutOfBounds, fix_out_of_bounds
 from geopolars.geo.force_dimension import force_2d, force_3d, force_m, without_m
-from geopolars.geo.has_repeated_points import has_repeated_points
+from geopolars.geo.has_repeats_in_succession import has_repeats_in_succession
 from geopolars.geo.interior import interior
 from geopolars.geo.is_ccw import is_ccw
 from geopolars.geo.is_close import is_close
@@ -67,7 +67,7 @@ from geopolars.geo.is_valid import (
 from geopolars.geo.length import length
 from geopolars.geo.mean_coordinate import mean_coordinate
 from geopolars.geo.offset_curve import offset_curve
-from geopolars.geo.remove_repeated_points import remove_repeated_points
+from geopolars.geo.remove_repeats_in_succession import remove_repeats_in_succession
 from geopolars.geo.reverse import reverse
 from geopolars.geo.rings_overlap import rings_overlap
 from geopolars.geo.simplify import simplify
@@ -102,7 +102,7 @@ __all__ = [
     "force_m",
     "from_wkb",
     "from_wkt",
-    "has_repeated_points",
+    "has_repeats_in_succession",
     "interior",
     "is_ccw",
     "is_close",
@@ -135,7 +135,7 @@ __all__ = [
     "polygons_from_nested_coordinates",
     "polygons_from_rings_in_separate_columns",
     "polygons_from_rings_in_single_column",
-    "remove_repeated_points",
+    "remove_repeats_in_succession",
     "reverse",
     "rings_overlap",
     "rotate",

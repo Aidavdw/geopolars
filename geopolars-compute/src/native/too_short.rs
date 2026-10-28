@@ -4,7 +4,7 @@
 use geopolars_core::output::validity_without;
 use geopolars_core::{List, ValidList};
 
-/// See `too_short` of `remove_repeated_points` in Python.
+/// See `too_short` of `remove_repeats_in_succession` in Python.
 #[derive(Debug, Clone, Copy)]
 pub enum TooShort {
     Null,
