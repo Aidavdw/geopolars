@@ -129,24 +129,28 @@ fn per_multi_polygon(rows: &List, parts: ListArray<i64>) -> ListArray<i64> {
 
 pub fn polygon_exteriors(array: &PolygonArray) -> LineStringArray {
     let validity = array.rows.validity().cloned();
-    if array.rows.is_all_valid() {
-        let kept = kept_rings_of_polygons::<true>(array, exterior_of);
-        exteriors(&array.rings, &array.coords, kept, validity)
-    } else {
-        let kept = kept_rings_of_polygons::<false>(array, exterior_of);
-        exteriors(&array.rings, &array.coords, kept, validity)
-    }
+    with_const_flags!(
+        ALL_VALID = array.rows.is_all_valid();
+        exteriors(
+            &array.rings,
+            &array.coords,
+            kept_rings_of_polygons::<ALL_VALID>(array, exterior_of),
+            validity,
+        )
+    )
 }
 
 pub fn polygon_interiors(array: &PolygonArray) -> MultiLineStringArray {
     let validity = array.rows.validity().cloned();
-    if array.rows.is_all_valid() {
-        let kept = kept_rings_of_polygons::<true>(array, interior_of);
-        interiors(&array.rings, &array.coords, kept, validity)
-    } else {
-        let kept = kept_rings_of_polygons::<false>(array, interior_of);
-        interiors(&array.rings, &array.coords, kept, validity)
-    }
+    with_const_flags!(
+        ALL_VALID = array.rows.is_all_valid();
+        interiors(
+            &array.rings,
+            &array.coords,
+            kept_rings_of_polygons::<ALL_VALID>(array, interior_of),
+            validity,
+        )
+    )
 }
 
 /// A list of linestrings per row, one per polygon.

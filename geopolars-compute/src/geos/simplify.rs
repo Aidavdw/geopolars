@@ -41,11 +41,10 @@ pub fn simplify_line_strings(
         preserve_topology,
         ignore_per_row_errors,
     )?;
-    if array.coords.dim().has_z() {
-        geos_geometries.into_line_string_array::<true>(ignore_per_row_errors)
-    } else {
-        geos_geometries.into_line_string_array::<false>(ignore_per_row_errors)
-    }
+    with_const_flags!(
+        Z = array.coords.dim().has_z();
+        geos_geometries.into_line_string_array::<Z>(ignore_per_row_errors)
+    )
 }
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
@@ -66,11 +65,10 @@ pub fn simplify_multi_line_strings(
         preserve_topology,
         ignore_per_row_errors,
     )?;
-    if array.coords.dim().has_z() {
-        geos_geometries.into_multi_line_string_array::<true>(ignore_per_row_errors)
-    } else {
-        geos_geometries.into_multi_line_string_array::<false>(ignore_per_row_errors)
-    }
+    with_const_flags!(
+        Z = array.coords.dim().has_z();
+        geos_geometries.into_multi_line_string_array::<Z>(ignore_per_row_errors)
+    )
 }
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.

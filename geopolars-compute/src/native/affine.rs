@@ -287,15 +287,16 @@ fn axis_of_points(
 ) -> Vec<f64> {
     let values = coords.ignoring_validity();
     let (x, y) = (values.x(), values.y());
-    match (values.z(), coords.is_all_valid()) {
-        (None, true) => transform_points::<2, false>([a, b], offset, [x, y], coords, rows, shift),
-        (None, false) => transform_points::<2, true>([a, b], offset, [x, y], coords, rows, shift),
-        (Some(z), true) => {
-            transform_points::<3, false>([a, b, c], offset, [x, y, z], coords, rows, shift)
-        }
-        (Some(z), false) => {
-            transform_points::<3, true>([a, b, c], offset, [x, y, z], coords, rows, shift)
-        }
+    let nulls = !coords.is_all_valid();
+    match values.z() {
+        None => with_const_flags!(
+            NULLS = nulls;
+            transform_points::<2, NULLS>([a, b], offset, [x, y], coords, rows, shift)
+        ),
+        Some(z) => with_const_flags!(
+            NULLS = nulls;
+            transform_points::<3, NULLS>([a, b, c], offset, [x, y, z], coords, rows, shift)
+        ),
     }
 }
 

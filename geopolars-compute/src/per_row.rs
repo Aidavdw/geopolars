@@ -69,11 +69,10 @@ pub(crate) fn per_row_values<T: Default, E>(
     rows: &List,
     measure: impl Fn(usize) -> Result<T, E>,
 ) -> Result<Vec<T>, E> {
-    if rows.is_all_valid() {
-        per_row_values_with::<true, T, E>(rows, measure)
-    } else {
-        per_row_values_with::<false, T, E>(rows, measure)
-    }
+    with_const_flags!(
+        ALL_VALID = rows.is_all_valid();
+        per_row_values_with::<ALL_VALID, T, E>(rows, measure)
+    )
 }
 
 #[inline(always)]
