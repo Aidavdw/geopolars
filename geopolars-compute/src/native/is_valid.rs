@@ -64,6 +64,13 @@ pub(crate) fn is_empty_point(coords: &ValidCoords, i: usize) -> bool {
     coords.x()[i].is_nan() && coords.y()[i].is_nan()
 }
 
+/// Whether `x` and `y` lie inside `bounds`.
+#[inline(always)]
+pub(crate) fn is_within(bounds: &Bounds, x: f64, y: f64) -> bool {
+    let [xmin, ymin, xmax, ymax] = *bounds;
+    (xmin..=xmax).contains(&x) && (ymin..=ymax).contains(&y)
+}
+
 #[inline(always)]
 fn coordinate_is_valid<
     const CHECK_FINITE_COORDINATES: bool,
@@ -77,13 +84,12 @@ fn coordinate_is_valid<
     bounds: &Bounds,
 ) -> bool {
     let (x, y) = (coords.x()[i], coords.y()[i]);
-    let [xmin, ymin, xmax, ymax] = *bounds;
     let finite = !CHECK_FINITE_COORDINATES
         || (x.is_finite()
             && y.is_finite()
             && (!Z || coords.z().expect("a z, with `Z`")[i].is_finite())
             && (!M || coords.m().expect("an m, with `M`")[i].is_finite()));
-    let within = !CHECK_CRS_BOUNDS || ((xmin..=xmax).contains(&x) && (ymin..=ymax).contains(&y));
+    let within = !CHECK_CRS_BOUNDS || is_within(bounds, x, y);
     (finite && within) || (ALLOW_EMPTY_POINTS && is_empty_point(coords, i))
 }
 

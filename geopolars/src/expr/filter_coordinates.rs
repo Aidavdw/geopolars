@@ -1,4 +1,4 @@
-//! Emptying or dropping the coordinates that are not finite, or empty,
+//! Emptying, dropping or invalidating the coordinates that are not finite, or empty,
 //! through `geopolars_compute::native::*_with_filtered_coordinates`.
 //! See `filter_coordinates` in Python for the rules.
 
@@ -6,7 +6,7 @@ use geopolars_compute::native::{
     line_strings_with_filtered_coordinates, multi_line_strings_with_filtered_coordinates,
     multi_points_with_filtered_coordinates, multi_polygons_with_filtered_coordinates,
     points_with_filtered_coordinates, polygons_with_filtered_coordinates, NonFinite,
-    NonFiniteAction, TooShort,
+    SelectedAction, TooShort,
 };
 use geopolars_core::{
     downcast, Coords, LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
@@ -22,10 +22,11 @@ use super::remove_repeated_points::TooShortDef;
 use crate::geoarrow::{describe, Kind};
 
 #[derive(Deserialize)]
-#[serde(remote = "NonFiniteAction", rename_all = "snake_case")]
-enum NonFiniteActionDef {
+#[serde(remote = "SelectedAction", rename_all = "snake_case")]
+enum SelectedActionDef {
     SetEmpty,
     Drop,
+    SetInvalid,
 }
 
 /// See python
@@ -36,8 +37,8 @@ pub struct NonFiniteKwargs {
     pub(super) select_empty: bool,
     pub(super) ignore_z: bool,
     pub(super) ignore_m: bool,
-    #[serde(with = "NonFiniteActionDef")]
-    pub(super) action: NonFiniteAction,
+    #[serde(with = "SelectedActionDef")]
+    pub(super) action: SelectedAction,
     #[serde(with = "TooShortDef")]
     pub(super) too_short: TooShort,
 }

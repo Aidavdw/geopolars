@@ -150,6 +150,30 @@ def test_a_selected_point_becomes_the_empty_point(action: str) -> None:
     ]
 
 
+def test_a_selected_point_can_become_missing() -> None:
+    rows = [*_A, *_NOT_FINITE, *_EMPTY_POINT, None]
+
+    assert _filter(PointXY(), *rows, action="set_invalid") == [
+        *_A,
+        None,
+        None,
+        None,
+        None,
+    ]
+
+
+def test_only_the_rows_holding_a_selected_vertex_become_missing() -> None:
+    out = _filter(
+        MultiPolygonXY(),
+        [[_SQUARE], [_SQUARE, _line((1, 1), (2, 1), (NAN, NAN), (1, 1))]],
+        [[_SQUARE]],
+        None,
+        action="set_invalid",
+    )
+
+    assert out == [None, [[_SQUARE]], None]
+
+
 def test_a_multipoint_can_lose_all_of_its_points() -> None:
     assert _filter(MultiPointXY(), _A + _NOT_FINITE, _EMPTY_POINT) == [_A, []]
 

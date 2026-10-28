@@ -88,7 +88,10 @@ def test_the_crs_bounds_can_be_checked() -> None:
     point = {"x": 0.0, "y": 91.0}
 
     assert _is_valid_ogc(PointXY(crs=WGS84), point) == [True]
-    assert _is_valid_ogc(PointXY(crs=WGS84), point, crs_bounds="crs") == [False]
+    out_of_bounds = geo.OutOfBounds()
+    assert _is_valid_ogc(PointXY(crs=WGS84), point, out_of_bounds=out_of_bounds) == [
+        False
+    ]
 
 
 # Coordinates have to be finite.

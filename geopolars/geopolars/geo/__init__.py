@@ -49,6 +49,7 @@ from geopolars.geo.crs import is_geographic, set_crs, to_crs
 from geopolars.geo.distance import distance
 from geopolars.geo.exterior import exterior
 from geopolars.geo.filter_coordinates import NonFinite, filter_coordinates
+from geopolars.geo.fix_out_of_bounds import OutOfBounds, fix_out_of_bounds
 from geopolars.geo.force_dimension import force_2d, force_3d, force_m, without_m
 from geopolars.geo.has_repeated_points import has_repeated_points
 from geopolars.geo.interior import interior
@@ -79,6 +80,7 @@ from geopolars.geo.wrap_longitude import wrap_longitude
 __all__ = [
     "CloseRings",
     "NonFinite",
+    "OutOfBounds",
     "affine_transform",
     "area",
     "area_geodesic",
@@ -94,6 +96,7 @@ __all__ = [
     "distance",
     "exterior",
     "filter_coordinates",
+    "fix_out_of_bounds",
     "force_2d",
     "force_3d",
     "force_m",

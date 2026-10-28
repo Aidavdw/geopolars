@@ -1,4 +1,4 @@
-"""Emptying or dropping the coordinates that are not finite, or empty (A-tier)."""
+"""Emptying, dropping or invalidating the coordinates that are not finite, or empty (A-tier)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
 
-NonFiniteAction = Literal["set_empty", "drop"]
+NonFiniteAction = Literal["set_empty", "drop", "set_invalid"]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,7 +60,7 @@ def _filter_coordinates(
     )
 
 
-@doc()
+@doc(selected="that is selected")
 def filter_coordinates(
     geometry: IntoExprColumn,
     *,
@@ -71,7 +71,8 @@ def filter_coordinates(
     action: NonFiniteAction = "drop",
     too_short: TooShort = "invalid",
 ) -> pl.Expr:
-    """Empties or drops the coordinates that are not finite, or empty.
+    """Finds coordinates that are not finite (NaN, inf) or empty,
+    and performs an action on then (make empty, null, or drop).
     {repairing_function}
 
     A coordinate is selected by either of:
@@ -85,16 +86,12 @@ def filter_coordinates(
 
     {flag_for_absent_axis}
 
-    With `action="set_empty"`, every axis of a selected coordinate becomes NaN.
-    Selecting only empty coordinates then changes nothing.
-    A ring whose ends are emptied is no longer closed (see `is_valid_geoarrow`).
-    With `action="drop"`, the default, a selected coordinate is removed.
-    A point cannot lose its coordinate, so it becomes the empty point instead.
+    {selected_coordinate_actions}
+
+    `"drop"` is the default.
+    With `action="set_empty"`, selecting only empty coordinates changes nothing.
 
     {too_short}
-
-    With `action="drop"`, a ring that is not closed (see `is_valid_geoarrow`) is too short as well.
-    With `action="set_empty"`, `too_short` is ignored.
 
     {keeps_type_dimension_and_crs}
 

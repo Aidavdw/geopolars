@@ -101,6 +101,18 @@ impl GeodeticCrs {
 ///
 /// `crs` is anything PROJ accepts.
 pub fn longitude_turn(crs: &str) -> PolarsResult<Option<f64>> {
+    Ok(geographic_turns(crs)?.map(|[x, _]| x))
+}
+
+/// How far `x` and `y` go in one full turn around the globe, each in the unit of its own axis.
+/// `None` if they are not a longitude and latitude, as in a projected CRS.
+///
+/// GeoArrow always stores longitude as `x` and latitude as `y`,
+/// whatever axis order the CRS declares (EPSG:4326 declares latitude first).
+/// So the axes are read from the CRS normalised to that order.
+///
+/// `crs` is anything PROJ accepts.
+fn geographic_turns(crs: &str) -> PolarsResult<Option<[f64; 2]>> {
     let ctx = Context::new()?;
     let c_crs = CString::new(crs)
         .map_err(|_| polars_err!(ComputeError: "a CRS cannot contain a NUL byte: {crs:?}"))?;
@@ -109,30 +121,35 @@ pub fn longitude_turn(crs: &str) -> PolarsResult<Option<f64>> {
     unsafe {
         let parsed = ctx.object(proj_create(ctx.0, c_crs.as_ptr()), crs)?;
         let horizontal = ctx.horizontal(&parsed, crs)?;
-        let cs = ctx.object(
-            proj_crs_get_coordinate_system(ctx.0, horizontal.crs().0),
+        let normalized = ctx.object(
+            proj_normalize_for_visualization(ctx.0, horizontal.crs().0),
             crs,
         )?;
+        let cs = ctx.object(proj_crs_get_coordinate_system(ctx.0, normalized.0), crs)?;
         if proj_cs_get_type(ctx.0, cs.0) != PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL {
             return Ok(None);
         }
-        let turn = std::f64::consts::TAU / ctx.unit_factor(&cs, crs)?;
-        // EPSG rounds a unit's size to 15 digits, which would make a degree's turn
-        // 359.99999999999994. Units with a whole turn get it back exactly.
-        let whole = turn.round();
-        Ok(Some(if (turn - whole).abs() <= 1e-12 * whole {
-            whole
-        } else {
-            turn
-        }))
+        let turn_of = |axis| -> PolarsResult<f64> {
+            let turn = std::f64::consts::TAU / ctx.unit_factor(&cs, axis, crs)?;
+            // EPSG rounds a unit's size to 15 digits, which would make a degree's turn
+            // 359.99999999999994. Units with a whole turn get it back exactly.
+            let whole = turn.round();
+            Ok(if (turn - whole).abs() <= 1e-12 * whole {
+                whole
+            } else {
+                turn
+            })
+        };
+        Ok(Some([turn_of(0)?, turn_of(1)?]))
     }
 }
 
-/// Gets a boundiing box of the crs provided.
+/// Gets a bounding box of the CRS provided, as `[xmin, ymin, xmax, ymax]`.
 ///
 /// - A geographic CRS bounds latitude to a quarter turn either side of the equator,
-///   and longitude to half a turn either side of the prime meridian.
-///   `allow_wrapped_longitude` stretches that up to a full turn east,
+///   and longitude to half a turn either side of the prime meridian,
+///   each in the unit of its own axis (see [geographic_turns]).
+///   `allow_wrapped_longitude` stretches longitude up to a full turn east,
 ///   so data in the 0 to 360 convention fits too.
 /// - `within_area_of_use` also bounds them by the area PROJ says the CRS is meant for,
 ///   converted into the CRS's own `x` and `y`.
@@ -144,13 +161,13 @@ pub fn crs_bounds(
     allow_wrapped_longitude: bool,
     within_area_of_use: bool,
 ) -> PolarsResult<Option<[f64; 4]>> {
-    let globe = longitude_turn(crs)?.map(|turn| {
+    let globe = geographic_turns(crs)?.map(|[x_turn, y_turn]| {
         let east = if allow_wrapped_longitude {
-            turn
+            x_turn
         } else {
-            turn / 2.0
+            x_turn / 2.0
         };
-        [-turn / 2.0, -turn / 4.0, east, turn / 4.0]
+        [-x_turn / 2.0, -y_turn / 4.0, east, y_turn / 4.0]
     });
     if !within_area_of_use {
         return Ok(globe);
@@ -335,7 +352,7 @@ impl Context {
         if proj_cs_get_type(self.0, cs.0) == PJ_COORDINATE_SYSTEM_TYPE_PJ_CS_TYPE_ELLIPSOIDAL {
             return Ok(1.0);
         }
-        self.unit_factor(&cs, name)
+        self.unit_factor(&cs, 0, name)
     }
 
     /// The part of `crs` that holds `x` and `y`:
@@ -355,17 +372,17 @@ impl Context {
         })
     }
 
-    /// The size of one unit of the coordinate system `cs`'s first axis:
+    /// The size of one unit of axis `axis` of the coordinate system `cs`:
     /// in metres for a length, in radians for an angle.
     ///
     /// # Safety
     /// `cs` must be a coordinate system created in this context.
-    unsafe fn unit_factor(&self, cs: &Object<'_>, name: &str) -> PolarsResult<f64> {
+    unsafe fn unit_factor(&self, cs: &Object<'_>, axis: c_int, name: &str) -> PolarsResult<f64> {
         let mut factor = 0.0;
         let ok = proj_cs_get_axis_info(
             self.0,
             cs.0,
-            0,
+            axis,
             ptr::null_mut(),
             ptr::null_mut(),
             ptr::null_mut(),

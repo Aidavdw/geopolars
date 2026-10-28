@@ -7,18 +7,20 @@ mod centroid;
 mod count_coordinates;
 pub mod distance;
 mod filter_coordinates;
+mod fix_out_of_bounds;
 mod has_repeated_points;
 mod is_ccw;
 mod is_close;
 mod is_empty;
 mod is_ring;
 mod is_simple;
-// Only for `geoarrow_validity` and `ogc_validity`.
+// For `geoarrow_validity`, `ogc_validity` and `fix_out_of_bounds`.
 mod is_valid;
 mod length;
 mod remove_repeated_points;
 mod reverse;
 mod rings;
+mod selected_coords;
 mod too_short;
 
 pub use affine::{
@@ -46,7 +48,12 @@ pub use filter_coordinates::{
     line_strings_with_filtered_coordinates, multi_line_strings_with_filtered_coordinates,
     multi_points_with_filtered_coordinates, multi_polygons_with_filtered_coordinates,
     points_with_filtered_coordinates, polygons_with_filtered_coordinates, NonFinite,
-    NonFiniteAction,
+};
+pub use fix_out_of_bounds::{
+    line_strings_with_fixed_out_of_bounds, multi_line_strings_with_fixed_out_of_bounds,
+    multi_points_with_fixed_out_of_bounds, multi_polygons_with_fixed_out_of_bounds,
+    points_with_fixed_out_of_bounds, polygons_with_fixed_out_of_bounds, OutOfBounds,
+    OutOfBoundsAction,
 };
 pub use has_repeated_points::{
     line_strings_have_repeated_points, multi_line_strings_have_repeated_points,
@@ -90,4 +97,5 @@ pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,
     polygon_interiors, polygons_from_exteriors_and_holes,
 };
+pub use selected_coords::SelectedAction;
 pub use too_short::TooShort;

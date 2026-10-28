@@ -9,55 +9,28 @@ The CRS bounds are looked up once, while the plan is built.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
+from geopolars.geo.fix_out_of_bounds import _bounds
 
 if TYPE_CHECKING:
     import polars as pl
 
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
-
-CrsBounds = Literal[
-    "off",
-    "crs",
-    "crs_wrapped_longitude",
-    "area_of_use",
-    "area_of_use_wrapped_longitude",
-]
-
-# What each `crs_bounds` asks of `_crs_bounds`, as
-# `(allow_wrapped_longitude, within_area_of_use)`. `None` asks nothing.
-_CRS_BOUNDS: dict[str, tuple[bool, bool] | None] = {
-    "off": None,
-    "crs": (False, False),
-    "crs_wrapped_longitude": (True, False),
-    "area_of_use": (False, True),
-    "area_of_use_wrapped_longitude": (True, True),
-}
+    from geopolars.geo.fix_out_of_bounds import OutOfBounds
 
 
 def _kernel(
-    function_name: str, *, crs_bounds: CrsBounds, **checks: bool
+    function_name: str, *, out_of_bounds: OutOfBounds | None, **checks: bool
 ) -> Callable[[pl.Expr, GeoArrowType], pl.Expr]:
-    if crs_bounds not in _CRS_BOUNDS:
-        msg = f"`crs_bounds` must be one of {list(_CRS_BOUNDS)}, got {crs_bounds!r}"
-        raise ValueError(msg)
-    asked = _CRS_BOUNDS[crs_bounds]
-
     def build(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         # PROJ is only asked when there are bounds to check.
-        bounds = None
-        if asked is not None:
-            allow_wrapped_longitude, within_area_of_use = asked
-            bounds = geometry._crs_bounds(
-                allow_wrapped_longitude=allow_wrapped_longitude,
-                within_area_of_use=within_area_of_use,
-            )
+        bounds = None if out_of_bounds is None else _bounds(geometry, out_of_bounds)
         return register_plugin_function(
             plugin_path=LIB,
             args=[column],
@@ -72,7 +45,7 @@ def _kernel(
 def is_valid_geoarrow(
     geometry: IntoExprColumn,
     *,
-    crs_bounds: CrsBounds = "off",
+    out_of_bounds: OutOfBounds | None = None,
     check_missing_coordinates: bool = True,
     check_finite_coordinates: bool = False,
 ) -> pl.Expr:
@@ -95,23 +68,9 @@ def is_valid_geoarrow(
     - `check_finite_coordinates=True`: every axis (x, y, z and m) has to be finite:
       no NaN, no infinity.
       The exception is the empty point, which is NaN in x and y. It may stand anywhere, also as a vertex.
-    - `crs_bounds`: the coordinates have to lie inside the CRS's bounds, if it has any.
-      The empty point is exempt.
-
-    `crs_bounds` says which bounds the coordinates have to lie in.
-    They only apply to a column that declares a CRS PROJ can read.
-    An opaque SRID is skipped, unless an area of use is asked for, which then raises.
-
-    - `"off"`, the default, does not check bounds, and does not ask PROJ for any.
-    - `"crs"`: in a geographic CRS, latitude has to lie within a quarter turn of the equator
-      (±90 for degrees), and longitude within half a turn of the prime meridian (±180).
-      A projected CRS has no bounds of its own.
-    - `"crs_wrapped_longitude"`: as `"crs"`, but longitude may run up to a full turn east (360),
-      so that data in the 0 to 360 convention is valid as well.
-    - `"area_of_use"`: as `"crs"`, and `x` and `y` also have to lie inside the area
-      PROJ says the CRS is meant for (UTM zone 31N covers 0 to 6 degrees east, for one).
-      Data just past it is common and often fine.
-    - `"area_of_use_wrapped_longitude"`: as `"area_of_use"`, with longitude as in `"crs_wrapped_longitude"`.
+    - `out_of_bounds`: no coordinate may lie outside the bounds `fix_out_of_bounds` would fix.
+      Its `crs_bounds` says which bounds those are. Its `action` and `too_short` are ignored here.
+      With `out_of_bounds=None`, the default, bounds are not checked, and PROJ is not asked for any.
 
     `check_missing_coordinates=False` skips looking for missing values below the row,
     and trusts the column to hold to GeoArrow's rule on them.
@@ -128,7 +87,7 @@ def is_valid_geoarrow(
         geometry,
         _kernel(
             "is_valid_geoarrow",
-            crs_bounds=crs_bounds,
+            out_of_bounds=out_of_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_finite_coordinates=check_finite_coordinates,
         ),
@@ -138,7 +97,7 @@ def is_valid_geoarrow(
 def null_out_invalid_geoarrow(
     geometry: IntoExprColumn,
     *,
-    crs_bounds: CrsBounds = "off",
+    out_of_bounds: OutOfBounds | None = None,
     check_missing_coordinates: bool = True,
     check_finite_coordinates: bool = False,
 ) -> pl.Expr:
@@ -159,7 +118,7 @@ def null_out_invalid_geoarrow(
         geometry,
         _kernel(
             "null_out_invalid_geoarrow",
-            crs_bounds=crs_bounds,
+            out_of_bounds=out_of_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_finite_coordinates=check_finite_coordinates,
         ),
@@ -169,7 +128,7 @@ def null_out_invalid_geoarrow(
 def is_valid_ogc(
     geometry: IntoExprColumn,
     *,
-    crs_bounds: CrsBounds = "off",
+    out_of_bounds: OutOfBounds | None = None,
     check_missing_coordinates: bool = True,
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
@@ -182,7 +141,7 @@ def is_valid_ogc(
     A geometry valid by OGC is valid by `is_valid_geoarrow` as well,
     with every coordinate finite on every axis.
     Only a point, or a point of a multipoint, may be the empty point (NaN in x and y).
-    `crs_bounds` and `check_missing_coordinates` are as for `is_valid_geoarrow`.
+    `out_of_bounds` and `check_missing_coordinates` are as for `is_valid_geoarrow`.
 
     On top of that, per geometry
     (<https://docs.ogc.org/is/06-103r4/06-103r4.pdf>, sections 6.1.11.1 and 6.1.14):
@@ -226,7 +185,7 @@ def is_valid_ogc(
         geometry,
         _kernel(
             "is_valid_ogc",
-            crs_bounds=crs_bounds,
+            out_of_bounds=out_of_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
@@ -238,7 +197,7 @@ def is_valid_ogc(
 def null_out_invalid_ogc(
     geometry: IntoExprColumn,
     *,
-    crs_bounds: CrsBounds = "off",
+    out_of_bounds: OutOfBounds | None = None,
     check_missing_coordinates: bool = True,
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
@@ -257,7 +216,7 @@ def null_out_invalid_ogc(
         geometry,
         _kernel(
             "null_out_invalid_ogc",
-            crs_bounds=crs_bounds,
+            out_of_bounds=out_of_bounds,
             check_missing_coordinates=check_missing_coordinates,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,

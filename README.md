@@ -85,9 +85,10 @@ The first is validity according to the GeoArrow spec, checked by `geo.is_valid_g
 
 Checking GeoArrow validity is cheap. It looks at every coordinate once.
 It can also check, in that same pass, that every coordinate is finite,
-or that it lies inside the bounds of its CRS (`crs_bounds`).
+or that it lies inside the bounds of its CRS (`out_of_bounds`).
 For example, a latitude has to be between -90° and 90°.
 PROJ cannot transform a place that does not exist.
+`geo.fix_out_of_bounds` drops or clamps the coordinates that do not.
 
 The second is the OGC Simple Features standard, checked by `geo.is_valid_ogc`.
 This is the same standard as followed by GEOS (and therefore shapely, and GeoPandas).

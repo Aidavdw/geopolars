@@ -113,7 +113,9 @@ def test_a_point_outside_its_crs_is_nulled_and_the_crs_kept() -> None:
         schema={"point": _XY},
     ).select(pl.col("point").ext.to(PointXY(crs="EPSG:4326")))
 
-    out = df.select(geo.null_out_invalid_geoarrow("point", crs_bounds="crs"))
+    out = df.select(
+        geo.null_out_invalid_geoarrow("point", out_of_bounds=geo.OutOfBounds())
+    )
 
     assert out["point"].is_null().to_list() == [True, True]
     assert out.schema == df.schema

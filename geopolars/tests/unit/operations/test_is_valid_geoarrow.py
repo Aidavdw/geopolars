@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import polars as pl
 import pytest
@@ -22,6 +23,9 @@ from geopolars.datatypes import (
     PointXYZM,
     PolygonXY,
 )
+
+if TYPE_CHECKING:
+    from geopolars.geo.fix_out_of_bounds import CrsBounds
 
 WGS84 = "EPSG:4326"
 UTM31N = "EPSG:32631"
@@ -231,9 +235,10 @@ def _point(x: float, y: float) -> Coord:
 
 
 def _within_crs(
-    dtype: GeoArrowType, *rows: object, crs_bounds: str = "crs_wrapped_longitude"
+    dtype: GeoArrowType, *rows: object, crs_bounds: CrsBounds = "crs_wrapped_longitude"
 ) -> list[bool | None]:
-    return _is_valid_geoarrow(dtype, *rows, crs_bounds=crs_bounds)
+    out_of_bounds = geo.OutOfBounds(crs_bounds=crs_bounds)
+    return _is_valid_geoarrow(dtype, *rows, out_of_bounds=out_of_bounds)
 
 
 def test_there_are_no_crs_bounds_by_default() -> None:
@@ -333,7 +338,7 @@ def test_an_opaque_srid_has_no_area_of_use() -> None:
 
 def test_rejects_an_unknown_crs_bounds() -> None:
     with pytest.raises(ValueError, match="`crs_bounds` must be one of"):
-        geo.is_valid_geoarrow("g", crs_bounds="everywhere")  # type: ignore[arg-type]
+        geo.OutOfBounds(crs_bounds="everywhere")  # type: ignore[arg-type]
 
 
 def test_the_bounds_do_not_need_the_finite_check() -> None:
@@ -377,8 +382,8 @@ def test_namespace_matches_the_functional_api() -> None:
     df = pl.DataFrame(storage.ext.to(PointXY(crs=WGS84)))
 
     assert_frame_equal(
-        df.select(gpl.col("g").geo.is_valid_geoarrow(crs_bounds="crs")),
-        df.select(geo.is_valid_geoarrow("g", crs_bounds="crs")),
+        df.select(gpl.col("g").geo.is_valid_geoarrow(out_of_bounds=geo.OutOfBounds())),
+        df.select(geo.is_valid_geoarrow("g", out_of_bounds=geo.OutOfBounds())),
     )
 
 

@@ -38,7 +38,8 @@ the comment says when one without a CRS takes a different tier.
 | `null_out_invalid_ogc` | A | nulls what `is_valid_ogc` rejects | A | | A/B | | A | | A | | A/B | |
 | `has_repeated_points` | A | always `False` | A | | A | | A | | A | EP | A | EP |
 | `remove_repeated_points` | A | returns the input | A | | A | | A | | A | | A | |
-| `filter_coordinates` | A | a dropped point becomes the empty point | A | | A | | A | | A | | A | |
+| `filter_coordinates` | A | | A | | A | | A | | A | | A | |
+| `fix_out_of_bounds` | A | bounds from PROJ (plan-time) | A | | A | | A | | A | | A | |
 | `distance` | A/B | [^2] | - | | - | | - | | - | | - | |
 | `mean_coordinate` | C | returns the point | C | | C | SCC | C | | C | | C | SCC |
 | `translate` | A | impl differs for const or col | A | | A | | A | | A | | A | |

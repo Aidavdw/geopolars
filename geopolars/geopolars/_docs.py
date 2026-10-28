@@ -49,6 +49,20 @@ A flag for an axis requires only does something if the geometry has that axis.
 If the geometry does not have the specific axis, the flag is ignored. """,
     "repairing_function": """\
 As a repairing function, it does not require the geometry to be valid (yet).""",
+    "selected_coordinate_actions": """\
+`action` says what happens to a coordinate {selected}:
+
+| `action` | a coordinate {selected} |
+| - | - |
+| `"drop"` | is removed |
+| `"set_empty"` | gets NaN on every axis |
+| `"set_invalid"` | makes its row missing |
+
+A point cannot lose its coordinate, so with `"drop"` it becomes the empty point,
+just as a linestring or ring that loses every vertex becomes empty.
+With `"drop"`, a ring that is no longer closed (see `is_valid_geoarrow`) is too short as well (see below).
+With `"set_empty"` and `"set_invalid"`, every offset is kept, and `too_short` is ignored.
+A ring whose ends are emptied is no longer closed.""",
     "too_short": """\
 This operation removes coordinates, which can leave a linestring or ring too short.
 A linestring is too short with a single vertex, and a ring with fewer than 4.
