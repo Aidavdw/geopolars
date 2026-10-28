@@ -4,9 +4,7 @@
 //!
 //! [selected_coords] marks the coordinates a [CoordinateSelection] selects, in one pass.
 //! [super::selected_coords](mod@super::selected_coords) acts on them.
-//! The validity checks reject the rows holding one ([unselected_coords]).
-
-use std::ops::Range;
+//! The validity checks reject the rows holding one ([which_are_not_selected]).
 
 use geopolars_core::ValidCoords;
 use polars_arrow::bitmap::Bitmap;
@@ -181,10 +179,4 @@ pub(crate) fn which_are_not_selected(
     selection: &CoordinateSelection,
 ) -> Option<Bitmap> {
     selected_coords(coords, selection).map(|selected| !&selected)
-}
-
-/// Whether any coordinate in `span` is set in `selected`, the output of [selected_coords].
-#[inline(always)]
-pub(crate) fn has_selected(selected: Option<&Bitmap>, span: Range<usize>) -> bool {
-    selected.is_some_and(|selected| selected.null_count_range(span.start, span.len()) < span.len())
 }

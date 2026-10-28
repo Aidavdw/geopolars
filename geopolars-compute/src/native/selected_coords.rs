@@ -26,11 +26,13 @@ use geopolars_core::{
     MultiPolygonArray, PointArray, PolygonArray, ValidCoords, ValidList, MIN_RING_VERTICES,
 };
 use polars_arrow::bitmap::Bitmap;
+use polars_arrow::compute::utils::combine_validities_and;
 use polars_arrow::offset::OffsetsBuffer;
 
-use super::coordinate_selection::{has_selected, selected_coords, CoordinateSelection};
+use super::coordinate_selection::{selected_coords, which_are_not_selected, CoordinateSelection};
 use super::rings::offsets_of;
 use super::too_short::{list_holding, without_rows, TooShort};
+use crate::passing::rows_passing;
 
 /// See `action` of `NonFinite` and `OutOfBounds` in Python.
 #[derive(Debug, Clone, Copy)]
@@ -270,16 +272,24 @@ fn multi_polygons_without_selected(
     }
 }
 
-/// The rows of `len` rows that hold a selected coordinate.
-/// `coords_of` gives the coordinates of a row.
-fn rows_with_selected(
-    len: usize,
-    coords_of: impl Fn(usize) -> Range<usize>,
-    selected: &Bitmap,
-) -> Vec<usize> {
-    (0..len)
-        .filter(|&i| has_selected(Some(selected), coords_of(i)))
-        .collect()
+/// `rows`, null too where a row holds a coordinate `selection` selects.
+/// `inner_lists` are the list levels below the rows, outermost first.
+fn rows_nulled_where_selected(
+    rows: &List,
+    inner_lists: &[&ValidList],
+    coords: &ValidCoords,
+    selection: &CoordinateSelection,
+) -> List {
+    let lists: Vec<&ValidList> = [rows.ignoring_validity()]
+        .into_iter()
+        .chain(inner_lists.iter().copied())
+        .collect();
+    let passing = [rows.validity().cloned()]
+        .into_iter()
+        .chain(inner_lists.iter().map(|_| None))
+        .chain([which_are_not_selected(coords, selection)])
+        .collect();
+    rows.clone().with_validity(rows_passing(&lists, passing))
 }
 
 /// [SelectedAction::Drop] leaves the empty point, as a point cannot lose its coordinate.
@@ -289,17 +299,15 @@ pub fn points_with_selected(
     action: SelectedAction,
 ) -> PointArray {
     let (coords, validity) = (array.coords.ignoring_validity(), array.coords.validity());
-    let selected = &selected_coords_bitmap(coords, selection);
     PointArray::new(match action {
         SelectedAction::SetEmpty | SelectedAction::Drop => {
+            let selected = &selected_coords_bitmap(coords, selection);
             Coords::from_valid(emptied(coords, selected), validity.cloned())
         }
         SelectedAction::SetNull => {
-            let failed = rows_with_selected(coords.len(), |i| i..i + 1, selected);
-            Coords::from_valid(
-                coords.clone(),
-                validity_without(validity, coords.len(), &failed),
-            )
+            let not_selected = which_are_not_selected(coords, selection);
+            let validity = combine_validities_and(validity, not_selected.as_ref());
+            Coords::from_valid(coords.clone(), validity)
         }
     })
 }
@@ -310,20 +318,17 @@ pub fn line_strings_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> LineStringArray {
-    let selected = &selected_coords_bitmap(&array.coords, selection);
+    let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => LineStringArray {
             rows: array.rows.clone(),
-            coords: emptied(&array.coords, selected),
+            coords: emptied(&array.coords, &selected()),
         },
-        SelectedAction::Drop => line_strings_without_selected(array, selected, too_short),
-        SelectedAction::SetNull => {
-            let failed = rows_with_selected(array.rows.len(), |i| array.rows.range(i), selected);
-            LineStringArray {
-                rows: without_rows(&array.rows, &failed),
-                coords: array.coords.clone(),
-            }
-        }
+        SelectedAction::Drop => line_strings_without_selected(array, &selected(), too_short),
+        SelectedAction::SetNull => LineStringArray {
+            rows: rows_nulled_where_selected(&array.rows, &[], &array.coords, selection),
+            coords: array.coords.clone(),
+        },
     }
 }
 
@@ -333,20 +338,17 @@ pub fn multi_points_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiPointArray {
-    let selected = &selected_coords_bitmap(&array.coords, selection);
+    let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiPointArray {
             rows: array.rows.clone(),
-            coords: emptied(&array.coords, selected),
+            coords: emptied(&array.coords, &selected()),
         },
-        SelectedAction::Drop => multi_points_without_selected(array, selected, too_short),
-        SelectedAction::SetNull => {
-            let failed = rows_with_selected(array.rows.len(), |i| array.rows.range(i), selected);
-            MultiPointArray {
-                rows: without_rows(&array.rows, &failed),
-                coords: array.coords.clone(),
-            }
-        }
+        SelectedAction::Drop => multi_points_without_selected(array, &selected(), too_short),
+        SelectedAction::SetNull => MultiPointArray {
+            rows: rows_nulled_where_selected(&array.rows, &[], &array.coords, selection),
+            coords: array.coords.clone(),
+        },
     }
 }
 
@@ -356,23 +358,24 @@ pub fn polygons_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> PolygonArray {
-    let selected = &selected_coords_bitmap(&array.coords, selection);
+    let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => PolygonArray {
             rows: array.rows.clone(),
             rings: array.rings.clone(),
-            coords: emptied(&array.coords, selected),
+            coords: emptied(&array.coords, &selected()),
         },
-        SelectedAction::Drop => polygons_without_selected(array, selected, too_short),
-        SelectedAction::SetNull => {
-            let coords_of = |i| array.rings.span(array.rows.range(i));
-            let failed = rows_with_selected(array.rows.len(), coords_of, selected);
-            PolygonArray {
-                rows: without_rows(&array.rows, &failed),
-                rings: array.rings.clone(),
-                coords: array.coords.clone(),
-            }
-        }
+        SelectedAction::Drop => polygons_without_selected(array, &selected(), too_short),
+        SelectedAction::SetNull => PolygonArray {
+            rows: rows_nulled_where_selected(
+                &array.rows,
+                &[&array.rings],
+                &array.coords,
+                selection,
+            ),
+            rings: array.rings.clone(),
+            coords: array.coords.clone(),
+        },
     }
 }
 
@@ -382,23 +385,24 @@ pub fn multi_line_strings_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiLineStringArray {
-    let selected = &selected_coords_bitmap(&array.coords, selection);
+    let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiLineStringArray {
             rows: array.rows.clone(),
             lines: array.lines.clone(),
-            coords: emptied(&array.coords, selected),
+            coords: emptied(&array.coords, &selected()),
         },
-        SelectedAction::Drop => multi_line_strings_without_selected(array, selected, too_short),
-        SelectedAction::SetNull => {
-            let coords_of = |i| array.lines.span(array.rows.range(i));
-            let failed = rows_with_selected(array.rows.len(), coords_of, selected);
-            MultiLineStringArray {
-                rows: without_rows(&array.rows, &failed),
-                lines: array.lines.clone(),
-                coords: array.coords.clone(),
-            }
-        }
+        SelectedAction::Drop => multi_line_strings_without_selected(array, &selected(), too_short),
+        SelectedAction::SetNull => MultiLineStringArray {
+            rows: rows_nulled_where_selected(
+                &array.rows,
+                &[&array.lines],
+                &array.coords,
+                selection,
+            ),
+            lines: array.lines.clone(),
+            coords: array.coords.clone(),
+        },
     }
 }
 
@@ -408,24 +412,25 @@ pub fn multi_polygons_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiPolygonArray {
-    let selected = &selected_coords_bitmap(&array.coords, selection);
+    let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiPolygonArray {
             rows: array.rows.clone(),
             polygons: array.polygons.clone(),
             rings: array.rings.clone(),
-            coords: emptied(&array.coords, selected),
+            coords: emptied(&array.coords, &selected()),
         },
-        SelectedAction::Drop => multi_polygons_without_selected(array, selected, too_short),
-        SelectedAction::SetNull => {
-            let coords_of = |i| array.rings.span(array.polygons.span(array.rows.range(i)));
-            let failed = rows_with_selected(array.rows.len(), coords_of, selected);
-            MultiPolygonArray {
-                rows: without_rows(&array.rows, &failed),
-                polygons: array.polygons.clone(),
-                rings: array.rings.clone(),
-                coords: array.coords.clone(),
-            }
-        }
+        SelectedAction::Drop => multi_polygons_without_selected(array, &selected(), too_short),
+        SelectedAction::SetNull => MultiPolygonArray {
+            rows: rows_nulled_where_selected(
+                &array.rows,
+                &[&array.polygons, &array.rings],
+                &array.coords,
+                selection,
+            ),
+            polygons: array.polygons.clone(),
+            rings: array.rings.clone(),
+            coords: array.coords.clone(),
+        },
     }
 }

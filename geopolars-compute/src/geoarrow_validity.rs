@@ -2,7 +2,7 @@
 //! See `is_valid_geoarrow` in Python for the rules.
 //!
 //! Every check writes a mask of the items that pass at its own level.
-//! These levels are the coordinates (`unselected_coords`) and the rings (`rings_are_closed`).
+//! These levels are the coordinates (`which_are_not_selected`) and the rings (`rings_are_closed`).
 //! `rows_passing` folds the masks up to the rows.
 //! Each kernel gives a `bool` per row, `false` for a null row.
 //!
