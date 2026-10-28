@@ -145,7 +145,7 @@ def test_the_crs_is_carried_over() -> None:
     assert out.schema["polygon"] == PointXY._with_metadata_of(df.schema["polygon"])
 
 
-def test_a_missing_or_empty_polygon_has_no_centroid() -> None:
+def test_a_null_or_empty_polygon_has_no_centroid() -> None:
     assert _centroids(_polygons(None, [], [_SQUARE])) == [None, None, (0.5, 0.5)]
 
 

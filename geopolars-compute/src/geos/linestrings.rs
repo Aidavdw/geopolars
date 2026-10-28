@@ -109,7 +109,7 @@ impl GeosGeometries {
     /// Our linestring array of the geometries, one row each.
     /// Every GEOS geometry is freed once it is copied.
     /// A geometry that is not a linestring is an error.
-    /// If `ignore_per_row_errors=true`, its row is missing instead.
+    /// If `ignore_per_row_errors=true`, its row is null instead.
     pub fn into_line_string_array<const Z: bool>(
         self,
         ignore_per_row_errors: bool,
@@ -119,7 +119,7 @@ impl GeosGeometries {
         let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
         for geometry in self.geometries {
             let is_valid = match geometry {
-                GeosRow::Missing => false,
+                GeosRow::Null => false,
                 GeosRow::Empty => true,
                 GeosRow::Geometry(line_string) => match line_string.geometry_type()? {
                     GeometryTypes::LineString => {
@@ -152,7 +152,7 @@ impl GeosGeometries {
         let mut rows = OffsetsBuilder::with_capacity(self.geometries.len());
         for geometry in self.geometries {
             let is_valid = match geometry {
-                GeosRow::Missing => false,
+                GeosRow::Null => false,
                 GeosRow::Empty => true,
                 GeosRow::Geometry(geometry) => match geometry.geometry_type()? {
                     GeometryTypes::LineString if geometry.is_empty()? => true,

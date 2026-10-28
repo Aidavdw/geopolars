@@ -79,10 +79,10 @@ def to_polygon(box: IntoExprColumn) -> pl.Expr:
 
     | box                                     | polygon                         |
     |-----------------------------------------|---------------------------------|
-    | missing                                 | missing                         |
+    | null                                    | null                            |
     | an empty range in any dimension         | empty (no rings)                |
     | `xmin > xmax`, geographic CRS           | continues past the antimeridian |
-    | `xmin > xmax`, any other CRS, or none   | missing                         |
+    | `xmin > xmax`, any other CRS, or none   | null                            |
 
     A box from 170 to -170 crosses the antimeridian.
     With a geographic CRS, its polygon runs from 170 to 190 instead:

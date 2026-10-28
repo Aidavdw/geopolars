@@ -69,8 +69,8 @@ def test_integer_coordinates_are_accepted() -> None:
     )
 
 
-def test_a_missing_coordinate_invalidates_the_whole_point() -> None:
-    """Missing coordinate must invalidate the entire point.
+def test_a_null_coordinate_nulls_the_whole_point() -> None:
+    """Null coordinate must null the entire point.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {

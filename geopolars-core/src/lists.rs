@@ -64,7 +64,7 @@ impl ValidList {
     }
 }
 
-/// Lists where individual lists can be missing: the outer level of a geometry column.
+/// Lists where individual lists can be null: the outer level of a geometry column.
 /// Otherwise, use [ValidList].
 ///
 /// See the README on views.

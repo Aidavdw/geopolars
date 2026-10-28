@@ -71,50 +71,50 @@ def _is_finite(
     return _is_valid_geoarrow(dtype, *rows, check_finite_coordinates=True, **kwargs)
 
 
-# Missing coordinates.
+# Null coordinates.
 
 
-def test_a_missing_axis_is_invalid() -> None:
+def test_a_null_axis_is_invalid() -> None:
     assert _is_valid_geoarrow(PointXY(), {"x": 1.0, "y": None}) == [False]
 
 
-def test_a_missing_vertex_is_invalid() -> None:
+def test_a_null_vertex_is_invalid() -> None:
     assert _is_valid_geoarrow(LineStringXY(), [{"x": 0.0, "y": 0.0}, None]) == [False]
 
 
 @pytest.mark.parametrize(
-    ("dtype", "valid", "missing_vertex"),
+    ("dtype", "valid", "null_vertex"),
     [
         (LineStringXY(), _SQUARE, [_SQUARE[0], None]),
         (PolygonXY(), [_SQUARE, _HOLE], [[_SQUARE[0], None, *_SQUARE[2:]]]),
     ],
     ids=["line", "polygon"],
 )
-def test_a_missing_vertex_only_makes_its_own_row_invalid(
-    dtype: GeoArrowType, valid: object, missing_vertex: object
+def test_a_null_vertex_only_makes_its_own_row_invalid(
+    dtype: GeoArrowType, valid: object, null_vertex: object
 ) -> None:
-    assert _is_valid_geoarrow(dtype, valid, missing_vertex, valid) == [
+    assert _is_valid_geoarrow(dtype, valid, null_vertex, valid) == [
         True,
         False,
         True,
     ]
 
 
-def test_a_missing_ring_is_invalid() -> None:
+def test_a_null_ring_is_invalid() -> None:
     assert _is_valid_geoarrow(PolygonXY(), [_SQUARE, None]) == [False]
 
 
 @pytest.mark.parametrize(
     "dtype", [MultiPointXY(), MultiLineStringXY(), MultiPolygonXY()]
 )
-def test_a_missing_part_is_invalid(dtype: GeoArrowType) -> None:
+def test_a_null_part_is_invalid(dtype: GeoArrowType) -> None:
     assert _is_valid_geoarrow(dtype, [None]) == [False]
 
 
 @pytest.mark.parametrize(
     "dtype", [PointXY(), LineStringXY(), PolygonXY(), MultiPolygonXY()]
 )
-def test_a_missing_geometry_gives_a_missing_result(dtype: GeoArrowType) -> None:
+def test_a_null_geometry_gives_a_null_result(dtype: GeoArrowType) -> None:
     assert _is_valid_geoarrow(dtype, None) == [None]
 
 
@@ -215,10 +215,10 @@ def test_a_multilinestring_with_one_non_finite_line_is_invalid() -> None:
     assert _is_finite(MultiLineStringXY(), [good, good], [good, bad]) == [True, False]
 
 
-def test_without_the_missing_check_a_coordinate_can_still_be_held_finite() -> None:
+def test_without_the_null_check_a_coordinate_can_still_be_held_finite() -> None:
     line = _line((0, 0), (NAN, 1))
 
-    assert _is_finite(LineStringXY(), line, check_missing_coordinates=False) == [False]
+    assert _is_finite(LineStringXY(), line, check_null_coordinates=False) == [False]
 
 
 def test_the_finite_check_still_needs_every_coordinate_there() -> None:
@@ -348,9 +348,7 @@ def test_the_bounds_do_not_need_the_finite_check() -> None:
 
 
 def test_without_the_coordinate_checks_the_rings_still_count() -> None:
-    out = _is_valid_geoarrow(
-        PolygonXY(), [_SQUARE[:-1]], check_missing_coordinates=False
-    )
+    out = _is_valid_geoarrow(PolygonXY(), [_SQUARE[:-1]], check_null_coordinates=False)
 
     assert out == [False]
 
@@ -392,7 +390,7 @@ def test_namespace_passes_the_checks_on() -> None:
     df = pl.DataFrame(
         pl.Series("g", rows, dtype=_storage(PolygonXY())).ext.to(PolygonXY())
     )
-    checks = {"check_missing_coordinates": False, "check_finite_coordinates": True}
+    checks = {"check_null_coordinates": False, "check_finite_coordinates": True}
 
     out = df.select(gpl.col("g").geo.is_valid_geoarrow(**checks))
 

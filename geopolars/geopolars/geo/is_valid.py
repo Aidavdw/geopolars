@@ -46,15 +46,15 @@ def is_valid_geoarrow(
     geometry: IntoExprColumn,
     *,
     out_of_bounds: OutOfBounds | None = None,
-    check_missing_coordinates: bool = True,
+    check_null_coordinates: bool = True,
     check_finite_coordinates: bool = False,
 ) -> pl.Expr:
     """Whether each geometry is valid by the GeoArrow spec: one `bool` per row, a multi-geometry included.
-    A missing geometry gives a missing result.
+    A null geometry gives a null result.
 
     GeoArrow asks two things (<https://geoarrow.org/format.html>):
 
-    - only the whole geometry may be missing.
+    - only the whole geometry may be null.
       A part, a ring or a coordinate nested in it may not;
     - every ring is closed: its last vertex lies at exactly the same place as its first,
       in x, y and z. An empty ring is closed too.
@@ -72,10 +72,10 @@ def is_valid_geoarrow(
       Its `crs_bounds` says which bounds those are. Its `action` and `too_short` are ignored here.
       With `out_of_bounds=None`, the default, bounds are not checked, and PROJ is not asked for any.
 
-    `check_missing_coordinates=False` skips looking for missing values below the row,
+    `check_null_coordinates=False` skips looking for null values below the row,
     and trusts the column to hold to GeoArrow's rule on them.
     This can save computation time.
-    A missing coordinate is then read as whatever values lie under it.
+    A null coordinate is then read as whatever values lie under it.
     Do not use this unless you know for sure the inner data is valid!
     The rings still have to be closed.
 
@@ -88,7 +88,7 @@ def is_valid_geoarrow(
         _kernel(
             "is_valid_geoarrow",
             out_of_bounds=out_of_bounds,
-            check_missing_coordinates=check_missing_coordinates,
+            check_null_coordinates=check_null_coordinates,
             check_finite_coordinates=check_finite_coordinates,
         ),
     )
@@ -98,7 +98,7 @@ def null_out_invalid_geoarrow(
     geometry: IntoExprColumn,
     *,
     out_of_bounds: OutOfBounds | None = None,
-    check_missing_coordinates: bool = True,
+    check_null_coordinates: bool = True,
     check_finite_coordinates: bool = False,
 ) -> pl.Expr:
     """Null out every geometry that `is_valid_geoarrow` rejects, keeping the rest as they are.
@@ -119,7 +119,7 @@ def null_out_invalid_geoarrow(
         _kernel(
             "null_out_invalid_geoarrow",
             out_of_bounds=out_of_bounds,
-            check_missing_coordinates=check_missing_coordinates,
+            check_null_coordinates=check_null_coordinates,
             check_finite_coordinates=check_finite_coordinates,
         ),
     )
@@ -129,19 +129,19 @@ def is_valid_ogc(
     geometry: IntoExprColumn,
     *,
     out_of_bounds: OutOfBounds | None = None,
-    check_missing_coordinates: bool = True,
+    check_null_coordinates: bool = True,
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
     check_multi_polygon_self_overlap: bool = True,
 ) -> pl.Expr:
     """Whether each geometry is valid by OGC Simple Features
     (which GEOS, and therefore shapely and GeoPandas also uses).
-    One `bool` per row, a multi-geometry included. A missing geometry gives a missing result.
+    One `bool` per row, a multi-geometry included. A null geometry gives a null result.
 
     A geometry valid by OGC is valid by `is_valid_geoarrow` as well,
     with every coordinate finite on every axis.
     Only a point, or a point of a multipoint, may be the empty point (NaN in x and y).
-    `out_of_bounds` and `check_missing_coordinates` are as for `is_valid_geoarrow`.
+    `out_of_bounds` and `check_null_coordinates` are as for `is_valid_geoarrow`.
 
     On top of that, per geometry
     (<https://docs.ogc.org/is/06-103r4/06-103r4.pdf>, sections 6.1.11.1 and 6.1.14):
@@ -186,7 +186,7 @@ def is_valid_ogc(
         _kernel(
             "is_valid_ogc",
             out_of_bounds=out_of_bounds,
-            check_missing_coordinates=check_missing_coordinates,
+            check_null_coordinates=check_null_coordinates,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
@@ -198,7 +198,7 @@ def null_out_invalid_ogc(
     geometry: IntoExprColumn,
     *,
     out_of_bounds: OutOfBounds | None = None,
-    check_missing_coordinates: bool = True,
+    check_null_coordinates: bool = True,
     check_ring_self_intersect: bool = True,
     check_polygon_self_overlap: bool = True,
     check_multi_polygon_self_overlap: bool = True,
@@ -217,7 +217,7 @@ def null_out_invalid_ogc(
         _kernel(
             "null_out_invalid_ogc",
             out_of_bounds=out_of_bounds,
-            check_missing_coordinates=check_missing_coordinates,
+            check_null_coordinates=check_null_coordinates,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,

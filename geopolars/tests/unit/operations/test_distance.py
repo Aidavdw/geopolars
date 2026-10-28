@@ -29,7 +29,7 @@ def _pairs(
     b: list[tuple[float, float] | None],
     crs: str | None = None,
 ) -> pl.DataFrame:
-    """Two XY point columns, `a` and `b`, with a missing point where it says `None`."""
+    """Two XY point columns, `a` and `b`, with a null point where it says `None`."""
     xy = pl.Struct({"x": pl.Float64, "y": pl.Float64})
 
     def column(points: list[tuple[float, float] | None]) -> pl.Series:
@@ -165,7 +165,7 @@ def test_the_order_of_the_points_does_not_matter() -> None:
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_a_missing_point_has_no_distance(crs: str | None) -> None:
+def test_a_null_point_has_no_distance(crs: str | None) -> None:
     df = _pairs([(0.0, 0.0), None, None], [None, (3.0, 4.0), None], crs=crs)
 
     assert _distances(df) == [None, None, None]

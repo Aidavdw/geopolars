@@ -413,7 +413,7 @@ class ExprGeoNameSpace:
         ignore_z: bool = False,
         ignore_m: bool = False,
         action: NonFiniteAction = "drop",
-        too_short: Literal["invalid", "keep", "empty"] = "invalid",
+        too_short: Literal["null", "keep", "empty"] = "null",
     ) -> pl.Expr:
         from geopolars.geo.filter_coordinates import filter_coordinates
 
@@ -432,7 +432,7 @@ class ExprGeoNameSpace:
         *,
         crs_bounds: CrsBounds = "crs",
         action: OutOfBoundsAction = "drop",
-        too_short: Literal["invalid", "keep", "empty"] = "invalid",
+        too_short: Literal["null", "keep", "empty"] = "null",
     ) -> pl.Expr:
         from geopolars.geo.fix_out_of_bounds import fix_out_of_bounds
 
@@ -444,7 +444,7 @@ class ExprGeoNameSpace:
         self,
         *,
         out_of_bounds: OutOfBounds | None = None,
-        check_missing_coordinates: bool = True,
+        check_null_coordinates: bool = True,
         check_finite_coordinates: bool = False,
     ) -> pl.Expr:
         from geopolars.geo.is_valid import is_valid_geoarrow
@@ -452,7 +452,7 @@ class ExprGeoNameSpace:
         return is_valid_geoarrow(
             self._expr,
             out_of_bounds=out_of_bounds,
-            check_missing_coordinates=check_missing_coordinates,
+            check_null_coordinates=check_null_coordinates,
             check_finite_coordinates=check_finite_coordinates,
         )
 
@@ -460,7 +460,7 @@ class ExprGeoNameSpace:
         self,
         *,
         out_of_bounds: OutOfBounds | None = None,
-        check_missing_coordinates: bool = True,
+        check_null_coordinates: bool = True,
         check_finite_coordinates: bool = False,
     ) -> pl.Expr:
         from geopolars.geo.is_valid import null_out_invalid_geoarrow
@@ -468,7 +468,7 @@ class ExprGeoNameSpace:
         return null_out_invalid_geoarrow(
             self._expr,
             out_of_bounds=out_of_bounds,
-            check_missing_coordinates=check_missing_coordinates,
+            check_null_coordinates=check_null_coordinates,
             check_finite_coordinates=check_finite_coordinates,
         )
 
@@ -476,7 +476,7 @@ class ExprGeoNameSpace:
         self,
         *,
         out_of_bounds: OutOfBounds | None = None,
-        check_missing_coordinates: bool = True,
+        check_null_coordinates: bool = True,
         check_ring_self_intersect: bool = True,
         check_polygon_self_overlap: bool = True,
         check_multi_polygon_self_overlap: bool = True,
@@ -486,7 +486,7 @@ class ExprGeoNameSpace:
         return is_valid_ogc(
             self._expr,
             out_of_bounds=out_of_bounds,
-            check_missing_coordinates=check_missing_coordinates,
+            check_null_coordinates=check_null_coordinates,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
@@ -496,7 +496,7 @@ class ExprGeoNameSpace:
         self,
         *,
         out_of_bounds: OutOfBounds | None = None,
-        check_missing_coordinates: bool = True,
+        check_null_coordinates: bool = True,
         check_ring_self_intersect: bool = True,
         check_polygon_self_overlap: bool = True,
         check_multi_polygon_self_overlap: bool = True,
@@ -506,7 +506,7 @@ class ExprGeoNameSpace:
         return null_out_invalid_ogc(
             self._expr,
             out_of_bounds=out_of_bounds,
-            check_missing_coordinates=check_missing_coordinates,
+            check_null_coordinates=check_null_coordinates,
             check_ring_self_intersect=check_ring_self_intersect,
             check_polygon_self_overlap=check_polygon_self_overlap,
             check_multi_polygon_self_overlap=check_multi_polygon_self_overlap,
@@ -538,7 +538,7 @@ class ExprGeoNameSpace:
         unique_z: bool = True,
         unique_m: bool = False,
         collapsed_lines: Literal["keep_ends", "single_vertex"] = "keep_ends",
-        too_short: Literal["invalid", "keep", "empty"] = "invalid",
+        too_short: Literal["null", "keep", "empty"] = "null",
     ) -> pl.Expr:
         from geopolars.geo.remove_repeated_points import remove_repeated_points
 

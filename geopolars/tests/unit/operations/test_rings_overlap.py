@@ -78,11 +78,11 @@ def test_a_ring_inside_touching_from_within_overlaps_either_way() -> None:
     assert _overlap([outer], [inner], include_touching=True) == [True]
 
 
-def test_missing_stays_missing() -> None:
+def test_null_stays_null() -> None:
     assert _overlap([None, _square(0, 0)], [_square(0, 0), None]) == [None, None]
 
 
-def test_a_not_finite_vertex_gives_missing() -> None:
+def test_a_not_finite_vertex_gives_null() -> None:
     nan, inf = float("nan"), float("inf")
     broken = [_ring((0, 0), (nan, 0), (1, 1)), _ring((0, 0), (inf, 0), (1, 1))]
     assert _overlap(broken, [_square(0, 0)] * 2) == [None] * 2
@@ -104,7 +104,7 @@ def test_anything_but_a_ring_raises(line: Ring) -> None:
         _overlap([_square(0, 0)], [line])
 
 
-def test_ignore_per_row_errors_gives_a_missing_result() -> None:
+def test_ignore_per_row_errors_gives_a_null_result() -> None:
     open_line = [{"x": 0.0, "y": 0.0}, {"x": 1.0, "y": 0.0}, {"x": 1.0, "y": 1.0}]
     df = pl.DataFrame(
         [

@@ -15,7 +15,7 @@ The crate holds:
   These need the `native` feature.
 - `is_valid_ogc`'s kernels in `ogc_validity`, which run the checks of `native` and `geos` in one pass per row.
   These need both features.
-- the pass that moves every missing value below a row out to the row in `inner_nulls`.
+- the pass that moves every null value below a row out to the row in `inner_nulls`.
 
 ## Writing kernels
 
@@ -24,12 +24,12 @@ The crate holds:
 A kernel can always assume its input is valid according to the GeoArrow spec.
 Only the outer level may have nulls.
 All other levels, including the coordinate values, contain none.
-There is therefore no need to branch on what to do with invalid data.
+There is therefore no need to branch on what to do with nulls below the rows.
 Making sure of this is up to whoever builds the views.
 Every kernel in turn has to give valid output.
 
 This does **not** shield you from NaNs!
-A valid Polygon cannot have missing coordinates, but it might still have e.g. a NaN x-coordinate.
+A valid Polygon cannot have null coordinates, but it might still have e.g. a NaN x-coordinate.
 They show up in two ways.
 
 - Individual NaN values (e.g. `x = 32.1, y = NaN`).
@@ -53,7 +53,7 @@ A runtime `bool` that dispatches to it has the same name in lowercase, so it nee
 
 How to handle errors depends on where they are raised.
 
-- An error before looping over the rows would make *all rows* invalid.
+- An error before looping over the rows would make *all rows* null.
   Return it, so the user sees it.
 - An error in a single row does not affect the other rows.
   Switch on an `ignore_per_row_errors` flag.
@@ -61,7 +61,7 @@ How to handle errors depends on where they are raised.
   So here it is fine to check the `bool` in the hot path, rather than make it a const generic.
   If `ignore_per_row_errors=false`, which is the default, return the error.
   This gives the user a way to inspect errors if they want.
-  If `ignore_per_row_errors=true`, mark the row as missing instead (not as an empty geometry!).
+  If `ignore_per_row_errors=true`, mark the row as null instead (not as an empty geometry!).
   The `geopolars-core` output functions take the rows that failed for this.
 - An accumulator-like function combines many rows into far fewer results.
   Ask the caller how to handle errors here, with an `IGNORE_ERRORS` const `bool`.

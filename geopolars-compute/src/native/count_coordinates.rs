@@ -51,7 +51,7 @@ pub fn point_coordinate_counts<const INCLUDE_EMPTY: bool>(
     array: &PointArray,
 ) -> PrimitiveArray<u32> {
     let coords = array.coords.ignoring_validity();
-    // A missing point is counted too: its count is masked by the validity.
+    // A null point is counted too: its count is masked by the validity.
     let counts = (0..coords.len())
         .map(|i| count_vertices::<INCLUDE_EMPTY>(coords, i..i + 1))
         .collect();

@@ -15,7 +15,7 @@ use super::rings_overlap::overlap;
 use super::{
     per_part_optional_bool, per_row_optional_bool, ring_is_finite, to_rsgeo_ring, xy_is_finite,
 };
-use crate::{row_or_missing, GeoComputeResult};
+use crate::{row_or_null, GeoComputeResult};
 
 /// One segment of a linestring
 #[derive(Clone, Copy)]
@@ -127,7 +127,7 @@ fn polygon_self_intersects(polygon: &ScalarPolygon) -> GeoComputeResult<Option<b
     })))
 }
 
-/// Whether each linestring intersects itself, missing where it is not finite in x or y.
+/// Whether each linestring intersects itself, null where it is not finite in x or y.
 pub fn line_strings_self_intersect(array: &LineStringArray) -> BooleanArray {
     let Ok(out) = per_row_optional_bool(&array.rows, |i| {
         Ok::<_, Infallible>(line_self_intersects(&array.get(i)))
@@ -147,14 +147,14 @@ pub fn multi_line_strings_self_intersect(array: &MultiLineStringArray) -> ListAr
 }
 
 /// Whether each polygon [intersects itself](polygon_self_intersects).
-/// If `ignore_per_row_errors=true`, a polygon with a ring that is not one is missing;
+/// If `ignore_per_row_errors=true`, a polygon with a ring that is not one is null;
 /// otherwise that is the error.
 pub fn polygons_self_intersect(
     array: &PolygonArray,
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<BooleanArray> {
     per_row_optional_bool(&array.rows, |i| {
-        row_or_missing(
+        row_or_null(
             polygon_self_intersects(&array.get(i)),
             ignore_per_row_errors,
         )
@@ -162,7 +162,7 @@ pub fn polygons_self_intersect(
 }
 
 /// [polygons_self_intersect], as a list per row of a chunk, one per part.
-/// If `ignore_per_row_errors=true`, only the part with a ring that is not one is missing.
+/// If `ignore_per_row_errors=true`, only the part with a ring that is not one is null.
 pub fn multi_polygons_self_intersect(
     array: &MultiPolygonArray,
     ignore_per_row_errors: bool,
@@ -173,6 +173,6 @@ pub fn multi_polygons_self_intersect(
             coords: &array.coords,
             parts: array.polygons.range(part),
         };
-        row_or_missing(polygon_self_intersects(&polygon), ignore_per_row_errors)
+        row_or_null(polygon_self_intersects(&polygon), ignore_per_row_errors)
     })
 }

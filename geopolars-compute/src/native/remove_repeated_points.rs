@@ -3,7 +3,7 @@
 //!
 //! Every kernel copies the kept coordinates once, a run of them at a time.
 //! No part is ever removed, so only the innermost list level gets new offsets.
-//! A missing row is processed like any other, as its value is masked anyway.
+//! A null row is processed like any other, as its value is masked anyway.
 //! A linestring or ring left with fewer than [min_vertices](Lists::min_vertices) vertices is too short.
 //! [TooShort] says what happens to it.
 //!
@@ -99,7 +99,7 @@ fn kept_or_too_short(
             runs.truncate(first_run);
             Some(0)
         }
-        TooShort::Invalid => {
+        TooShort::Null => {
             runs.truncate(first_run);
             None
         }
@@ -112,7 +112,7 @@ fn kept_or_too_short(
 /// Unless `lists` is [Lists::Points], the last vertex is always kept.
 /// If it coincides with the one kept before it, that one is dropped instead, unless it is the first.
 /// A [too short](Lists::min_vertices) list keeps nothing, unless [TooShort::Keep].
-/// With [TooShort::Invalid], it returns `None`, as soon as it is clear the list will be too short.
+/// With [TooShort::Null], it returns `None`, as soon as it is clear the list will be too short.
 #[inline(always)]
 fn push_kept_runs<const TOLERANCE_COINCIDENCE: bool, const UNIQUE_Z: bool, const UNIQUE_M: bool>(
     coords: &ValidCoords,
@@ -168,7 +168,7 @@ fn push_kept_runs<const TOLERANCE_COINCIDENCE: bool, const UNIQUE_Z: bool, const
 }
 
 /// The offsets of what each of `lists` keeps by [push_kept_runs], and the coordinates it keeps.
-/// Last, the lists that are too short with [TooShort::Invalid], which keep none.
+/// Last, the lists that are too short with [TooShort::Null], which keep none.
 fn without_repeated_vertices<
     const TOLERANCE_COINCIDENCE: bool,
     const UNIQUE_Z: bool,

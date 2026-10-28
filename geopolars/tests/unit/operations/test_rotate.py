@@ -181,7 +181,7 @@ def test_every_vertex_of_every_ring_turns(
     )
 
 
-def test_keeps_empty_and_missing_linestrings(dimension: Dimension) -> None:
+def test_keeps_empty_and_null_linestrings(dimension: Dimension) -> None:
     df = pl.DataFrame(
         {"vertices": [[], None]},
         schema={
@@ -288,7 +288,7 @@ def test_a_slice_turns_about_its_own_origins(ring_coords: pl.DataFrame) -> None:
     )
 
 
-def test_a_missing_origin_gives_a_missing_geometry(
+def test_a_null_origin_gives_a_null_geometry(
     ring_coords: pl.DataFrame, dimension: Dimension
 ) -> None:
     df = dimension.polygons(ring_coords).with_columns(
@@ -303,7 +303,7 @@ def test_a_missing_origin_gives_a_missing_geometry(
     )
 
 
-def test_a_missing_origin_gives_a_missing_point(coords: pl.DataFrame) -> None:
+def test_a_null_origin_gives_a_null_point(coords: pl.DataFrame) -> None:
     df = coords.select(
         XY.point(), origin=geo.point(pl.col("x").replace(0.0, None), pl.col("y"))
     )
@@ -312,7 +312,7 @@ def test_a_missing_origin_gives_a_missing_point(coords: pl.DataFrame) -> None:
     assert out["point"].is_null().to_list() == [False, False, True]
 
 
-def test_keeps_empty_and_missing_linestrings_about_a_column() -> None:
+def test_keeps_empty_and_null_linestrings_about_a_column() -> None:
     df = pl.DataFrame(
         {"vertices": [[], None]},
         schema={"vertices": pl.List(pl.Struct(dict.fromkeys(XY.coords, pl.Float64)))},

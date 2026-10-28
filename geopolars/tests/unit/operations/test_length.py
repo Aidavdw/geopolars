@@ -39,7 +39,7 @@ def _rows(line: Line) -> list[dict[str, float]] | None:
 
 
 def _lines(lines: list[Line], crs: str | None = None) -> pl.DataFrame:
-    """A `line` column, with a missing line where it says `None`."""
+    """A `line` column, with a null line where it says `None`."""
     storage = pl.Series("line", [_rows(line) for line in lines], dtype=pl.List(_XY))
     return pl.DataFrame(storage.ext.to(LineStringXY(crs=crs)))
 
@@ -180,7 +180,7 @@ def test_without_ignore_nan_a_nan_vertex_makes_the_length_nan() -> None:
 
 
 @pytest.mark.parametrize("crs", [None, WGS84], ids=["planar", "geodesic"])
-def test_a_missing_line_has_no_length(crs: str | None) -> None:
+def test_a_null_line_has_no_length(crs: str | None) -> None:
     df = _lines([[(0.0, 0.0), (3.0, 4.0)], None], crs=crs)
 
     assert _lengths(df)[1] is None

@@ -41,7 +41,7 @@ fn has_no_points<const CHECK_NESTED: bool>(coords: &ValidCoords, vertices: Range
 
 pub fn points_are_empty(array: &PointArray) -> BooleanArray {
     let coords = array.coords.ignoring_validity();
-    // A missing point is tested too: its value is masked by the validity.
+    // A null point is tested too, but its value is masked by the validity.
     let values = Bitmap::from_iter((0..coords.len()).map(|i| is_empty_point(coords, i)));
     BooleanArray::new(
         ArrowDataType::Boolean,

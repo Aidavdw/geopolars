@@ -26,7 +26,7 @@ use crate::geoarrow::{describe, Kind};
 enum OutOfBoundsActionDef {
     SetEmpty,
     Drop,
-    SetInvalid,
+    SetNull,
     Clamp,
 }
 

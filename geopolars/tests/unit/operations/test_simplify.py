@@ -88,7 +88,7 @@ def test_a_tolerance_of_zero_keeps_every_vertex() -> None:
         (MultiPolygonXY, [[_DENTED]], [[_SQUARE]]),
     ],
 )
-def test_a_missing_or_empty_geometry_stays_so(
+def test_a_null_or_empty_geometry_stays_so(
     preserve_topology: bool,
     dtype: type[GeoArrowType],
     geometry: list,
@@ -137,7 +137,7 @@ def test_a_polygon_cut_in_two_raises() -> None:
         _simplified(df, 1.0)
 
 
-def test_a_polygon_cut_in_two_is_missing_when_ignoring_errors() -> None:
+def test_a_polygon_cut_in_two_is_null_when_ignoring_errors() -> None:
     df = _column(PolygonXY, [_CUT_BY_NOTCH], [_DENTED])
 
     simplified = _simplified(df, 1.0, ignore_per_row_errors=True)
@@ -251,7 +251,7 @@ def test_a_geometry_geos_fails_on_raises() -> None:
         _simplified(df, 0.5)
 
 
-def test_a_geometry_geos_fails_on_is_missing_when_ignoring_errors() -> None:
+def test_a_geometry_geos_fails_on_is_null_when_ignoring_errors() -> None:
     df = _column(LineStringXY, _line((1, 1)), _ZIGZAG)
 
     assert _simplified(df, 0.5, ignore_per_row_errors=True) == [None, _STRAIGHT]

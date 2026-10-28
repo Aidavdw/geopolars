@@ -162,7 +162,7 @@ def test_a_point_or_line_gets_an_empty_polygon_without_a_positive_distance(
         (MultiPolygonXY, []),
     ],
 )
-def test_a_missing_or_empty_geometry_stays_so(
+def test_a_null_or_empty_geometry_stays_so(
     dtype: type[GeoArrowType], empty: object
 ) -> None:
     assert _buffered(_column(dtype, None, empty), 1.0) == [None, []]
@@ -183,7 +183,7 @@ def test_a_polygon_split_in_two_raises() -> None:
         _buffered(df, -0.5)
 
 
-def test_a_polygon_split_in_two_is_missing_when_ignoring_errors() -> None:
+def test_a_polygon_split_in_two_is_null_when_ignoring_errors() -> None:
     df = _column(PolygonXY, [_DUMBBELL], [_SQUARE])
 
     [split, square] = _buffered(df, -0.5, ignore_per_row_errors=True)
@@ -351,10 +351,10 @@ def test_a_distance_column_gives_every_row_its_own_distance() -> None:
 
     out = df.select(geo.buffer("geom", "d").geo.area_planar())
 
-    [one, two, missing] = out.to_series().to_list()
+    [one, two, null] = out.to_series().to_list()
     assert one == pytest.approx(_inscribed_area(8))
     assert two == pytest.approx(4 * _inscribed_area(8))
-    assert missing is None
+    assert null is None
 
 
 def test_a_distance_series_of_one_value_is_broadcast() -> None:
@@ -409,7 +409,7 @@ def test_a_distance_column_splits_a_polygon_with_allow_splitting() -> None:
         (-1.0, {"side": "left"}, "at least 0"),
     ],
 )
-def test_an_invalid_row_distance_raises_or_is_missing(
+def test_an_invalid_row_distance_raises_or_is_null(
     distance: float, kwargs: dict[str, object], match: str
 ) -> None:
     df = _column(LineStringXY, _SEGMENT, _SEGMENT).with_columns(

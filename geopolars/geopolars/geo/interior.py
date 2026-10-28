@@ -48,7 +48,7 @@ def interior(geometry: IntoExprColumn) -> pl.Expr:
 
     The rings stay closed, as they are stored.
     A polygon without holes, or without any rings, gives an empty multilinestring.
-    A missing polygon gives a missing multilinestring.
+    A null polygon gives a null multilinestring.
 
     ```python
     df.select(geo.interior("parcel"))

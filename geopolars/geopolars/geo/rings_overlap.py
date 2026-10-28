@@ -52,9 +52,9 @@ def rings_overlap(
     Every linestring has to be a ring:
     at least four vertices, the last exactly at the first.
     Anything else, including an empty linestring, raises.
-    With `ignore_per_row_errors=True`, it gives a missing result instead.
+    With `ignore_per_row_errors=True`, it gives a null result instead.
     A ring that is not simple (see `is_simple`) gives no meaningful answer.
-    {missing_ring_input}
+    {null_ring_input}
 
     ```python
     df.filter(~geo.rings_overlap("hole", "other_hole", include_touching=True))

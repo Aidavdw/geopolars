@@ -122,7 +122,7 @@ edge_cases = pl.DataFrame(
             # An empty line is a geometry a linestring can hold, unlike a point.
             [],
             None,
-            # A missing vertex, or a vertex missing a coordinate, takes the
+            # A null vertex, or a vertex with a null coordinate, takes the
             # whole line with it.
             [{"x": 0.0, "y": 0.0}, None],
             [{"x": 0.0, "y": None}],
@@ -221,7 +221,7 @@ print(
 )
 
 print("\nThe exterior and the holes can also come from separate columns.")
-print("A plot without holes gets a missing `holes`, which means none.")
+print("A plot without holes gets a null `holes`, which means none.")
 exteriors = boundaries.filter(ring="outer").select("plot", exterior="boundary")
 holes = boundaries.filter(ring="hole").group_by("plot").agg(holes="boundary")
 separate_plots = exteriors.join(holes, on="plot", how="left").select(

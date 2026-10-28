@@ -48,9 +48,9 @@ def offset_curve(
     (degrees for longitude/latitude).
     It is one number for every geometry,
     or a column (or expression) with one distance per geometry.
-    A missing distance gives a missing linestring.
+    A null distance gives a null linestring.
     A NaN or infinite distance in a column raises.
-    With `ignore_per_row_errors=True`, such a row gives a missing linestring instead.
+    With `ignore_per_row_errors=True`, such a row gives a null linestring instead.
 
     Only linestrings and multilinestrings are accepted.
     The output is always XY:
@@ -61,7 +61,7 @@ def offset_curve(
     | `MultiLineStringXY[Z][M]` | `MultiLineStringXY` | `MultiLineStringXY` |
 
     {computed_by_geos_dropping_z_and_m}
-    {empty_and_missing}
+    {empty_and_null}
     A line without length also gives an empty linestring.
     So does an offset that vanishes,
     such as the inside of a hairpin bend narrower than `distance`.

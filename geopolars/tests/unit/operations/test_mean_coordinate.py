@@ -155,7 +155,7 @@ def test_a_closed_multipoint_keeps_every_point() -> None:
     )
 
 
-def test_an_empty_or_missing_multipoint_has_no_mean_coordinate(
+def test_an_empty_or_null_multipoint_has_no_mean_coordinate(
     dimension: Dimension,
 ) -> None:
     df = pl.DataFrame(
@@ -210,7 +210,7 @@ def test_a_closed_multilinestring_keeps_every_vertex() -> None:
     )
 
 
-def test_an_empty_or_missing_multilinestring_has_no_mean_coordinate(
+def test_an_empty_or_null_multilinestring_has_no_mean_coordinate(
     dimension: Dimension,
 ) -> None:
     df = pl.DataFrame(
@@ -255,7 +255,7 @@ def test_a_multipolygon_of_one_polygon_agrees_with_the_polygon() -> None:
     )
 
 
-def test_an_empty_or_missing_multipolygon_has_no_mean_coordinate(
+def test_an_empty_or_null_multipolygon_has_no_mean_coordinate(
     dimension: Dimension,
 ) -> None:
     df = pl.DataFrame(
@@ -317,7 +317,7 @@ def test_m_is_averaged_like_any_other_coordinate(line_coords: pl.DataFrame) -> N
     )
 
 
-def test_an_empty_or_missing_linestring_has_no_mean_coordinate(
+def test_an_empty_or_null_linestring_has_no_mean_coordinate(
     dimension: Dimension,
 ) -> None:
     """A geometry with no coordinates has no mean coordinate, and a null
@@ -335,7 +335,7 @@ def test_an_empty_or_missing_linestring_has_no_mean_coordinate(
     assert out["line"].is_null().to_list() == [True, True]
 
 
-def test_an_empty_or_missing_polygon_has_no_mean_coordinate(
+def test_an_empty_or_null_polygon_has_no_mean_coordinate(
     dimension: Dimension,
 ) -> None:
     """A polygon with no rings, or with nothing but empty ones, has no
@@ -354,7 +354,7 @@ def test_an_empty_or_missing_polygon_has_no_mean_coordinate(
     assert out["polygon"].is_null().to_list() == [True, True, True]
 
 
-def test_a_missing_point_has_no_mean_coordinate() -> None:
+def test_a_null_point_has_no_mean_coordinate() -> None:
     df = pl.DataFrame({"x": [None, 1.0], "y": [2.0, 2.0]}).select(
         geo.point("x", "y").alias("point")
     )
@@ -364,8 +364,8 @@ def test_a_missing_point_has_no_mean_coordinate() -> None:
     assert out["point"].is_null().to_list() == [True, False]
 
 
-def test_a_missing_coordinate_takes_the_whole_mean_with_it() -> None:
-    """The constructors do not let a vertex go missing, so this goes around
+def test_a_null_coordinate_takes_the_whole_mean_with_it() -> None:
+    """The constructors do not let a vertex become null, so this goes around
     them. Averaging what is left would hand back the mean coordinate of a
     geometry that is not there, which is what `null_out_invalid_geoarrow` is there to prevent."""
     df = pl.DataFrame(

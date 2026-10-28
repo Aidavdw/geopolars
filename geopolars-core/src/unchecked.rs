@@ -1,4 +1,4 @@
-//! A view over storage that might not hold to GeoArrow's rule on missing values:
+//! A view over storage that might not hold to GeoArrow's rule on null values:
 //! nulls only at the outermost level.
 //! This is the one place that reads validity below the rows.
 
@@ -8,13 +8,13 @@ use polars_core::prelude::PolarsResult;
 
 use crate::{downcast, AxisArrays, Coords, List, ValidCoords};
 
-/// A chunk of storage as it comes from Polars, which might have missing values below the rows.
-/// Use it only to move the missing values below the rows out to the rows
+/// A chunk of storage as it comes from Polars, which might have null values below the rows.
+/// Use it only to move the null values below the rows out to the rows
 /// (see `inner_nulls` in geopolars-compute).
 pub struct UncheckedStorage {
     /// The list levels above the coordinates, outermost first. Empty for points.
     pub lists: Vec<List>,
-    /// Missing where the coordinate struct is, or one of its axes.
+    /// Null where the coordinate struct is, or one of its axes.
     pub coords: Coords,
 }
 
@@ -29,7 +29,7 @@ impl UncheckedStorage {
 
         let coords: &StructArray = downcast(level, "a coordinate struct")?;
         let axes = AxisArrays::new(coords)?;
-        // Polars also nulls every axis under a missing coordinate, which changes nothing here.
+        // Polars also nulls every axis under a null coordinate, which changes nothing here.
         let validity = [Some(axes.x), Some(axes.y), axes.z, axes.m]
             .into_iter()
             .flatten()

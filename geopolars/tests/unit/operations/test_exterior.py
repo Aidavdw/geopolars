@@ -51,7 +51,7 @@ def test_the_exterior_is_the_first_ring_without_its_holes() -> None:
     ]
 
 
-def test_a_missing_or_empty_polygon() -> None:
+def test_a_null_or_empty_polygon() -> None:
     assert _rings(_polygons(None, [], [_SQUARE]), "polygon") == [None, [], _SQUARE]
 
 
@@ -122,7 +122,7 @@ def test_the_namespace_matches_the_function() -> None:
     )
 
 
-def test_a_missing_multipolygon_leaves_no_null_inside_the_exteriors() -> None:
+def test_a_null_multipolygon_leaves_no_null_inside_the_exteriors() -> None:
     """GeoArrow allows nulls only at the outermost level.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = _multipolygons([[_SQUARE], []], None)

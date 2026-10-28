@@ -65,11 +65,11 @@ def convex_hull(
     | `MultiPolygonXYZ[M]` | `PolygonXYZ` |
 
     {computed_by_geos_keeping_z}
-    {empty_and_missing}
+    {empty_and_null}
     One that encloses nothing (all its vertices on one point or one line,
     such as a straight linestring, or a multipoint of one or two points)
     has a point or a line for a hull,
-    so it gives a missing polygon.
+    so it gives a null polygon.
 
     CRS is ignored:
     for longitude/latitude the hull's edges are straight in degrees, not along the globe.
@@ -79,7 +79,7 @@ def convex_hull(
 
     {geos_non_finite}
     Depending on where such a vertex sits, it is left out of the hull,
-    the polygon is missing, or GEOS raises.
+    the polygon is null, or GEOS raises.
     {early_finite_check}
 
     {ccw_outer}

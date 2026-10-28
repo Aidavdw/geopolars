@@ -27,7 +27,7 @@ def has_repeated_points(
     unique_m: bool = False,
 ) -> pl.Expr:
     """Whether each geometry has two points that lie at the same place.
-    One `bool` per row, a multi-geometry included. A missing geometry gives a missing result.
+    One `bool` per row, a multi-geometry included. A null geometry gives a null result.
 
     The geometries have to be valid by `is_valid_geoarrow` already. This trusts its input.
 

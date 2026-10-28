@@ -83,7 +83,7 @@ def test_integer_bounds_are_accepted() -> None:
     assert _storage(df).row(0) == (1.0, 2.0, 3.0, 4.0)
 
 
-def test_a_missing_bound_invalidates_the_whole_box() -> None:
+def test_a_null_bound_nulls_the_whole_box() -> None:
     """See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {

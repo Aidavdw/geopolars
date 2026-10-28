@@ -117,7 +117,7 @@ def test_a_split_line_raises() -> None:
         _offset(_column(LineStringXY, _CROSSING), -1.0)
 
 
-def test_a_split_line_is_missing_when_ignoring_errors() -> None:
+def test_a_split_line_is_null_when_ignoring_errors() -> None:
     df = _column(LineStringXY, _CROSSING, _SEGMENT)
 
     [split, segment] = _offset(df, -1.0, ignore_per_row_errors=True)
@@ -144,7 +144,7 @@ def test_every_part_of_a_multilinestring_gets_its_curve() -> None:
 @pytest.mark.parametrize(
     ("dtype", "empty"), [(LineStringXY, []), (MultiLineStringXY, [])]
 )
-def test_a_missing_or_empty_geometry_stays_so(
+def test_a_null_or_empty_geometry_stays_so(
     dtype: type[GeoArrowType], empty: object
 ) -> None:
     assert _offset(_column(dtype, None, empty), 1.0) == [None, []]
@@ -159,14 +159,14 @@ def test_a_distance_column_gives_every_row_its_own_distance() -> None:
         d=pl.Series([1.0, -2.0, None])
     )
 
-    [left, right, missing] = _offset(df, "d")
+    [left, right, null] = _offset(df, "d")
 
     assert left == _line((0, 1), (4, 1))
     assert right == _line((0, -2), (4, -2))
-    assert missing is None
+    assert null is None
 
 
-def test_a_non_finite_row_distance_raises_or_is_missing() -> None:
+def test_a_non_finite_row_distance_raises_or_is_null() -> None:
     df = _column(LineStringXY, _SEGMENT, _SEGMENT).with_columns(
         d=pl.Series([math.nan, 1.0])
     )

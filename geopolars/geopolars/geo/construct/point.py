@@ -56,7 +56,7 @@ def point(
     # No plugin call is needed:
     # the coordinates are never copied or crossed over FFI.
     #
-    # Missing coordinate must invalidate the entire point.
+    # Null coordinate must null the entire point.
     # https://geoarrow.org/format.html#missing-values-null
     # TODO: The spec can be interpreted as saying that 'm' may also not be null.
     # That really limits usability, no?

@@ -102,7 +102,7 @@ impl Drop for Transformation {
 }
 
 /// For a column of points.
-/// A missing point is never handed to PROJ, and keeps its coordinates.
+/// A null point is never handed to PROJ, and keeps its coordinates.
 pub fn reproject_coords(
     transformation: &Transformation,
     coords: &Coords,
@@ -121,7 +121,7 @@ pub fn reproject_coords(
     Ok(Coords::from_valid(axes, coords.validity().cloned()))
 }
 
-/// [`reproject_coords`], for the coordinates of a nested kind, which are never missing.
+/// [`reproject_coords`], for the coordinates of a nested kind, which are never null.
 pub fn reproject_valid_coords(
     transformation: &Transformation,
     coords: &ValidCoords,

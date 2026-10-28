@@ -141,7 +141,7 @@ impl GeosGeometries {
     /// Our polygon array of the geometries, one row each.
     /// Every GEOS geometry is freed once it is copied.
     /// A geometry that is not a polygon is an error.
-    /// If `ignore_per_row_errors=true`, its row is missing instead.
+    /// If `ignore_per_row_errors=true`, its row is null instead.
     pub fn into_polygon_array(
         self,
         z: bool,
@@ -183,7 +183,7 @@ fn into_multi_polygon_array_with<const Z: bool, const REVERSED: bool>(
     let mut rows = OffsetsBuilder::with_capacity(geometries.geometries.len());
     for geometry in geometries.geometries {
         let is_valid = match geometry {
-            GeosRow::Missing => false,
+            GeosRow::Null => false,
             GeosRow::Empty => true,
             GeosRow::Geometry(geometry) => match geometry.geometry_type()? {
                 GeometryTypes::Polygon if geometry.is_empty()? => true,
@@ -228,7 +228,7 @@ fn into_polygon_array_with<const Z: bool, const REVERSED: bool>(
     let mut rows = OffsetsBuilder::with_capacity(geometries.geometries.len());
     for geometry in geometries.geometries {
         let is_valid = match geometry {
-            GeosRow::Missing => false,
+            GeosRow::Null => false,
             GeosRow::Empty => true,
             GeosRow::Geometry(polygon) => match polygon.geometry_type()? {
                 GeometryTypes::Polygon => {

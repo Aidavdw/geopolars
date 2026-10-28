@@ -47,7 +47,7 @@ def exterior(geometry: IntoExprColumn) -> pl.Expr:
     | `MultiPolygonXY[ZM]` | `list[LineStringXY[ZM]]` |
 
     A polygon without rings gives an empty linestring.
-    A missing polygon gives a missing linestring.
+    A null polygon gives a null linestring.
 
     ```python
     df.select(geo.exterior("parcel"))

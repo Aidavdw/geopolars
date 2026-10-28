@@ -95,7 +95,7 @@ def test_abs_tol_lets_a_moved_geometry_be_close(kind: str) -> None:
 
 
 @pytest.mark.parametrize("kind", _KINDS)
-def test_a_missing_geometry_gives_a_missing_result(kind: str) -> None:
+def test_a_null_geometry_gives_a_null_result(kind: str) -> None:
     dtype, same, _, _ = _KINDS[kind]
 
     assert _is_close(dtype, [same, None, same], [same, same, None]) == [
@@ -126,7 +126,7 @@ def test_a_single_geometry_is_compared_against_every_row(kind: str) -> None:
     ]
 
 
-def test_against_a_single_missing_geometry_everything_is_missing() -> None:
+def test_against_a_single_null_geometry_everything_is_null() -> None:
     many = _series("many", PointXY(), [_LINE[0], _LINE[1]])
     one = _series("one", PointXY(), [None])
 

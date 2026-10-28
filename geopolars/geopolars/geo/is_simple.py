@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 def is_simple(geometry: IntoExprColumn) -> pl.Expr:
     """Whether each geometry is simple by OGC Simple Features, as GEOS's (and shapely's) `is_simple` has it.
-    One `bool` per row, a multi-geometry included. A missing geometry gives a missing result.
+    One `bool` per row, a multi-geometry included. A null geometry gives a null result.
 
     A simple geometry does not cross or touch itself
     (<https://docs.ogc.org/is/06-103r4/06-103r4.pdf>, sections 6.1.4 to 6.1.8).

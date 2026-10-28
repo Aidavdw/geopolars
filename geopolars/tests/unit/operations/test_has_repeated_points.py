@@ -137,7 +137,7 @@ def test_a_multi_geometry_is_repeated_when_a_part_is(
 @pytest.mark.parametrize(
     "dtype", [PointXY(), LineStringXY(), PolygonXY(), MultiPolygonXY()]
 )
-def test_a_missing_geometry_gives_a_missing_result(dtype: GeoArrowType) -> None:
+def test_a_null_geometry_gives_a_null_result(dtype: GeoArrowType) -> None:
     assert _has_repeated_points(dtype, None) == [None]
 
 

@@ -87,7 +87,7 @@ def length(
     unless `ignore_nan` is set: then it is skipped, and the line runs on to the next vertex.
 
     An empty linestring, or one of a single vertex, has a length of `0.0`.
-    A missing geometry has no length.
+    A null geometry has no length.
     Every other geometry (points, polygons and their multi forms)
     is refused while the plan is built,
     unless `allow_non_lines` is set: then each of them gets `0.0`

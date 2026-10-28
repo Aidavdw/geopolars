@@ -1,4 +1,4 @@
-//! Emptying, dropping or invalidating the coordinates that are not finite, or empty,
+//! Emptying, dropping or nulling the coordinates that are not finite, or empty,
 //! through `geopolars_compute::native::*_with_filtered_coordinates`.
 //! See `filter_coordinates` in Python for the rules.
 
@@ -26,7 +26,7 @@ use crate::geoarrow::{describe, Kind};
 enum SelectedActionDef {
     SetEmpty,
     Drop,
-    SetInvalid,
+    SetNull,
 }
 
 /// See python

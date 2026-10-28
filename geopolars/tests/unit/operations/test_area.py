@@ -138,7 +138,7 @@ def test_an_empty_polygon_encloses_nothing(planar_area: Area) -> None:
     assert _areas(planar_area, _rings([])) == [0.0]
 
 
-def test_a_missing_polygon_has_no_area(planar_area: Area) -> None:
+def test_a_null_polygon_has_no_area(planar_area: Area) -> None:
     df = pl.DataFrame({"polygon": [[_SQUARE], None]}, schema={"polygon": _XY_RINGS})
 
     df = df.select(pl.col("polygon").ext.to(PolygonXY()))
@@ -305,7 +305,7 @@ def test_with_a_crs_z_and_m_are_left_out(
     assert got == flat
 
 
-def test_with_a_crs_a_missing_polygon_has_no_area(geodesic_area: Area) -> None:
+def test_with_a_crs_a_null_polygon_has_no_area(geodesic_area: Area) -> None:
     df = pl.DataFrame(
         {"polygon": [[_DEGREE_SQUARE], None]}, schema={"polygon": _XY_RINGS}
     )

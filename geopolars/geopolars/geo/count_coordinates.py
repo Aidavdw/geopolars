@@ -47,7 +47,7 @@ def count_coordinates(
 
     With `include_empty=True`, an empty point (NaN `x` and `y`) counts like any other.
     This skips a ring's last coordinate, as this repeats its first.
-    A geometry without coordinates counts `0`; a missing geometry gives null.
+    A geometry without coordinates counts `0`; a null geometry gives null.
 
     ```python
     df.select(geo.count_coordinates("parcel"))

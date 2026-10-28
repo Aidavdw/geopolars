@@ -121,7 +121,7 @@ def translate(geometry: IntoExprColumn, offset: Offset | IntoExprColumn) -> pl.E
     df.select(geo.translate("shape", "offset"))
     ```
 
-    A geometry with a missing offset comes out missing.
+    A geometry with a null offset comes out null.
     A `dz` is rejected for a geometry with no `z` rather than silently ignored:
     a number when it is not 0, and a column or a point with a `z` always,
     as whether that is 0 everywhere is not known in advance.

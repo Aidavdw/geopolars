@@ -35,7 +35,7 @@ use crate::geoarrow::{describe, Kind};
 #[serde(default, deny_unknown_fields)]
 pub struct IsValidGeoArrowKwargs {
     bounds: Option<Bounds>,
-    check_missing_coordinates: bool,
+    check_null_coordinates: bool,
     check_finite_coordinates: bool,
 }
 
@@ -43,7 +43,7 @@ impl Default for IsValidGeoArrowKwargs {
     fn default() -> Self {
         Self {
             bounds: None,
-            check_missing_coordinates: true,
+            check_null_coordinates: true,
             check_finite_coordinates: false,
         }
     }
@@ -54,7 +54,7 @@ impl Default for IsValidGeoArrowKwargs {
 #[serde(default, deny_unknown_fields)]
 pub struct IsValidOgcKwargs {
     bounds: Option<Bounds>,
-    check_missing_coordinates: bool,
+    check_null_coordinates: bool,
     check_ring_self_intersect: bool,
     check_polygon_self_overlap: bool,
     check_multi_polygon_self_overlap: bool,
@@ -64,7 +64,7 @@ impl Default for IsValidOgcKwargs {
     fn default() -> Self {
         Self {
             bounds: None,
-            check_missing_coordinates: true,
+            check_null_coordinates: true,
             check_ring_self_intersect: true,
             check_polygon_self_overlap: true,
             check_multi_polygon_self_overlap: true,
@@ -99,15 +99,15 @@ fn compute_err(e: impl std::fmt::Display) -> PolarsError {
 
 /// [`are_valid`] for one chunk of the storage of a `kind`.
 ///
-/// If `check_missing_coordinates=true`, every missing value below a row is first moved out to the row
+/// If `check_null_coordinates=true`, every null value below a row is first moved out to the row
 /// (see [geopolars_compute::inner_nulls]), so that the views can trust the rest.
 fn chunk_is_valid(
     chunk: &dyn Array,
     kind: Kind,
-    check_missing_coordinates: bool,
+    check_null_coordinates: bool,
     validity: &Validity,
 ) -> PolarsResult<BooleanArray> {
-    let propagate = check_missing_coordinates;
+    let propagate = check_null_coordinates;
     let unchecked = || UncheckedStorage::new(chunk);
     let rows = || downcast::<ListArray<i64>>(chunk, "a list of parts");
 
@@ -184,14 +184,14 @@ fn chunk_is_valid(
             }
         }
     };
-    // A missing row stays missing, and an incomplete one is invalid:
+    // A null row stays null, and an incomplete one is invalid:
     // both are `false` in `valid`'s values.
     Ok(valid.with_validity(chunk.validity().cloned()))
 }
 
 fn are_valid(
     geometries: &Series,
-    check_missing_coordinates: bool,
+    check_null_coordinates: bool,
     validity: &Validity,
 ) -> PolarsResult<BooleanChunked> {
     let kind = describe(geometries.dtype())?.kind;
@@ -199,7 +199,7 @@ fn are_valid(
     let chunks = storage
         .chunks()
         .iter()
-        .map(|chunk| chunk_is_valid(chunk.as_ref(), kind, check_missing_coordinates, validity));
+        .map(|chunk| chunk_is_valid(chunk.as_ref(), kind, check_null_coordinates, validity));
     BooleanChunked::try_from_chunk_iter(geometries.name().clone(), chunks)
 }
 
@@ -214,7 +214,7 @@ fn are_valid_geoarrow(
     };
     are_valid(
         geometries,
-        kwargs.check_missing_coordinates,
+        kwargs.check_null_coordinates,
         &Validity::GeoArrow(checks),
     )
 }
@@ -224,7 +224,7 @@ fn are_valid_ogc(geometries: &Series, kwargs: &IsValidOgcKwargs) -> PolarsResult
         bounds: kwargs.bounds,
         topology: kwargs.topology(),
     };
-    are_valid(geometries, kwargs.check_missing_coordinates, &validity)
+    are_valid(geometries, kwargs.check_null_coordinates, &validity)
 }
 
 /// For [`is_valid_geoarrow`] and [`is_valid_ogc`]: a `bool` per geometry.
@@ -246,8 +246,8 @@ fn is_valid_ogc(inputs: &[Series], kwargs: IsValidOgcKwargs) -> PolarsResult<Ser
     Ok(are_valid_ogc(&inputs[0], &kwargs)?.into_series())
 }
 
-/// `geometries`, missing where `keep` is `false`.
-/// `keep`'s values alone say what stays: a missing row has to be `false` in them.
+/// `geometries`, null where `keep` is `false`.
+/// `keep`'s values alone say what stays: a null row has to be `false` in them.
 /// On a column where every row stays, it copies nothing.
 fn keep_rows(geometries: &Series, keep: &BooleanChunked) -> PolarsResult<Series> {
     if keep.all() {
@@ -274,13 +274,13 @@ fn null_out_invalid_geoarrow(
     inputs: &[Series],
     kwargs: IsValidGeoArrowKwargs,
 ) -> PolarsResult<Series> {
-    // A missing row is `false` in the values.
+    // A null row is `false` in the values.
     keep_rows(&inputs[0], &are_valid_geoarrow(&inputs[0], &kwargs)?)
 }
 
 /// See `null_out_invalid_ogc`.
 #[polars_expr(output_type_func=kernel_output_type_same_geometry)]
 fn null_out_invalid_ogc(inputs: &[Series], kwargs: IsValidOgcKwargs) -> PolarsResult<Series> {
-    // A missing row is `false` in the values.
+    // A null row is `false` in the values.
     keep_rows(&inputs[0], &are_valid_ogc(&inputs[0], &kwargs)?)
 }

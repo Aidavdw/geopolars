@@ -81,11 +81,11 @@ def test_a_concave_polygon_loses_its_notch() -> None:
     assert _hulls(_polygons([_NOTCHED])) == [[_HULL]]
 
 
-def test_a_missing_or_empty_polygon() -> None:
+def test_a_null_or_empty_polygon() -> None:
     assert _hulls(_polygons(None, [], [_NOTCHED])) == [None, [], [_HULL]]
 
 
-def test_a_polygon_that_encloses_nothing_gives_a_missing_hull() -> None:
+def test_a_polygon_that_encloses_nothing_gives_a_null_hull() -> None:
     assert _hulls(_polygons([_ALONG_A_LINE], [_NOTCHED])) == [None, [_HULL]]
 
 
@@ -161,13 +161,13 @@ def test_a_multipoint_is_hulled_around_its_outer_points() -> None:
     assert _hulls(df) == [[_HULL]]
 
 
-def test_a_missing_or_empty_multipoint() -> None:
+def test_a_null_or_empty_multipoint() -> None:
     square = _line((0, 0), (4, 0), (4, 4), (0, 4))
 
     assert _hulls(_multipoints(None, [], square)) == [None, [], [_HULL]]
 
 
-def test_one_or_two_points_give_a_missing_hull() -> None:
+def test_one_or_two_points_give_a_null_hull() -> None:
     square = _line((0, 0), (4, 0), (4, 4), (0, 4))
 
     hulls = _hulls(_multipoints(_line((1, 1)), _line((0, 0), (1, 1)), square))
@@ -185,13 +185,13 @@ def test_a_bent_linestring_is_closed_around() -> None:
     assert _hulls(df) == [[_HULL]]
 
 
-def test_a_missing_or_empty_linestring() -> None:
+def test_a_null_or_empty_linestring() -> None:
     bent = _line((0, 0), (4, 0), (4, 4), (0, 4))
 
     assert _hulls(_lines(None, [], bent)) == [None, [], [_HULL]]
 
 
-def test_a_straight_linestring_gives_a_missing_hull() -> None:
+def test_a_straight_linestring_gives_a_null_hull() -> None:
     straight = _line((0, 0), (1, 0), (2, 0))
     single = _line((1, 1))
     bent = _line((0, 0), (4, 0), (4, 4), (0, 4))
@@ -221,11 +221,11 @@ def test_a_multipolygon_gets_one_hull_of_the_whole() -> None:
     assert _hulls(df) == [[_ring((0, 0), (0, 1), (4, 1), (4, 0))]]
 
 
-def test_a_missing_or_empty_multipolygon() -> None:
+def test_a_null_or_empty_multipolygon() -> None:
     assert _hulls(_multipolygons(None, [], [[_NOTCHED]])) == [None, [], [_HULL]]
 
 
-def test_a_multipolygon_that_encloses_nothing_gives_a_missing_hull() -> None:
+def test_a_multipolygon_that_encloses_nothing_gives_a_null_hull() -> None:
     flat = [[_ALONG_A_LINE], [_ring((3, 0), (4, 0), (5, 0))]]
 
     assert _hulls(_multipolygons(flat, [[_NOTCHED]])) == [None, [_HULL]]
@@ -250,7 +250,7 @@ def test_a_geometry_geos_fails_on_raises_by_default() -> None:
         df.select(geo.convex_hull("polygon"))
 
 
-def test_ignore_per_row_errors_gives_a_missing_hull() -> None:
+def test_ignore_per_row_errors_gives_a_null_hull() -> None:
     df = _lines(_HALF_NAN, _line((0, 0), (4, 0), (4, 4), (0, 4)))
 
     hulls = (

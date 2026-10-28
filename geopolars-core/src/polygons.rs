@@ -53,7 +53,7 @@ impl PolygonArray {
         list_array(rings.boxed(), rows, validity)
     }
 
-    /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
+    /// Row `i`. A null row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
     pub fn get(&self, i: usize) -> ScalarPolygon<'_> {
         ScalarPolygon {
@@ -114,7 +114,7 @@ impl MultiPolygonArray {
         list_array(polygons.boxed(), rows, validity)
     }
 
-    /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
+    /// Row `i`. A null row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
     pub fn get(&self, i: usize) -> ScalarMultiPolygon<'_> {
         ScalarMultiPolygon {

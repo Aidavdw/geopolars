@@ -23,7 +23,7 @@ CrsBounds = Literal[
     "area_of_use",
     "area_of_use_wrapped_longitude",
 ]
-OutOfBoundsAction = Literal["set_empty", "drop", "set_invalid", "clamp"]
+OutOfBoundsAction = Literal["set_empty", "drop", "set_null", "clamp"]
 
 # What each `crs_bounds` asks of `_crs_bounds`, as
 # `(allow_wrapped_longitude, within_area_of_use)`.
@@ -44,7 +44,7 @@ class OutOfBounds:
 
     crs_bounds: CrsBounds = "crs"
     action: OutOfBoundsAction = "drop"
-    too_short: TooShort = "invalid"
+    too_short: TooShort = "null"
 
     def __post_init__(self) -> None:
         for name, allowed in [
@@ -96,9 +96,9 @@ def fix_out_of_bounds(
     *,
     crs_bounds: CrsBounds = "crs",
     action: OutOfBoundsAction = "drop",
-    too_short: TooShort = "invalid",
+    too_short: TooShort = "null",
 ) -> pl.Expr:
-    """Drops, empties, invalidates or clamps the coordinates that lie outside the bounds of the CRS.
+    """Drops, empties, nulls or clamps the coordinates that lie outside the bounds of the CRS.
     {repairing_function}
 
     `crs_bounds` says which bounds the coordinates have to lie in.

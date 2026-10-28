@@ -17,7 +17,7 @@ use polars_arrow::datatypes::ArrowDataType;
 use super::polygons::polygon_enclosed_by_ring_to_geos;
 use super::{axes, xy_is_finite_or_error};
 use crate::per_row::per_row_optional_bool;
-use crate::{row_or_missing, GeoComputeError, GeoComputeResult};
+use crate::{row_or_null, GeoComputeError, GeoComputeResult};
 
 /// Their interiors share no area.
 const INTERIORS_DISJOINT: &str = "F********";
@@ -80,8 +80,8 @@ fn ring_pair_overlaps<const TOUCHING: bool>(
 }
 
 /// Whether the rings of `a` and `b`, which have the same length, overlap row by row.
-/// A row is missing where either ring is, or where one of them is not finite in x or y.
-/// If `ignore_per_row_errors=true`, a row where one of them is not a ring is missing too;
+/// A row is null where either ring is, or where one of them is not finite in x or y.
+/// If `ignore_per_row_errors=true`, a row where one of them is not a ring is null too;
 /// otherwise that is the error.
 pub fn rings_overlap_pairwise<const TOUCHING: bool>(
     a: &LineStringArray,
@@ -94,7 +94,7 @@ pub fn rings_overlap_pairwise<const TOUCHING: bool>(
         .clone()
         .with_validity(combine_validities_and(a.rows.validity(), b.rows.validity()));
     per_row_optional_bool(&rows, |i| {
-        row_or_missing(
+        row_or_null(
             ring_pair_overlaps::<TOUCHING>(&a.get(i), &b.get(i)),
             ignore_per_row_errors,
         )
@@ -110,7 +110,7 @@ pub fn rings_overlap_against_one<const TOUCHING: bool>(
     many: &LineStringArray,
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<BooleanArray> {
-    let Some(one) = row_or_missing(polygon_enclosed_by_finite_ring(one), ignore_per_row_errors)?
+    let Some(one) = row_or_null(polygon_enclosed_by_finite_ring(one), ignore_per_row_errors)?
     else {
         return Ok(BooleanArray::new_null(
             ArrowDataType::Boolean,
@@ -119,7 +119,7 @@ pub fn rings_overlap_against_one<const TOUCHING: bool>(
     };
     let one = PreparedGeometry::new(&one)?;
     per_row_optional_bool(&many.rows, |i| {
-        let ring = row_or_missing(
+        let ring = row_or_null(
             polygon_enclosed_by_finite_ring(&many.get(i)),
             ignore_per_row_errors,
         )?;

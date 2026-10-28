@@ -19,8 +19,8 @@
 //! ## `ALL_VALID`
 //!
 //! The loops over the rows of a list array are generic over `ALL_VALID`.
-//! It is set when no row is missing ([`List::is_all_valid`]).
-//! If `ALL_VALID=true`, every row is there, so none is checked for being missing.
+//! It is set when no row is null ([`List::is_all_valid`]).
+//! If `ALL_VALID=true`, every row is there, so none is checked for being null.
 //!
 //! ## `Z`
 //!
@@ -74,7 +74,7 @@ use geos::{CoordSeq, CoordType, Geom, Geometry, GeometryTypes};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
 use polars_arrow::offset::{Offsets, OffsetsBuffer};
 
-use crate::{row_or_missing, GeoComputeError, GeoComputeResult};
+use crate::{row_or_null, GeoComputeError, GeoComputeResult};
 
 /// Converts a single geometry into a GEOS geometry.
 /// For an array, see [`ToGeosRows`].
@@ -85,10 +85,10 @@ pub trait ToGeos {
 }
 
 /// Converts an array into one [`GeosRow`] per row.
-/// A missing row is `Missing`.
+/// A null row is `Null`.
 /// A row without parts is `Empty`, so it never goes to GEOS.
 /// The size hint is the size of the array itself.
-/// If `ignore_per_row_errors=true`, a row GEOS fails to build is missing too;
+/// If `ignore_per_row_errors=true`, a row GEOS fails to build is null too;
 /// otherwise its error is returned.
 pub trait ToGeosRows {
     fn to_geos_rows(
@@ -107,7 +107,7 @@ fn coord_type(dim: GeoDimension) -> CoordType {
     }
 }
 
-/// `None` if the point is empty (missing).
+/// `None` if the point is empty (null).
 impl ToGeos for ScalarPoint<'_> {
     type Geos = Option<Geometry>;
 
@@ -153,7 +153,7 @@ fn points_to_geos<const EARLY_FINITE_CHECK: bool>(
     let mut geometries = Vec::with_capacity(coords.len());
     for i in 0..coords.len() {
         let point = point_to_geos::<EARLY_FINITE_CHECK>(coords, i, len, coord_type);
-        geometries.push(row_or_missing(point, ignore_per_row_errors)?.into());
+        geometries.push(row_or_null(point, ignore_per_row_errors)?.into());
     }
     Ok(geometries)
 }
@@ -193,7 +193,7 @@ fn multi_point_to_geos(axes: &Axes, vertices: Range<usize>) -> GeoComputeResult<
 }
 
 /// Point `i` of `coords`, which carry `len` axes of `coord_type`.
-/// `None` if it is missing.
+/// `None` if it is null.
 #[inline(always)]
 fn point_to_geos<const EARLY_FINITE_CHECK: bool>(
     coords: &Coords,
@@ -253,9 +253,9 @@ fn rows_to_geos_with<const ALL_VALID: bool, const EARLY_FINITE_CHECK: bool>(
     let (x, y, _, _) = axes;
     let mut geometries = Vec::with_capacity(rows.len());
     for i in 0..rows.len() {
-        // A missing row's offsets point anywhere, so it is not converted.
+        // A null row's offsets point anywhere, so it is not converted.
         if !ALL_VALID && !rows.is_valid(i) {
-            geometries.push(GeosRow::Missing);
+            geometries.push(GeosRow::Null);
             continue;
         }
         let parts = rows.range(i);
@@ -268,7 +268,7 @@ fn rows_to_geos_with<const ALL_VALID: bool, const EARLY_FINITE_CHECK: bool>(
             } else {
                 to_geos(parts)
             };
-            row_or_missing(geometry.map(Some), ignore_per_row_errors)?.into()
+            row_or_null(geometry.map(Some), ignore_per_row_errors)?.into()
         });
     }
     Ok(geometries)
@@ -329,21 +329,21 @@ pub struct GeosGeometries {
 
 /// One row of [`GeosGeometries`].
 pub enum GeosRow {
-    Missing,
+    Null,
     /// Empty, without a GEOS geometry. Valid for every kind.
     Empty,
     Geometry(Geometry),
 }
 
-/// `None` is a missing row.
+/// `None` is a null row.
 impl From<Option<Geometry>> for GeosRow {
     fn from(geometry: Option<Geometry>) -> Self {
-        geometry.map_or(GeosRow::Missing, GeosRow::Geometry)
+        geometry.map_or(GeosRow::Null, GeosRow::Geometry)
     }
 }
 
 /// For a conversion getting a geometry of a kind it can't hold:
-/// `false` (its row is missing) if `ignore_per_row_errors=true`, otherwise an error.
+/// `false` (its row is null) if `ignore_per_row_errors=true`, otherwise an error.
 fn wrong_kind(
     expected: &str,
     found: GeometryTypes,
@@ -356,9 +356,9 @@ fn wrong_kind(
 }
 
 /// Which rows are there, pushed one after the other.
-/// A bitmap is only built once a row is missing.
+/// A bitmap is only built once a row is null.
 struct ValidityBuilder {
-    /// How many rows were pushed before the first missing one.
+    /// How many rows were pushed before the first null one.
     valid: usize,
     rows: usize,
     bitmap: Option<MutableBitmap>,

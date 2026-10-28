@@ -54,7 +54,7 @@ def is_ring(geometry: IntoExprColumn) -> pl.Expr:
     m is a measure along the line rather than a position, so it is not compared.
     4 vertices is a triangle plus the one closing it, so a closed line with fewer is no ring.
 
-    An empty linestring or multilinestring is no ring. A missing linestring gives a missing result.
+    An empty linestring or multilinestring is no ring. A null linestring gives a null result.
 
     This is what the polygon constructors check every ring against.
 

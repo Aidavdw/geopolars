@@ -1,5 +1,5 @@
 //! Linestrings and rings that an operation left too short,
-//! and the rows they make missing.
+//! and the rows they make null.
 
 use geopolars_core::output::validity_without;
 use geopolars_core::{List, ValidList};
@@ -7,7 +7,7 @@ use geopolars_core::{List, ValidList};
 /// See `too_short` of `remove_repeated_points` in Python.
 #[derive(Debug, Clone, Copy)]
 pub enum TooShort {
-    Invalid,
+    Null,
     Keep,
     Empty,
 }
@@ -21,7 +21,7 @@ pub(super) fn list_holding(lists: &ValidList, item: usize) -> Option<usize> {
     (i < lists.len() && item < offsets[i + 1] as usize).then_some(i)
 }
 
-/// `rows`, with the rows in `failed` missing too.
+/// `rows`, with the rows in `failed` null too.
 pub(super) fn without_rows(rows: &List, failed: &[usize]) -> List {
     let validity = validity_without(rows.validity(), rows.len(), failed);
     rows.clone().with_validity(validity)

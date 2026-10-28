@@ -90,7 +90,7 @@ def test_a_single_polygon_is_a_valid_multipolygon() -> None:
     assert df.schema["multipolygon"] != PolygonXY()
 
 
-def test_a_missing_polygon_invalidates_the_whole_multipolygon() -> None:
+def test_a_null_polygon_nulls_the_whole_multipolygon() -> None:
     """GeoArrow allows nulls only at the outermost level.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
@@ -101,7 +101,7 @@ def test_a_missing_polygon_invalidates_the_whole_multipolygon() -> None:
     assert df["multipolygon"].is_null().to_list() == [True, False, True]
 
 
-def test_a_missing_ring_invalidates_the_whole_multipolygon() -> None:
+def test_a_null_ring_nulls_the_whole_multipolygon() -> None:
     df = pl.DataFrame(
         {"polygons": [[[*_SQUARE[0], None]], _SQUARE]},
         schema={"polygons": _XY_POLYGONS},
@@ -110,7 +110,7 @@ def test_a_missing_ring_invalidates_the_whole_multipolygon() -> None:
     assert df["multipolygon"].is_null().to_list() == [True, False]
 
 
-def test_a_missing_vertex_invalidates_the_whole_multipolygon() -> None:
+def test_a_null_vertex_nulls_the_whole_multipolygon() -> None:
     df = pl.DataFrame(
         {"polygons": [[[[{"x": 1.0, "y": 2.0}, None]]], _SQUARE]},
         schema={"polygons": _XY_POLYGONS},
@@ -119,7 +119,7 @@ def test_a_missing_vertex_invalidates_the_whole_multipolygon() -> None:
     assert df["multipolygon"].is_null().to_list() == [True, False]
 
 
-def test_a_missing_coordinate_invalidates_the_whole_multipolygon() -> None:
+def test_a_null_coordinate_nulls_the_whole_multipolygon() -> None:
     df = pl.DataFrame(
         {"polygons": [[[[{"x": 1.0, "y": None}]]], _SQUARE]},
         schema={"polygons": _XY_POLYGONS},
@@ -263,7 +263,7 @@ def test_coordinate_columns_are_cast_to_f64() -> None:
     )
 
 
-def test_a_missing_coordinate_invalidates_the_multipolygon_of_coords() -> None:
+def test_a_null_coordinate_nulls_the_multipolygon_of_coords() -> None:
     df = pl.DataFrame(
         {
             "lon": [[[[0.0, 1.0, 0.0, 0.0]]], [[[0.0, 1.0, 0.0, 0.0]]]],
@@ -338,7 +338,7 @@ def _from_polygons(
     )
 
 
-def test_one_polygon_with_a_ring_that_is_no_ring_invalidates_the_multipolygon() -> None:
+def test_one_polygon_with_a_ring_that_is_no_ring_nulls_the_multipolygon() -> None:
     out = _from_polygons(
         [_SQUARE_POLYGON, _OPEN_POLYGON], [_SQUARE_POLYGON], [[]], [], None
     )
@@ -367,8 +367,8 @@ def test_close_closes_the_rings_of_every_polygon() -> None:
 
 
 def test_close_does_not_reach_polygons_that_are_already_built() -> None:
-    """Built polygons were checked when they were built: an open ring made them missing,
-    which leaves the multipolygon missing a polygon."""
+    """Built polygons were checked when they were built: an open ring made them null,
+    which leaves the multipolygon with a null polygon."""
     polygons = pl.DataFrame(
         {"rings": [_OPEN_POLYGON]}, schema={"rings": _XY_RINGS}
     ).select(
@@ -419,7 +419,7 @@ def test_exterior_coordinate_columns_build_the_same_multipolygons(
     )
 
 
-def test_a_missing_coordinate_invalidates_the_multipolygon_of_exterior_coords() -> None:
+def test_a_null_coordinate_nulls_the_multipolygon_of_exterior_coords() -> None:
     df = pl.DataFrame(
         {
             "lon": [[[0.0, 1.0, 0.0, 0.0]], [[0.0, 1.0, 0.0, 0.0]]],

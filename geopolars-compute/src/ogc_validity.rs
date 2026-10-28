@@ -4,12 +4,12 @@
 //! Every geometry is held to the checks of [crate::geoarrow_validity] first,
 //! with every coordinate finite: only a point or multipoint may hold the empty point.
 //! Then its shape is checked natively, and its topology through GEOS.
-//! Each gives a `bool` per row, `false` for a missing row.
+//! Each gives a `bool` per row, `false` for a null row.
 //! The polygon kernels error when GEOS does.
 //! With every topology check on, GEOS's `is_valid` runs them all at once.
 //! Otherwise, each check runs on its own.
 //!
-//! Missing values below the rows are not looked at here, as in [crate::geoarrow_validity].
+//! Null values below the rows are not looked at here, as in [crate::geoarrow_validity].
 //!
 //! # Const generic flags
 //!

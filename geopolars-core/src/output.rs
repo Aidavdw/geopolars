@@ -1,5 +1,5 @@
 //! The arrays kernels build their output in.
-//! A row is missing where the given validity says, and at the rows in `failed`.
+//! A row is null where the given validity says, and at the rows in `failed`.
 
 use polars_arrow::array::{Array, BooleanArray, ListArray, PrimitiveArray, StructArray};
 use polars_arrow::bitmap::{Bitmap, MutableBitmap};
@@ -40,7 +40,7 @@ pub fn f64_array(values: Vec<f64>, validity: Option<&Bitmap>) -> PrimitiveArray<
     PrimitiveArray::from_vec(values).with_validity(validity.cloned())
 }
 
-/// [f64_array], with a row missing where `a` or `b` is, and at the rows in `failed`.
+/// [f64_array], with a row null where `a` or `b` is, and at the rows in `failed`.
 pub fn f64_array_masked(
     values: Vec<f64>,
     a: Option<&Bitmap>,
@@ -52,7 +52,7 @@ pub fn f64_array_masked(
     PrimitiveArray::from_vec(values).with_validity(validity)
 }
 
-/// `validity` of `len` rows, with the rows in `failed` missing too.
+/// `validity` of `len` rows, with the rows in `failed` null too.
 pub fn validity_without(validity: Option<&Bitmap>, len: usize, failed: &[usize]) -> Option<Bitmap> {
     combine_validities_and(validity, succeeded(len, failed).as_ref())
 }
@@ -64,7 +64,7 @@ pub fn bool_array(values: Vec<bool>, validity: Option<&Bitmap>) -> BooleanArray 
 
 /// The coordinate struct of `dim`, taking over the `axes` buffers.
 /// `validity` is `None` when every coordinate is there.
-/// Polars expects a missing coordinate to be missing in every field too,
+/// Polars expects a null coordinate to be null in every field too,
 /// (not needed for geoarrow spec), so they all get it.
 pub(crate) fn coords_struct(
     dim: GeoDimension,
@@ -89,7 +89,7 @@ pub(crate) fn coords_struct(
 /// `bounds` holds one array per field, in the order of
 /// [`box_field_names`](GeoDimension::box_field_names).
 /// `validity` is `None` when every box is there.
-/// Like [`coords_struct`], a missing box is missing in every field too.
+/// Like [`coords_struct`], a null box is null in every field too.
 pub fn box_struct(
     dim: GeoDimension,
     bounds: Vec<Vec<f64>>,

@@ -111,7 +111,7 @@ def test_a_nan_point_is_empty(dimension: Dimension) -> None:
     ],
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
-def test_no_coordinates_is_empty_and_missing_is_null(
+def test_no_coordinates_is_empty_and_null_stays_null(
     geometry: type[GeoArrowType],
     layers: int,
     rows: list,

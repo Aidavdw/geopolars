@@ -3,7 +3,7 @@
 //! - a polygon's is the shoelace formula, over the planar area,
 //! - a multi-geometry's is that of its parts together: the running sum just goes on over them.
 //!
-//! A geometry without length or area has no centroid, so its row is missing.
+//! A geometry without length or area has no centroid, so its row is null.
 //! The centroid keeps the geometry's dimension.
 //!
 //! # Const generic flags

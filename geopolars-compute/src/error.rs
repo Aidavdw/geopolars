@@ -34,7 +34,7 @@ pub type GeoComputeResult<T> = Result<T, GeoComputeError>;
 /// The result of one row, or `None` if it failed and `ignore_per_row_errors=true`.
 #[cfg(any(feature = "geos", feature = "rsgeo"))]
 #[inline(always)]
-pub(crate) fn row_or_missing<T>(
+pub(crate) fn row_or_null<T>(
     result: GeoComputeResult<Option<T>>,
     ignore_per_row_errors: bool,
 ) -> GeoComputeResult<Option<T>> {

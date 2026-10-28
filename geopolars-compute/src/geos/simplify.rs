@@ -26,7 +26,7 @@ use crate::GeoComputeResult;
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// The endpoints are always kept.
 /// GEOS keeps z, but drops m.
-/// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
+/// If `ignore_per_row_errors=true`, a row GEOS fails on is null;
 /// otherwise its error is returned.
 pub fn simplify_line_strings(
     array: &LineStringArray,
@@ -51,7 +51,7 @@ pub fn simplify_line_strings(
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// The endpoints of every part are always kept, but an empty part is dropped.
 /// GEOS keeps z, but drops m.
-/// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
+/// If `ignore_per_row_errors=true`, a row GEOS fails on is null;
 /// otherwise its error is returned.
 pub fn simplify_multi_line_strings(
     array: &MultiLineStringArray,
@@ -75,7 +75,7 @@ pub fn simplify_multi_line_strings(
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// GEOS keeps z, but drops m.
-/// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
+/// If `ignore_per_row_errors=true`, a row GEOS fails on is null;
 /// otherwise its error is returned.
 pub fn simplify_polygons(
     array: &PolygonArray,
@@ -95,7 +95,7 @@ pub fn simplify_polygons(
 
 /// Every row simplified to within `tolerance`, forwarded to GEOS.
 /// GEOS keeps z, but drops m.
-/// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
+/// If `ignore_per_row_errors=true`, a row GEOS fails on is null;
 /// otherwise its error is returned.
 pub fn simplify_multi_polygons(
     array: &MultiPolygonArray,
@@ -114,8 +114,8 @@ pub fn simplify_multi_polygons(
 }
 
 /// Every geometry simplified to within `tolerance`, forwarded to GEOS.
-/// A missing or empty geometry stays as it is.
-/// If `ignore_per_row_errors=true`, a geometry GEOS fails on becomes missing;
+/// A null or empty geometry stays as it is.
+/// If `ignore_per_row_errors=true`, a geometry GEOS fails on becomes null;
 /// otherwise its error is returned.
 /// The size hint is kept as an upper bound: simplifying removes vertices.
 /// Only where GEOS repairs a crossing can it add some.
@@ -151,7 +151,7 @@ fn simplify_via_geos_with<const PRESERVE_TOPOLOGY: bool>(
         *geometry = match simplified {
             Ok(simple) => GeosRow::Geometry(simple),
             Err(e) if !ignore_per_row_errors => return Err(e.into()),
-            Err(_) => GeosRow::Missing,
+            Err(_) => GeosRow::Null,
         };
     }
     Ok(())

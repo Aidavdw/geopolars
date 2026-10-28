@@ -32,12 +32,12 @@
 //!
 //! See [super] for `EARLY_FINITE_CHECK`.
 //! If `EARLY_FINITE_CHECK=false`, what happens to NaN coordinates depends on where they are placed.
-//! - only empty points (x and y NaN) -> a `POINT (NaN NaN)`, so the row is missing
+//! - only empty points (x and y NaN) -> a `POINT (NaN NaN)`, so the row is null
 //! - an empty point first, then real ones -> also a `POINT (NaN NaN)`,
-//!   so the row is silently missing, even with `ignore_per_row_errors=false`;
+//!   so the row is silently null, even with `ignore_per_row_errors=false`;
 //! - an empty point after a real one -> it is left out, giving the hull of the others
 //! - a vertex with just one NaN axis -> an error ("orientationIndex encountered NaN/Inf numbers").
-//!   So the error is returned, or with `ignore_per_row_errors=true` the row is missing.
+//!   So the error is returned, or with `ignore_per_row_errors=true` the row is null.
 //!
 //! If `EARLY_FINITE_CHECK=true`, each of these rows fails the same way a GEOS error does,
 //! which makes this consistent.
@@ -66,7 +66,7 @@ use crate::GeoComputeResult;
 /// GEOS keeps z, but drops m.
 /// An empty linestring's hull is empty.
 /// A straight linestring (or one of a single vertex) has a point or a line for a hull,
-/// so that row is missing.
+/// so that row is null.
 /// If `ignore_per_row_errors=true`, a row GEOS fails on is null,
 /// otherwise its error is returned.
 /// If `ccw_outer=true`, the exterior is made to run counter-clockwise
@@ -89,7 +89,7 @@ pub fn line_string_convex_hulls(
 }
 
 /// Like [`line_string_convex_hulls`], with one hull around all the points.
-/// One or two points, or points all on one line, give a missing row.
+/// One or two points, or points all on one line, give a null row.
 pub fn multi_point_convex_hulls(
     array: &MultiPointArray,
     ignore_per_row_errors: bool,
@@ -124,7 +124,7 @@ pub fn multi_line_string_convex_hulls(
 }
 
 /// Like [`line_string_convex_hulls`], hulling only the exterior.
-/// A polygon with zero area gives a missing row.
+/// A polygon with zero area gives a null row.
 pub fn polygon_convex_hulls(
     array: &PolygonArray,
     ignore_per_row_errors: bool,
@@ -147,7 +147,7 @@ pub fn polygon_convex_hulls(
 
 /// Like [`line_string_convex_hulls`],
 /// with one hull of the exteriors of all the parts as a whole.
-/// A multipolygon with zero area gives a missing row.
+/// A multipolygon with zero area gives a null row.
 pub fn multi_polygon_convex_hulls(
     array: &MultiPolygonArray,
     ignore_per_row_errors: bool,
@@ -225,9 +225,9 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const EARLY_FINITE_CHECK: bo
 
     let mut hulls = Vec::with_capacity(rows.len());
     for i in 0..rows.len() {
-        // A missing row's offsets point anywhere, so it is not converted.
+        // A null row's offsets point anywhere, so it is not converted.
         if !ALL_VALID && !rows.is_valid(i) {
-            hulls.push(GeosRow::Missing);
+            hulls.push(GeosRow::Null);
             continue;
         }
         ranges.clear();
@@ -246,11 +246,11 @@ fn hulls_with<const Z: bool, const ALL_VALID: bool, const EARLY_FINITE_CHECK: bo
             // An empty row has an empty hull, without a trip to GEOS.
             0 => GeosRow::Empty,
             // A single coordinate encloses nothing, and GEOS can't build a linestring of it.
-            1 => GeosRow::Missing,
+            1 => GeosRow::Null,
             _ => match hull(&row_x, &row_y, &row_z) {
                 Ok(hull) => hull.into(),
                 Err(e) if !ignore_per_row_errors => return Err(e),
-                Err(_) => GeosRow::Missing,
+                Err(_) => GeosRow::Null,
             },
         });
     }

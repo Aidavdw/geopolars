@@ -74,7 +74,7 @@ def test_a_polygons_boundary_is_its_rings_exterior_first() -> None:
     assert _boundaries(df) == [[_OUTER, _HOLE], [_SQUARE]]
 
 
-def test_a_missing_or_empty_polygon() -> None:
+def test_a_null_or_empty_polygon() -> None:
     assert _boundaries(_polygons(None, [])) == [None, []]
 
 
@@ -167,7 +167,7 @@ def test_m_does_not_keep_a_line_open() -> None:
     assert _boundaries(df) == [[]]
 
 
-def test_a_missing_or_empty_linestring() -> None:
+def test_a_null_or_empty_linestring() -> None:
     assert _boundaries(_lines(None, [])) == [None, []]
 
 

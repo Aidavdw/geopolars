@@ -44,7 +44,7 @@ def is_empty(geometry: IntoExprColumn, *, check_nested: bool = False) -> pl.Expr
     By default, this only checks for outer emptiness.
     A linestring with only empty points would still not be considered empty.
     A single non-empty point makes it non-empty.
-    A missing geometry is neither empty nor not: it gives null.
+    A null geometry is neither empty nor not: it gives null.
     With `check_nested=True`, any geometry but a point is also empty
     when all of its points are empty (NaN `x` and `y`).
     This would catch a case like a linestring with only empty points,

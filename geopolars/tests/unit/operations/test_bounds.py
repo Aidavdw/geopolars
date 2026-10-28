@@ -168,7 +168,7 @@ def test_an_empty_point_has_an_empty_box() -> None:
     assert out["x"].ext.storage().to_list() == [_EMPTY]
 
 
-def test_empty_and_missing_geometries() -> None:
+def test_empty_and_null_geometries() -> None:
     storage = pl.List(pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64})))
     df = pl.DataFrame(
         {"polygon": [[], [[]], None]}, schema={"polygon": storage}
@@ -190,7 +190,7 @@ def test_empty_points_are_skipped() -> None:
     ]
 
 
-def test_a_missing_multigeometry_stays_missing() -> None:
+def test_a_null_multigeometry_stays_null() -> None:
     df = pl.DataFrame({"x": [[1.0], None], "y": [[2.0], None]}).select(
         geo.multi_point("x", "y")
     )

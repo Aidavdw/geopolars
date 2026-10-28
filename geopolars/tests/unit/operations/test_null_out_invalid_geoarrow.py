@@ -27,7 +27,7 @@ _SQUARE = [
 ]
 
 
-def test_a_missing_vertex_nulls_the_linestring_around_it() -> None:
+def test_a_null_vertex_nulls_the_linestring_around_it() -> None:
     df = pl.DataFrame(
         {"line": [[{"x": 0.0, "y": 0.0}, None], _SQUARE]},
         schema={"line": _XY_VERTICES},
@@ -38,8 +38,8 @@ def test_a_missing_vertex_nulls_the_linestring_around_it() -> None:
     assert out["line"].is_null().to_list() == [True, False]
 
 
-def test_a_missing_coordinate_nulls_the_linestring_around_it() -> None:
-    """A vertex that is there but missing an axis is a vertex that is not
+def test_a_null_coordinate_nulls_the_linestring_around_it() -> None:
+    """A vertex that is there but has a null axis is a vertex that is not
     there: the geometry cannot stand without it either."""
     df = pl.DataFrame(
         {"line": [[{"x": 0.0, "y": 0.0}, {"x": 2.0, "y": None}]]},
@@ -51,7 +51,7 @@ def test_a_missing_coordinate_nulls_the_linestring_around_it() -> None:
     assert out["line"].is_null().to_list() == [True]
 
 
-def test_a_missing_ring_nulls_the_polygon_around_it() -> None:
+def test_a_null_ring_nulls_the_polygon_around_it() -> None:
     """Nesting is walked all the way down: a null one layer in is as fatal as
     a null coordinate two layers in."""
     df = pl.DataFrame(
@@ -63,7 +63,7 @@ def test_a_missing_ring_nulls_the_polygon_around_it() -> None:
     assert out["polygon"].is_null().to_list() == [True, False]
 
 
-def test_a_missing_coordinate_inside_a_ring_nulls_the_polygon() -> None:
+def test_a_null_coordinate_inside_a_ring_nulls_the_polygon() -> None:
     df = pl.DataFrame(
         {"polygon": [[[{"x": 0.0, "y": None}]]]}, schema={"polygon": _XY_RINGS}
     ).select(pl.col("polygon").ext.to(PolygonXY()))
@@ -73,7 +73,7 @@ def test_a_missing_coordinate_inside_a_ring_nulls_the_polygon() -> None:
     assert out["polygon"].is_null().to_list() == [True]
 
 
-def test_a_missing_coordinate_nulls_the_point() -> None:
+def test_a_null_coordinate_nulls_the_point() -> None:
     df = pl.DataFrame(
         {"point": [{"x": 1.0, "y": None}, {"x": 1.0, "y": 2.0}]},
         schema={"point": _XY},
@@ -134,7 +134,7 @@ def test_every_chunk_is_checked() -> None:
 
 
 def test_an_empty_geometry_is_whole() -> None:
-    """A geometry with no coordinates is not a geometry with missing ones. It
+    """A geometry with no coordinates is not a geometry with null ones. It
     has no mean coordinate, but it is there, and `null_out_invalid_geoarrow` leaves it alone."""
     df = pl.DataFrame({"line": [[], _SQUARE]}, schema={"line": _XY_VERTICES}).select(
         pl.col("line").ext.to(LineStringXY())

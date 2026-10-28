@@ -1,4 +1,4 @@
-//! Emptying, dropping or invalidating the coordinates that are not finite, or empty.
+//! Emptying, dropping or nulling the coordinates that are not finite, or empty.
 //! See `filter_coordinates` in Python for the rules.
 //!
 //! Every kernel marks the selected coordinates ([selected_coords]),

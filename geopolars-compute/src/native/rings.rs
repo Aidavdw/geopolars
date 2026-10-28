@@ -9,7 +9,7 @@
 //! ## `ALL_VALID`
 //!
 //! [kept_rings_of_polygons] is generic over `ALL_VALID`.
-//! If `ALL_VALID=true`, every row is there, so none is checked for being missing.
+//! If `ALL_VALID=true`, every row is there, so none is checked for being null.
 //!
 //! ## `Z`
 //!
@@ -40,14 +40,14 @@ fn interior_of(rings: Range<usize>) -> Range<usize> {
     (rings.start + 1).min(rings.end)..rings.end
 }
 
-/// The rings every row of `array` keeps, none for a missing row.
+/// The rings every row of `array` keeps, none for a null row.
 #[inline(always)]
 fn kept_rings_of_polygons<const ALL_VALID: bool>(
     array: &PolygonArray,
     keep: Keep,
 ) -> impl Iterator<Item = Range<usize>> + Clone + '_ {
     let rows = &array.rows;
-    // A missing row's offsets point anywhere, so it keeps nothing.
+    // A null row's offsets point anywhere, so it keeps nothing.
     (0..rows.len()).map(move |i| {
         if ALL_VALID || rows.is_valid(i) {
             keep(rows.range(i))
@@ -78,7 +78,7 @@ pub(super) fn offsets_of(lengths: impl Iterator<Item = usize>) -> OffsetsBuffer<
 }
 
 /// One linestring per item of `kept` (a single ring or none),
-/// with its row missing where `validity` says.
+/// with its row null where `validity` says.
 #[inline(always)]
 fn exteriors(
     rings: &ValidList,
@@ -102,7 +102,7 @@ fn exteriors(
 }
 
 /// One multilinestring per item of `kept`,
-/// with its row missing where `validity` says.
+/// with its row null where `validity` says.
 #[inline(always)]
 fn interiors(
     rings: &ValidList,
@@ -284,10 +284,10 @@ fn assembled_axis(
 
 /// Polygons out of the linestrings of `exteriors`,
 /// each followed by the linestrings on the same row of `holes` as its holes.
-/// A missing row of `holes` has no holes.
+/// A null row of `holes` has no holes.
 /// Without `holes`, no polygon has holes.
-/// The rows are missing where `validity` says,
-/// which has to cover the missing rows of `exteriors`.
+/// The rows are null where `validity` says,
+/// which has to cover the null rows of `exteriors`.
 ///
 /// `exteriors` and `holes` have to have the same length and dimension.
 /// The vertices are copied into new buffers, as one slice per axis per row of each.
@@ -310,7 +310,7 @@ pub fn polygons_from_exteriors_and_holes(
         );
     }
     let is_valid = |i: usize| validity.as_ref().is_none_or(|validity| validity.get_bit(i));
-    // `None` for a missing row: its offsets point anywhere, so it takes nothing.
+    // `None` for a null row: its offsets point anywhere, so it takes nothing.
     let rows: Vec<Option<Assembled>> = (0..len)
         .map(|i| {
             is_valid(i).then(|| {

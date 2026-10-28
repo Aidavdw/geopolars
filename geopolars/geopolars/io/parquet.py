@@ -122,10 +122,10 @@ def _storage_of(name: str, dtype: pl.DataType) -> pl.Expr:
     # A covering column can have its bounds in any order: put them in the box's.
     bounds = [storage.struct.field(field) for field in dtype.ext_storage().to_schema()]
     # A row without a geometry must not have a bbox, but some writers (geopandas)
-    # give it one with every bound missing instead.
+    # give it one with every bound null instead.
     # We follow the spec.
-    missing = pl.all_horizontal(bound.is_null() for bound in bounds)
-    return pl.when(~missing).then(pl.struct(bounds)).alias(name)
+    all_null = pl.all_horizontal(bound.is_null() for bound in bounds)
+    return pl.when(~all_null).then(pl.struct(bounds)).alias(name)
 
 
 def _geometry_dtypes(geo: str, schema: pl.Schema) -> dict[str, pl.DataType]:

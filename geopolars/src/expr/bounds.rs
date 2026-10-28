@@ -208,7 +208,7 @@ fn total_bounds(inputs: &[Series], kwargs: TotalBoundsKwargs) -> PolarsResult<Se
     let (kind, dim) = (geo.kind, geo.dim);
     let dtype = bounds_dtype(inputs[0].dtype(), false)?;
     let name = inputs[0].name().clone();
-    // No rows, or only missing ones: nothing to bound.
+    // No rows, or only null ones: nothing to bound.
     if inputs[0].null_count() == inputs[0].len() {
         return Ok(Series::full_null(name, 1, &dtype));
     }

@@ -3,7 +3,7 @@
 //!
 //! Every kernel copies the coordinates once, then reverses runs of them in place.
 //! The list levels are shared with the input, unless the order of the parts changes.
-//! A missing row is reversed like any other, as its value is masked anyway.
+//! A null row is reversed like any other, as its value is masked anyway.
 //!
 //! # Const generic flags
 //!

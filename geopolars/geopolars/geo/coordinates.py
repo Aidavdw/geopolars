@@ -56,7 +56,7 @@ def x(geometry: IntoExprColumn) -> pl.Expr:
     The values are returned as they are stored, in the unit of the CRS.
     The CRS itself is not carried over: the result is a plain float column.
     Every stored coordinate is included, so a polygon's rings keep their closing coordinate.
-    A missing geometry has no `x`; an empty one gives an empty list.
+    A null geometry has no `x`; an empty one gives an empty list.
 
     ```python
     df.select(geo.x("location"))

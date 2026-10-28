@@ -223,7 +223,7 @@ def test_a_lazy_frame_is_refused_before_it_runs() -> None:
 
 
 def _lines(crs: str | None = None) -> pl.DataFrame:
-    """Two linestrings and a missing one."""
+    """Two linestrings and a null one."""
     return pl.DataFrame(
         {"x": [[0.0, 2.0], [170.0, 190.0], None], "y": [[1.0, 3.0], [0.0, 1.0], None]}
     ).select(geo.line_string("x", "y", crs=crs).alias("geometry"))

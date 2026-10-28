@@ -7,7 +7,7 @@
 //! A linestring or ring left [too short](is_too_short) is handled by [TooShort].
 //! A point cannot lose its coordinate, so it becomes the empty point instead.
 //! The other actions keep every offset.
-//! A missing row is processed like any other, as its value is masked anyway.
+//! A null row is processed like any other, as its value is masked anyway.
 //!
 //! # Const generic flags
 //!
@@ -36,8 +36,8 @@ pub enum SelectedAction {
     SetEmpty,
     /// A selected coordinate is removed.
     Drop,
-    /// A row holding a selected coordinate becomes missing.
-    SetInvalid,
+    /// A row holding a selected coordinate becomes null.
+    SetNull,
 }
 
 /// `coords`, with every axis NaN where `selected`.
@@ -114,7 +114,7 @@ fn is_too_short<const Z: bool>(
 
 /// The offsets of what each of `lists` keeps, and the coordinates it keeps.
 /// A list keeps the vertices that are not `selected`, unless it is then [too short](is_too_short).
-/// Last, the lists that are too short with [TooShort::Invalid], which keep none.
+/// Last, the lists that are too short with [TooShort::Null], which keep none.
 fn without_selected<const Z: bool>(
     lists: &ValidList,
     kind: Lists,
@@ -122,7 +122,7 @@ fn without_selected<const Z: bool>(
     selected: &[bool],
     too_short: TooShort,
 ) -> (OffsetsBuffer<i64>, ValidCoords, Vec<usize>) {
-    let (mut runs, mut invalid) = (Vec::new(), Vec::new());
+    let (mut runs, mut nulled) = (Vec::new(), Vec::new());
     let lengths: Vec<usize> = lists
         .ranges()
         .enumerate()
@@ -138,9 +138,9 @@ fn without_selected<const Z: bool>(
                     runs.truncate(first_run);
                     0
                 }
-                TooShort::Invalid => {
+                TooShort::Null => {
                     runs.truncate(first_run);
-                    invalid.push(j);
+                    nulled.push(j);
                     0
                 }
             }
@@ -149,7 +149,7 @@ fn without_selected<const Z: bool>(
     (
         offsets_of(lengths.into_iter()),
         coords.copy_ranges(runs.into_iter()),
-        invalid,
+        nulled,
     )
 }
 
@@ -169,14 +169,14 @@ fn line_strings_without_selected(
     selected: &[bool],
     too_short: TooShort,
 ) -> LineStringArray {
-    let (offsets, coords, invalid) = without_selected::<false>(
+    let (offsets, coords, nulled) = without_selected::<false>(
         array.rows.ignoring_validity(),
         Lists::Lines,
         &array.coords,
         selected,
         too_short,
     );
-    let validity = validity_without(array.rows.validity(), array.rows.len(), &invalid);
+    let validity = validity_without(array.rows.validity(), array.rows.len(), &nulled);
     LineStringArray {
         rows: List::from_offsets(offsets, validity),
         coords,
@@ -206,9 +206,9 @@ fn polygons_without_selected(
     selected: &[bool],
     too_short: TooShort,
 ) -> PolygonArray {
-    let (rings, coords, invalid) =
+    let (rings, coords, nulled) =
         without_selected_in_rings(&array.rings, &array.coords, selected, too_short);
-    let failed: Vec<usize> = invalid
+    let failed: Vec<usize> = nulled
         .into_iter()
         .filter_map(|ring| list_holding(array.rows.ignoring_validity(), ring))
         .collect();
@@ -224,14 +224,14 @@ fn multi_line_strings_without_selected(
     selected: &[bool],
     too_short: TooShort,
 ) -> MultiLineStringArray {
-    let (lines, coords, invalid) = without_selected::<false>(
+    let (lines, coords, nulled) = without_selected::<false>(
         &array.lines,
         Lists::Lines,
         &array.coords,
         selected,
         too_short,
     );
-    let failed: Vec<usize> = invalid
+    let failed: Vec<usize> = nulled
         .into_iter()
         .filter_map(|line| list_holding(array.rows.ignoring_validity(), line))
         .collect();
@@ -247,9 +247,9 @@ fn multi_polygons_without_selected(
     selected: &[bool],
     too_short: TooShort,
 ) -> MultiPolygonArray {
-    let (rings, coords, invalid) =
+    let (rings, coords, nulled) =
         without_selected_in_rings(&array.rings, &array.coords, selected, too_short);
-    let failed: Vec<usize> = invalid
+    let failed: Vec<usize> = nulled
         .into_iter()
         .filter_map(|ring| list_holding(&array.polygons, ring))
         .filter_map(|polygon| list_holding(array.rows.ignoring_validity(), polygon))
@@ -285,7 +285,7 @@ pub(super) fn points_with_selected(
         SelectedAction::SetEmpty | SelectedAction::Drop => {
             Coords::from_valid(emptied(coords, selected), validity.cloned())
         }
-        SelectedAction::SetInvalid => {
+        SelectedAction::SetNull => {
             let failed = rows_with_selected(coords.len(), |i| i..i + 1, selected);
             Coords::from_valid(
                 coords.clone(),
@@ -307,7 +307,7 @@ pub(super) fn line_strings_with_selected(
             coords: emptied(&array.coords, selected),
         },
         SelectedAction::Drop => line_strings_without_selected(array, selected, too_short),
-        SelectedAction::SetInvalid => {
+        SelectedAction::SetNull => {
             let failed = rows_with_selected(array.rows.len(), |i| array.rows.range(i), selected);
             LineStringArray {
                 rows: without_rows(&array.rows, &failed),
@@ -329,7 +329,7 @@ pub(super) fn multi_points_with_selected(
             coords: emptied(&array.coords, selected),
         },
         SelectedAction::Drop => multi_points_without_selected(array, selected, too_short),
-        SelectedAction::SetInvalid => {
+        SelectedAction::SetNull => {
             let failed = rows_with_selected(array.rows.len(), |i| array.rows.range(i), selected);
             MultiPointArray {
                 rows: without_rows(&array.rows, &failed),
@@ -352,7 +352,7 @@ pub(super) fn polygons_with_selected(
             coords: emptied(&array.coords, selected),
         },
         SelectedAction::Drop => polygons_without_selected(array, selected, too_short),
-        SelectedAction::SetInvalid => {
+        SelectedAction::SetNull => {
             let coords_of = |i| array.rings.span(array.rows.range(i));
             let failed = rows_with_selected(array.rows.len(), coords_of, selected);
             PolygonArray {
@@ -377,7 +377,7 @@ pub(super) fn multi_line_strings_with_selected(
             coords: emptied(&array.coords, selected),
         },
         SelectedAction::Drop => multi_line_strings_without_selected(array, selected, too_short),
-        SelectedAction::SetInvalid => {
+        SelectedAction::SetNull => {
             let coords_of = |i| array.lines.span(array.rows.range(i));
             let failed = rows_with_selected(array.rows.len(), coords_of, selected);
             MultiLineStringArray {
@@ -403,7 +403,7 @@ pub(super) fn multi_polygons_with_selected(
             coords: emptied(&array.coords, selected),
         },
         SelectedAction::Drop => multi_polygons_without_selected(array, selected, too_short),
-        SelectedAction::SetInvalid => {
+        SelectedAction::SetNull => {
             let coords_of = |i| array.rings.span(array.polygons.span(array.rows.range(i)));
             let failed = rows_with_selected(array.rows.len(), coords_of, selected);
             MultiPolygonArray {

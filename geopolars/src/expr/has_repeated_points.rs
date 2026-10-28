@@ -28,7 +28,7 @@ pub struct HasRepeatedPointsKwargs {
     unique_m: bool,
 }
 
-/// `None` when neither tolerance is given; otherwise the missing one is `0.0`.
+/// `None` when neither tolerance is given; otherwise the one not given is `0.0`.
 pub(super) fn tolerance(abs_tol: Option<f64>, rel_tol: Option<f64>) -> Option<Tolerance> {
     (abs_tol.is_some() || rel_tol.is_some()).then(|| Tolerance {
         abs_tol: abs_tol.unwrap_or(0.0),

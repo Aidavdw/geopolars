@@ -108,7 +108,7 @@ def test_translate_rejects_a_bare_coordinate_struct() -> None:
         df.select(geo.translate("point", (1.0, 1.0)))
 
 
-def test_translate_keeps_a_missing_point_missing() -> None:
+def test_translate_keeps_a_null_point_null() -> None:
     """Shifting the coordinates rebuilds the storage struct, and the row that
     says 'no point here' must survive that: GeoArrow has no point with null
     coordinates, only a null point."""
@@ -159,8 +159,8 @@ def test_translate_rejects_dz_on_a_linestring_with_no_z(
         df.select(geo.translate("line", (0.0, 0.0, 1.0)))
 
 
-def test_translate_keeps_empty_and_missing_linestrings(dimension: Dimension) -> None:
-    """An empty line has nothing to shift and a missing one is still missing."""
+def test_translate_keeps_empty_and_null_linestrings(dimension: Dimension) -> None:
+    """An empty line has nothing to shift and a null one is still null."""
     df = pl.DataFrame(
         {"vertices": [[], None]},
         schema={
@@ -242,7 +242,7 @@ def test_translate_rejects_dz_on_a_multilinestring_with_no_z(
         df.select(geo.translate("multilinestring", (0.0, 0.0, 1.0)))
 
 
-def test_translate_keeps_empty_and_missing_multilinestrings(
+def test_translate_keeps_empty_and_null_multilinestrings(
     dimension: Dimension,
 ) -> None:
     df = pl.DataFrame(
@@ -280,7 +280,7 @@ def test_translate_shifts_every_vertex_of_every_ring(
     )
 
 
-def test_translate_keeps_empty_and_missing_polygons(dimension: Dimension) -> None:
+def test_translate_keeps_empty_and_null_polygons(dimension: Dimension) -> None:
     df = pl.DataFrame(
         {"rings": [[], [[]], None]},
         schema={
@@ -323,7 +323,7 @@ def test_translate_rejects_dz_on_a_multipolygon_with_no_z(
         df.select(geo.translate("multipolygon", (0.0, 0.0, 1.0)))
 
 
-def test_translate_keeps_empty_and_missing_multipolygons(
+def test_translate_keeps_empty_and_null_multipolygons(
     dimension: Dimension,
 ) -> None:
     df = pl.DataFrame(

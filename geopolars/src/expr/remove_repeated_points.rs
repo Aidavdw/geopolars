@@ -30,7 +30,7 @@ enum CollapsedLinesDef {
 #[derive(Deserialize)]
 #[serde(remote = "TooShort", rename_all = "snake_case")]
 pub(super) enum TooShortDef {
-    Invalid,
+    Null,
     Keep,
     Empty,
 }

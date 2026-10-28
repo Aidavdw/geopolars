@@ -3,9 +3,9 @@
 //!
 //! The coordinates are checked first, in one pass that does not know the geometry.
 //! Then every row is checked against that, and every ring for being closed.
-//! Each gives a `bool` per row, `false` for a missing row.
+//! Each gives a `bool` per row, `false` for a null row.
 //!
-//! Missing values below the rows are not looked at here:
+//! Null values below the rows are not looked at here:
 //! the views have to be built with them moved out to the rows (see [crate::inner_nulls]).
 //!
 //! # Const generic flags
@@ -35,7 +35,7 @@ pub fn points_are_valid_geoarrow(array: &PointArray, checks: &CoordinateChecks) 
     let len = coords.ignoring_validity().len();
     let valid = coordinates_are_valid(coords.ignoring_validity(), checks)
         .unwrap_or_else(|| Bitmap::new_with_value(true, len));
-    // A missing row is `false` in the values too.
+    // A null row is `false` in the values too.
     let values = match coords.validity() {
         Some(rows) => &valid & rows,
         None => valid,

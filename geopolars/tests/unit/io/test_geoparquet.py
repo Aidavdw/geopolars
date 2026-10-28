@@ -302,8 +302,8 @@ def test_a_covering_reads_as_a_box_in_the_geometrys_crs(tmp_path: Path) -> None:
     assert back["bbox"].ext.storage().to_list() == [_BOUNDS, _BOUNDS]
 
 
-def test_a_covering_without_any_bound_is_a_missing_box(tmp_path: Path) -> None:
-    """The way geopandas writes the bbox of a missing geometry."""
+def test_a_covering_without_any_bound_is_a_null_box(tmp_path: Path) -> None:
+    """The way geopandas writes the bbox of a null geometry."""
     df = POINTS.with_columns(
         geometry=pl.when(pl.col("id") == 1).then("geometry"),
         bbox=pl.when(pl.col("id") == 1)

@@ -53,7 +53,7 @@ def box(
         _coord(value, f"{axis}max") for axis, value in maxima.items()
     ]
 
-    # A missing bound invalidates the entire box.
+    # A null bound nulls the entire box.
     complete = pl.all_horizontal([bound.is_not_null() for bound in bounds])
     dtype = BoxType.of_dimension(dimension)
     return pl.when(complete).then(pl.struct(bounds)).ext.to(dtype(crs=crs))

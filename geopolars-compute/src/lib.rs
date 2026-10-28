@@ -1,7 +1,7 @@
 //! Kernels on GeoArrow, taking the views of `geopolars-core`:
 //! [native] ones of our own, and [geos], [rsgeo] and [proj] ones forwarding to those libraries.
 //! [geoarrow_validity] and [ogc_validity] are the checks of `is_valid_geoarrow` and `is_valid_ogc`.
-//! [inner_nulls] moves missing values below the rows out to the rows.
+//! [inner_nulls] moves null values below the rows out to the rows.
 //!
 //! See the README.
 
@@ -50,6 +50,6 @@ pub mod proj;
 pub mod rsgeo;
 
 #[cfg(any(feature = "geos", feature = "rsgeo"))]
-use error::row_or_missing;
+use error::row_or_null;
 pub use error::{GeoComputeError, GeoComputeResult};
 pub use metric::{BaseMetric, GeodesicMetric, Planar, WithHeight};

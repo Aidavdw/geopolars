@@ -15,14 +15,14 @@
 //!
 //! Every function here is generic over `STOP_ON_ERROR`.
 //! If `STOP_ON_ERROR=true`, it stops at the first error and returns it.
-//! If `STOP_ON_ERROR=false`, it marks that row missing and carries on, so it never fails.
-//! For [against_one], an error on `one` marks every row missing.
+//! If `STOP_ON_ERROR=false`, it marks that row null and carries on, so it never fails.
+//! For [against_one], an error on `one` marks every row null.
 //!
 //! ## `NULLS`
 //!
 //! `pairwise_values` and `against_one_values` are generic over `NULLS`.
-//! If `NULLS=true`, a missing point is not measured.
-//! If `NULLS=false`, every point is measured, missing or not.
+//! If `NULLS=true`, a null point is not measured.
+//! If `NULLS=false`, every point is measured, null or not.
 
 use std::convert::Infallible;
 
@@ -42,14 +42,14 @@ pub trait DistanceMetric: BaseMetric {
     /// Sometimes it is faster to just *do* a calculation and then
     /// mask out the result *afterwards* (`TRUE`),
     /// rather than first checking for validity,
-    /// and if the value is marked as invalid on the bitflag,
+    /// and if the value is null,
     /// skipping the calculation all together (`FALSE`).
     /// This flag switches between the two behaviours.
     ///
     /// If `FALSE`,
     /// That slot can hold anything in its fields,
     /// so only a metric that measures anything harmlessly should!
-    /// One that must never hand it on (e.g. to PROJ) skips missing points.
+    /// One that must never hand it on (e.g. to PROJ) skips null points.
     const MEASURES_NULL_SLOTS: bool;
     /// The vertex at `position`. Its height only counts in [`segment`](Self::segment) with `Z`.
     fn vertex(&self, position: [f64; 3]) -> Result<Self::Vertex, Self::Error>;
@@ -116,10 +116,10 @@ pub fn pairwise<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
     // Can't just pass the M::MEASURES_NULL_SLOTS into the function on rust stable,
     // so use a silly if-statement. I know we use nightly at polars,
     // but this is nicer if other people would want to use this crate :)
-    // Without missing points there is nothing to skip either.
-    let measure_missing_points_anyway =
+    // Without null points there is nothing to skip either.
+    let measure_null_points_anyway =
         M::MEASURES_NULL_SLOTS || (a.coords.is_all_valid() && b.coords.is_all_valid());
-    let (values, failed) = if measure_missing_points_anyway {
+    let (values, failed) = if measure_null_points_anyway {
         pairwise_values::<false, Z, STOP_ON_ERROR, _>(metric, a, b)?
     } else {
         pairwise_values::<true, Z, STOP_ON_ERROR, _>(metric, a, b)?
@@ -133,7 +133,7 @@ pub fn pairwise<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
 }
 
 /// [pairwise]'s distances, and the rows that failed.
-/// A missing point's distance is masked by the validity afterwards.
+/// A null point's distance is masked by the validity afterwards.
 #[inline(always)]
 fn pairwise_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
     metric: &M,
@@ -164,7 +164,7 @@ where
                 Err(_) => failed.push(i),
             }
         }
-        // A missing point keeps its 0.0, which the validity masks out.
+        // A null point keeps its 0.0, which the validity masks out.
     }
     Ok((values, failed))
 }
@@ -178,7 +178,7 @@ pub fn against_one<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
 ) -> Result<PrimitiveArray<f64>, M::Error> {
     // If any of the 'one' is NaN, then everything will become NaN anyway,
     // so we might as well exit early.
-    // Missing points stay missing.
+    // Null points stay null.
     if one[..if Z { 3 } else { 2 }]
         .iter()
         .any(|axis| axis.is_nan())
@@ -201,8 +201,8 @@ pub fn against_one<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
             ));
         }
     };
-    let measure_missing_points_anyway = M::MEASURES_NULL_SLOTS || many.coords.is_all_valid();
-    let (values, failed) = if measure_missing_points_anyway {
+    let measure_null_points_anyway = M::MEASURES_NULL_SLOTS || many.coords.is_all_valid();
+    let (values, failed) = if measure_null_points_anyway {
         against_one_values::<false, Z, STOP_ON_ERROR, _>(metric, one, many)?
     } else {
         against_one_values::<true, Z, STOP_ON_ERROR, _>(metric, one, many)?
@@ -216,7 +216,7 @@ pub fn against_one<const Z: bool, const STOP_ON_ERROR: bool, M: DistanceMetric>(
 }
 
 /// [against_one]'s distances, and the rows that failed.
-/// A missing point's distance is masked by the validity afterwards.
+/// A null point's distance is masked by the validity afterwards.
 #[inline(always)]
 fn against_one_values<const NULLS: bool, const Z: bool, const STOP_ON_ERROR: bool, M>(
     metric: &M,
@@ -239,7 +239,7 @@ where
                 Err(_) => failed.push(i),
             }
         }
-        // A missing point keeps its 0.0, which the validity masks out.
+        // A null point keeps its 0.0, which the validity masks out.
     }
     Ok((values, failed))
 }

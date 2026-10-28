@@ -23,7 +23,7 @@ pub enum BufferDistance<'a> {
     /// One distance for every row.
     Constant(f64),
     /// One distance per row.
-    /// A missing distance gives a missing row.
+    /// A null distance gives a null row.
     PerRow(&'a PrimitiveArray<f64>),
 }
 
@@ -58,7 +58,7 @@ pub struct BufferStyle {
 /// A negative distance shrinks a polygon.
 /// A row that GEOS buffers into several polygons fails like a GEOS error.
 /// For a single kind, that only happens with a negative distance.
-/// If `ignore_per_row_errors=true`, a row GEOS fails on is missing;
+/// If `ignore_per_row_errors=true`, a row GEOS fails on is null;
 /// otherwise its error is returned.
 /// If `ccw_outer=true`, every ring is reversed, so the exterior runs counter-clockwise.
 /// Otherwise it runs clockwise, as GEOS gives it.
@@ -129,7 +129,7 @@ fn buffer_via_geos(
 
 /// Every geometry passed to `op` with its distance, forwarded to GEOS.
 /// `geos_distance` checks a distance, and gives it as `op` takes it.
-/// If `ignore_per_row_errors=true`, a geometry that fails becomes missing;
+/// If `ignore_per_row_errors=true`, a geometry that fails becomes null;
 /// otherwise its error is returned.
 /// A constant distance that fails would fail every row, so its error is always returned.
 /// The size hint stays the input's: it is only a starting capacity.
@@ -145,7 +145,7 @@ pub(super) fn by_distance_via_geos(
         match op(input, geos_distance) {
             Ok(output) => Ok(GeosRow::Geometry(output)),
             Err(e) if !ignore_per_row_errors => Err(e.into()),
-            Err(_) => Ok(GeosRow::Missing),
+            Err(_) => Ok(GeosRow::Null),
         }
     };
     match distance {
@@ -161,7 +161,7 @@ pub(super) fn by_distance_via_geos(
             debug_assert_eq!(distances.len(), geometries.geometries.len());
             for (geometry, distance) in geometries.geometries.iter_mut().zip(distances.iter()) {
                 let Some(&distance) = distance else {
-                    *geometry = GeosRow::Missing;
+                    *geometry = GeosRow::Null;
                     continue;
                 };
                 let GeosRow::Geometry(input) = geometry else {
@@ -170,7 +170,7 @@ pub(super) fn by_distance_via_geos(
                 *geometry = match geos_distance(distance) {
                     Ok(distance) => apply(input, distance)?,
                     Err(e) if !ignore_per_row_errors => return Err(e),
-                    Err(_) => GeosRow::Missing,
+                    Err(_) => GeosRow::Null,
                 };
             }
         }

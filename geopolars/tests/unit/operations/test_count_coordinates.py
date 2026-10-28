@@ -43,7 +43,7 @@ def test_a_point_counts_one(coords: pl.DataFrame, dimension: Dimension) -> None:
     assert out["point"].to_list() == [1] * coords.height
 
 
-def test_an_empty_point_counts_zero_and_a_missing_one_null(
+def test_an_empty_point_counts_zero_and_a_null_one_gives_null(
     dimension: Dimension,
 ) -> None:
     """GeoArrow spells the empty point as NaN `x` and `y`."""
@@ -159,7 +159,7 @@ def test_a_multipolygon_counts_over_all_its_polygons(
     ],
     ids=["linestring", "multipoint", "polygon", "multilinestring", "multipolygon"],
 )
-def test_no_coordinates_counts_zero_and_missing_is_null(
+def test_no_coordinates_counts_zero_and_null_stays_null(
     geometry: type[GeoArrowType], layers: int, rows: list, dimension: Dimension
 ) -> None:
     # Relabelled rather than built: a constructor refuses a ring without vertices,

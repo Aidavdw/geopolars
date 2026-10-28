@@ -46,7 +46,7 @@ def test_a_closed_line_of_three_vertices_is_no_ring() -> None:
     assert _is_ring(_line((0, 0), (1, 0), (0, 0))) == [False]
 
 
-def test_an_empty_line_is_no_ring_and_missing_stays_missing() -> None:
+def test_an_empty_line_is_no_ring_and_null_stays_null() -> None:
     assert _is_ring([], None) == [False, None]
 
 
@@ -132,7 +132,7 @@ def test_a_multilinestring_chain_needs_4_joined_vertices() -> None:
     assert _multi_is_ring(there_and_back) == [False]
 
 
-def test_an_empty_and_a_missing_multilinestring() -> None:
+def test_an_empty_and_a_null_multilinestring() -> None:
     assert _multi_is_ring([], None) == [False, None]
 
 

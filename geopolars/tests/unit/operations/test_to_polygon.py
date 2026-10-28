@@ -75,7 +75,7 @@ def test_the_polygon_is_a_geometry_like_any_other() -> None:
     assert df.select(geo.area("box")).item() == 8.0
 
 
-def test_a_missing_box_gives_a_missing_polygon() -> None:
+def test_a_null_box_gives_a_null_polygon() -> None:
     assert _rings(_polygons((None, 0.0, 1.0, 1.0))) == [None]
 
 
@@ -98,7 +98,7 @@ def test_an_empty_range_gives_an_empty_polygon(bounds: tuple[float, ...]) -> Non
 
 
 @pytest.mark.parametrize("crs", [None, "EPSG:28992"], ids=["no crs", "projected"])
-def test_a_box_across_the_antimeridian_without_a_longitude_is_missing(
+def test_a_box_across_the_antimeridian_without_a_longitude_is_null(
     crs: str | None,
 ) -> None:
     """Without a longitude there is no way around: no polygon describes the box."""

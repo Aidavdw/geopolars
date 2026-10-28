@@ -93,7 +93,7 @@ def test_rings_keep_their_order() -> None:
 
 def test_an_empty_list_is_an_empty_polygon() -> None:
     """A polygon with no rings is a geometry this layout can hold,
-    and is not a missing polygon.
+    and is not a null polygon.
     See https://geoarrow.org/format.html#empty-geometries"""
     df = pl.DataFrame({"rings": [[]]}, schema={"rings": _XY_RINGS}).select(
         geo.polygons_from_rings_in_single_column("rings").alias("polygon")
@@ -106,9 +106,9 @@ def test_an_empty_list_is_an_empty_polygon() -> None:
     ].to_list() == [0]
 
 
-def test_a_missing_ring_invalidates_the_whole_polygon() -> None:
+def test_a_null_ring_nulls_the_whole_polygon() -> None:
     """GeoArrow allows nulls only at the outermost level,
-    so a polygon that is missing a ring is a missing polygon.
+    so a polygon with a null ring is a null polygon.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {"rings": [[*_TRIANGLE, None], _TRIANGLE, None]},
@@ -118,9 +118,9 @@ def test_a_missing_ring_invalidates_the_whole_polygon() -> None:
     assert df["polygon"].is_null().to_list() == [True, False, True]
 
 
-def test_a_missing_vertex_invalidates_the_whole_polygon() -> None:
+def test_a_null_vertex_nulls_the_whole_polygon() -> None:
     """The same rule one level further down than for a linestring:
-    a ring missing a vertex cannot stand,
+    a ring with a null vertex cannot stand,
     and neither can the polygon around it."""
     df = pl.DataFrame(
         {"rings": [[[{"x": 1.0, "y": 2.0}, None]], _TRIANGLE]},
@@ -130,7 +130,7 @@ def test_a_missing_vertex_invalidates_the_whole_polygon() -> None:
     assert df["polygon"].is_null().to_list() == [True, False]
 
 
-def test_a_missing_coordinate_invalidates_the_whole_polygon() -> None:
+def test_a_null_coordinate_nulls_the_whole_polygon() -> None:
     """And one level down again:
     a vertex that is present but has no `y` is not a vertex,
     so its ring cannot stand, so its polygon cannot either."""
@@ -218,8 +218,8 @@ def test_coordinate_columns_build_the_same_polygons(
     )
 
 
-def test_a_missing_coordinate_invalidates_the_whole_polygon_of_coords() -> None:
-    """A vertex missing its `y` cannot stand, so neither can the ring around
+def test_a_null_coordinate_nulls_the_whole_polygon_of_coords() -> None:
+    """A vertex with a null `y` cannot stand, so neither can the ring around
     it, nor the polygon around that."""
     df = pl.DataFrame(
         {
@@ -298,7 +298,7 @@ def test_nested_coordinate_columns_keep_their_rings_in_order() -> None:
     )
 
 
-def test_a_missing_coordinate_invalidates_the_whole_polygon_of_nested_coords() -> None:
+def test_a_null_coordinate_nulls_the_whole_polygon_of_nested_coords() -> None:
     df = pl.DataFrame(
         {
             "lon": [[[0.0, 1.0, 0.0, 0.0]], [[0.0, 1.0, 0.0, 0.0]]],
@@ -381,7 +381,7 @@ def _from_rings(
     )
 
 
-def test_a_ring_that_is_no_ring_invalidates_the_polygon() -> None:
+def test_a_ring_that_is_no_ring_nulls_the_polygon() -> None:
     """Open, or closed with too few vertices to enclose anything,
     in the exterior or in a hole."""
     there_and_back = _ring_xy((0, 0), (1, 0), (0, 0))
@@ -515,7 +515,7 @@ def test_separate_columns_without_holes_build_the_exterior_alone() -> None:
     assert out.to_frame("polygon").equals(_from_rings(_TRIANGLE).to_frame("polygon"))
 
 
-def test_missing_holes_are_no_holes() -> None:
+def test_null_holes_are_no_holes() -> None:
     listed = _from_separate_rings([_EXTERIOR], [None])
     single = _from_separate_rings([_EXTERIOR], [None], holes_dtype=_XY_VERTICES)
 
@@ -523,19 +523,19 @@ def test_missing_holes_are_no_holes() -> None:
     assert single.ext.storage().to_list() == [[_EXTERIOR]]
 
 
-def test_a_missing_exterior_is_a_missing_polygon() -> None:
+def test_a_null_exterior_is_a_null_polygon() -> None:
     out = _from_separate_rings([None, _EXTERIOR], [[_HOLE], [_HOLE]])
 
     assert out.is_null().to_list() == [True, False]
 
 
-def test_a_missing_ring_among_the_holes_invalidates_the_polygon() -> None:
+def test_a_null_ring_among_the_holes_nulls_the_polygon() -> None:
     out = _from_separate_rings([_EXTERIOR, _EXTERIOR], [[_HOLE, None], [_HOLE]])
 
     assert out.is_null().to_list() == [True, False]
 
 
-def test_a_missing_vertex_in_a_hole_invalidates_the_polygon() -> None:
+def test_a_null_vertex_in_a_hole_nulls_the_polygon() -> None:
     broken = [*_HOLE[:3], None]
     listed = _from_separate_rings([_EXTERIOR], [[broken]])
     single = _from_separate_rings([_EXTERIOR], [broken], holes_dtype=_XY_VERTICES)

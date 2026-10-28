@@ -94,7 +94,7 @@ def test_clamping_keeps_z_and_m() -> None:
     [
         ("drop", _EMPTY),
         ("set_empty", _EMPTY),
-        ("set_invalid", None),
+        ("set_null", None),
         ("clamp", {"x": 0.0, "y": 90.0}),
     ],
 )
@@ -128,7 +128,7 @@ def test_a_multipoint_can_lose_all_of_its_points() -> None:
 
 @pytest.mark.parametrize(
     ("too_short", "expected"),
-    [("invalid", None), ("keep", [_A + _B, _A]), ("empty", [_A + _B, []])],
+    [("null", None), ("keep", [_A + _B, _A]), ("empty", [_A + _B, []])],
 )
 def test_a_short_part_of_a_multilinestring(too_short: str, expected: object) -> None:
     out = _fix(
@@ -152,7 +152,7 @@ def test_a_ring_keeps_its_vertices_inside() -> None:
 @pytest.mark.parametrize(
     ("too_short", "expected"),
     [
-        ("invalid", None),
+        ("null", None),
         ("keep", [_line((4, 0), (4, 4), (0, 4))]),
         ("empty", [[]]),
     ],
@@ -171,19 +171,19 @@ def test_a_clamped_ring_stays_closed() -> None:
     assert out == [[_line((0, 90), (4, 0), (4, 4), (0, 4), (0, 90))]]
 
 
-def test_only_the_multipolygon_with_a_short_ring_becomes_missing() -> None:
+def test_only_the_multipolygon_with_a_short_ring_becomes_null() -> None:
     out = _fix(MultiPolygonXY(crs=WGS84), [[_SQUARE], [_OVER_THE_POLE]], [[_SQUARE]])
 
     assert out == [None, [[_SQUARE]]]
 
 
-def test_only_the_rows_with_a_vertex_outside_become_missing() -> None:
+def test_only_the_rows_with_a_vertex_outside_become_null() -> None:
     out = _fix(
         MultiPolygonXY(crs=WGS84),
         [[_SQUARE], [_SPIKE]],
         [[_SQUARE]],
         None,
-        action="set_invalid",
+        action="set_null",
     )
 
     assert out == [None, [[_SQUARE]], None]
@@ -252,7 +252,7 @@ def test_without_bounds_the_input_is_returned(dtype: GeoArrowType) -> None:
     assert _fix(dtype, line, action="clamp") == [line]
 
 
-def test_a_missing_row_stays_missing() -> None:
+def test_a_null_row_stays_null() -> None:
     assert _fix(LineStringXY(crs=WGS84), None, _A + _NORTH + _B) == [None, _A + _B]
 
 

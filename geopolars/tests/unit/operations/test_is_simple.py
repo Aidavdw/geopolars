@@ -157,7 +157,7 @@ def test_a_single_vertex_is_not_simple() -> None:
     assert _lines_are_simple(_line((0, 0))) == [False]
 
 
-def test_missing_stays_missing() -> None:
+def test_null_stays_null() -> None:
     assert _lines_are_simple(None, _SQUARE) == [None, True]
 
 

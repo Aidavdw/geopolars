@@ -5,7 +5,7 @@
 //! ## `ALL_VALID`
 //!
 //! The loop over the rows is generic over `ALL_VALID`.
-//! If `ALL_VALID=true`, every row is there, so none is checked for being missing.
+//! If `ALL_VALID=true`, every row is there, so none is checked for being null.
 
 use geopolars_core::output::{bool_array, f64_array, list_array};
 use geopolars_core::{List, ValidList};
@@ -44,7 +44,7 @@ pub(crate) fn per_row_count(rows: &List, count: impl Fn(usize) -> u32) -> Primit
     PrimitiveArray::from_vec(counts).with_validity(rows.validity().cloned())
 }
 
-/// A `bool` per item, missing where it is `None`.
+/// A `bool` per item, null where it is `None`.
 pub(crate) fn optional_bool_array(tested: &[Option<bool>]) -> BooleanArray {
     let values = tested
         .iter()
@@ -54,7 +54,7 @@ pub(crate) fn optional_bool_array(tested: &[Option<bool>]) -> BooleanArray {
     bool_array(values, Some(&validity))
 }
 
-/// `test` of every row of a chunk, missing where the row is or where `test` gives `None`.
+/// `test` of every row of a chunk, null where the row is or where `test` gives `None`.
 #[inline(always)]
 pub(crate) fn per_row_optional_bool<E>(
     rows: &List,
@@ -63,7 +63,7 @@ pub(crate) fn per_row_optional_bool<E>(
     Ok(optional_bool_array(&per_row_values(rows, test)?))
 }
 
-/// `measure` of every row of a chunk, with a default value for a missing row.
+/// `measure` of every row of a chunk, with a default value for a null row.
 #[inline(always)]
 pub(crate) fn per_row_values<T: Default, E>(
     rows: &List,
@@ -82,7 +82,7 @@ fn per_row_values_with<const ALL_VALID: bool, T: Default, E>(
     measure: impl Fn(usize) -> Result<T, E>,
 ) -> Result<Vec<T>, E> {
     (0..rows.len())
-        // A missing row's offsets point anywhere, so it is not measured.
+        // A null row's offsets point anywhere, so it is not measured.
         .map(|i| {
             if ALL_VALID || rows.is_valid(i) {
                 measure(i)
@@ -104,7 +104,7 @@ pub(crate) fn per_part_optional_bool<E>(
     let mut offsets = Vec::with_capacity(rows.len() + 1);
     offsets.push(0);
     for i in 0..rows.len() {
-        // A missing row's offsets point anywhere, so it gets no parts.
+        // A null row's offsets point anywhere, so it gets no parts.
         if rows.is_valid(i) {
             for part in rows.range(i) {
                 tested.push(test(part)?);

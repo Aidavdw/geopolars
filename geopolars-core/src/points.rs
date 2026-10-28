@@ -8,7 +8,7 @@ use polars_core::prelude::PolarsResult;
 use crate::output::{coords_struct, list_array};
 use crate::{Coords, List, ValidCoords};
 
-/// One point: a single coordinate, which may be missing.
+/// One point: a single coordinate, which may be null.
 pub struct ScalarPoint<'a> {
     pub coords: &'a Coords,
     pub index: usize,
@@ -16,7 +16,7 @@ pub struct ScalarPoint<'a> {
 
 impl ScalarPoint<'_> {
     /// Its position: x, y, and with `Z` its z (`0.0` without).
-    /// With `NULLS`, `None` if it is missing.
+    /// With `NULLS`, `None` if it is null.
     /// Without, it assumes it is there.
     #[inline(always)]
     pub fn position<const NULLS: bool, const Z: bool>(&self) -> Option<[f64; 3]> {
@@ -25,7 +25,7 @@ impl ScalarPoint<'_> {
 }
 
 /// A column of points: one coordinate per row,
-/// with missing rows recorded in the coordinates' own validity.
+/// with null rows recorded in the coordinates' own validity.
 pub struct PointArray {
     pub coords: Coords,
 }
@@ -60,7 +60,7 @@ pub struct ScalarMultiPoint<'a> {
 }
 
 /// A column of multipoints: rows of coordinates.
-/// The points of a multipoint are never missing, only a whole row is.
+/// The points of a multipoint are never null, only a whole row is.
 pub struct MultiPointArray {
     pub rows: List,
     pub coords: ValidCoords,
@@ -82,7 +82,7 @@ impl MultiPointArray {
         list_array(coords.boxed(), rows, validity)
     }
 
-    /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
+    /// Row `i`. A null row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
     pub fn get(&self, i: usize) -> ScalarMultiPoint<'_> {
         ScalarMultiPoint {

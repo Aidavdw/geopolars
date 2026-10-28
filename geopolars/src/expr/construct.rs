@@ -181,14 +181,14 @@ pub(super) fn closed_rings(
 }
 
 /// `array` with its open rings closed first if there is a `close`,
-/// and missing where it does not have only rings (see [polygons_have_only_rings]).
+/// and null where it does not have only rings (see [polygons_have_only_rings]).
 fn validated_polygons(mut array: PolygonArray, close: Option<CloseRingsKwargs>) -> Box<dyn Array> {
     if let Some((rings, coords)) =
         close.and_then(|closing| closed_rings(&array.rings, &array.coords, closing))
     {
         (array.rings, array.coords) = (rings, coords);
     }
-    // A missing row is `false` in the values too.
+    // A null row is `false` in the values too.
     let z = array.coords.dim().has_z();
     let valid = with_const_flags!(polygons_have_only_rings(&array); z)
         .values()
@@ -197,8 +197,8 @@ fn validated_polygons(mut array: PolygonArray, close: Option<CloseRingsKwargs>) 
     array.into_list_array().boxed()
 }
 
-/// One chunk of the storage of a `kind`, with every missing value below a row moved out to it.
-/// A polygon is also missing where it does not have only rings (see [polygons_have_only_rings]).
+/// One chunk of the storage of a `kind`, with every null value below a row moved out to it.
+/// A polygon is also null where it does not have only rings (see [polygons_have_only_rings]).
 /// With a `close`, the open rings of a polygon are closed first.
 fn validated_chunk(
     chunk: &dyn Array,
@@ -225,7 +225,7 @@ fn validated_chunk(
             {
                 (array.rings, array.coords) = (rings, coords);
             }
-            // A missing row is `false` in the values too.
+            // A null row is `false` in the values too.
             let z = array.coords.dim().has_z();
             let valid = with_const_flags!(multi_polygons_have_only_rings(&array); z)
                 .values()
@@ -496,7 +496,7 @@ fn interleaved_columns(inputs: &[Series], nesting: u8) -> PolarsResult<Series> {
         polars_ensure!(
             column.list_offsets_and_validities_recursive() == structure,
             ComputeError: "`{}` and `{}` do not nest the same way: their lists \
-            differ in length, or in which of them are missing",
+            differ in length, or in which of them are null",
             columns[0].name(), column.name()
         );
     }
@@ -671,8 +671,8 @@ fn one_hole_per_row(holes: LineStringArray) -> MultiLineStringArray {
     }
 }
 
-/// Which polygons are there: missing where the exterior is,
-/// or where the holes of the row were given but something in them was missing.
+/// Which polygons are there: null where the exterior is,
+/// or where the holes of the row were given but something in them was null.
 /// `given` is the validity of the rows of holes before inner nulls moved out to them.
 fn assembled_validity(
     exteriors: &LineStringArray,
@@ -689,7 +689,7 @@ fn assembled_validity(
 
 /// One chunk of polygons out of one chunk of exterior rings, and of holes.
 /// `holes` holds one ring per row, or with `listed=true` a list of them.
-/// See `polygons_from_rings_in_separate_columns` for the missing values.
+/// See `polygons_from_rings_in_separate_columns` for the null values.
 fn assembled_polygons(
     exteriors: &dyn Array,
     holes: Option<(&dyn Array, bool)>,

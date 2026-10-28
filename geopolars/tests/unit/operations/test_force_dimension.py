@@ -137,7 +137,7 @@ def test_an_empty_point_stays_empty(op: Op) -> None:
 
 
 @OPS
-def test_missing_and_empty_geometries_stay_so(
+def test_null_and_empty_geometries_stay_so(
     op: Op, z: bool | None, m: bool | None
 ) -> None:
     xy = pl.Struct({"x": pl.Float64, "y": pl.Float64})

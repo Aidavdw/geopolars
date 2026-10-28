@@ -76,7 +76,7 @@ pub fn is_ring<const Z: bool>(coords: &ValidCoords, vertices: Range<usize>) -> b
 }
 
 /// Coordinates that are all assumed to be valid.
-/// Use for coordinates that **cannot** include invalid coordinates (nested geometries).
+/// Use for coordinates that **cannot** include null coordinates (nested geometries).
 /// Otherwise, use [Coords].
 ///
 /// See the README on views.
@@ -256,7 +256,7 @@ impl ValidCoords {
     }
 }
 
-/// Coordinate data that might be potentially invalid.
+/// Coordinate data that might hold nulls.
 /// Considers validity of individual components of the coordinates
 /// ('x' may be valid, but 'y' may not be).
 /// Use this in validation only.
@@ -291,8 +291,8 @@ impl<'a> AxisArrays<'a> {
     }
 }
 
-/// Coordinates where individual coordinates can be invalid.
-/// Use for coordinates that **can** include invalid coordinates (columns of Points).
+/// Coordinates where individual coordinates can be null.
+/// Use for coordinates that **can** include null coordinates (columns of Points).
 /// Otherwise, use [ValidCoords].
 ///
 /// See the README on views.
@@ -349,7 +349,7 @@ impl Coords {
         self.xy_checking_nulls::<true>(i)
     }
 
-    /// [`xy`](Self::xy), checking whether it is missing only with `NULLS`.
+    /// [`xy`](Self::xy), checking whether it is null only with `NULLS`.
     /// Without, it assumes every coordinate is there.
     #[inline(always)]
     pub fn xy_checking_nulls<const NULLS: bool>(&self, i: usize) -> Option<(f64, f64)> {
@@ -357,7 +357,7 @@ impl Coords {
     }
 
     /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
-    /// With `NULLS`, `None` if it is missing.
+    /// With `NULLS`, `None` if it is null.
     /// Without, it assumes every coordinate is there.
     #[inline(always)]
     pub fn position<const NULLS: bool, const Z: bool>(&self, i: usize) -> Option<[f64; 3]> {

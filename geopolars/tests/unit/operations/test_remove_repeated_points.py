@@ -97,13 +97,13 @@ def test_a_ring_stays_closed() -> None:
     assert _remove(PolygonXY(), [ring]) == [[_SQUARE]]
 
 
-def test_a_polygon_with_a_collapsed_ring_becomes_missing() -> None:
+def test_a_polygon_with_a_collapsed_ring_becomes_null() -> None:
     ring = _line((0, 0), (1e-12, 0), (1, 1), (0, 0))
 
     assert _remove(PolygonXY(), [ring], [_SQUARE], abs_tol=1e-9) == [None, [_SQUARE]]
 
 
-def test_a_multipolygon_with_a_collapsed_ring_becomes_missing() -> None:
+def test_a_multipolygon_with_a_collapsed_ring_becomes_null() -> None:
     hole = _line((1, 1), (1, 1), (2, 2), (1, 1))
 
     assert _remove(MultiPolygonXY(), [[_SQUARE], [_SQUARE, hole]], [[_SQUARE]]) == [
@@ -127,10 +127,10 @@ _A = _line((1, 1))
 @pytest.mark.parametrize(
     ("collapsed_lines", "too_short", "collapsed", "single"),
     [
-        ("keep_ends", "invalid", _A + _A, None),
+        ("keep_ends", "null", _A + _A, None),
         ("keep_ends", "keep", _A + _A, _A),
         ("keep_ends", "empty", _A + _A, []),
-        ("single_vertex", "invalid", None, None),
+        ("single_vertex", "null", None, None),
         ("single_vertex", "keep", _A, _A),
         ("single_vertex", "empty", [], []),
     ],
@@ -154,7 +154,7 @@ def test_what_a_collapsed_or_short_line_keeps(
 
 @pytest.mark.parametrize(
     ("too_short", "expected"),
-    [("invalid", None), ("keep", [_REMOVED, _A]), ("empty", [_REMOVED, []])],
+    [("null", None), ("keep", [_REMOVED, _A]), ("empty", [_REMOVED, []])],
 )
 def test_a_short_part_of_a_multilinestring(too_short: str, expected: object) -> None:
     out = _remove(
@@ -167,7 +167,7 @@ def test_a_short_part_of_a_multilinestring(too_short: str, expected: object) -> 
     assert out == [expected]
 
 
-@pytest.mark.parametrize("too_short", ["invalid", "keep", "empty"])
+@pytest.mark.parametrize("too_short", ["null", "keep", "empty"])
 def test_a_multipoint_of_one_point_repeated_keeps_one(too_short: str) -> None:
     out = _remove(MultiPointXY(), _A + _A + _A, too_short=too_short)
 
@@ -181,7 +181,7 @@ _B = _line((2, 2))
 @pytest.mark.parametrize(
     ("too_short", "at_one_place", "back_and_forth"),
     [
-        ("invalid", None, None),
+        ("null", None, None),
         ("keep", [_A + _A], [_A + _B + _A]),
         ("empty", [[]], [[]]),
     ],
@@ -313,7 +313,7 @@ def test_a_point_is_returned_as_is() -> None:
     assert _remove(PointXY(), point, None) == [point, None]
 
 
-def test_missing_and_empty_geometries_stay_so() -> None:
+def test_null_and_empty_geometries_stay_so() -> None:
     assert _remove(LineStringXY(), None, [], _REPEATED) == [None, [], _REMOVED]
 
 

@@ -39,7 +39,7 @@ def _check_one_of(
 def _distances_of(geometry: pl.Expr, distance: IntoExprColumn) -> pl.Expr:
     """One distance per geometry, broadcast from a single value.
     Polars raises a `ShapeError` on any other length, which a plugin cannot.
-    A missing geometry gives a missing row either way, so its distance is dropped.
+    A null geometry gives a null row either way, so its distance is dropped.
     """
     distance = _to_expr(distance).cast(pl.Float64)
     return pl.when(geometry.is_null()).then(None).otherwise(distance)
@@ -67,9 +67,9 @@ def buffer(
     (degrees for longitude/latitude).
     It is one number for every geometry,
     or a column (or expression) with one distance per geometry.
-    A missing distance gives a missing polygon.
+    A null distance gives a null polygon.
     A NaN or infinite distance in a column raises, as does a negative one with `side`.
-    With `ignore_per_row_errors=True`, such a row gives a missing polygon instead.
+    With `ignore_per_row_errors=True`, such a row gives a null polygon instead.
 
     A point, linestring or polygon gives a polygon.
     Their multi-variants give a multipolygon,
@@ -86,7 +86,7 @@ def buffer(
     | `MultiPolygonXY[Z][M]` | `MultiPolygonXY` | `MultiPolygonXY` |
 
     {computed_by_geos_dropping_z_and_m}
-    {empty_and_missing}
+    {empty_and_null}
     A `distance` of at most 0 gives an empty polygon for a point or linestring.
 
     With `allow_splitting=True` and a `distance` column, or one of at most 0,

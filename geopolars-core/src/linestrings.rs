@@ -76,7 +76,7 @@ impl LineStringArray {
         list_array(coords.boxed(), rows, validity)
     }
 
-    /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
+    /// Row `i`. A null row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
     pub fn get(&self, i: usize) -> ScalarLineString<'_> {
         ScalarLineString {
@@ -112,7 +112,7 @@ impl MultiLineStringArray {
         list_array(lines.boxed(), rows, validity)
     }
 
-    /// Row `i`. A missing row's offsets point anywhere: check `rows.is_valid(i)` first.
+    /// Row `i`. A null row's offsets point anywhere: check `rows.is_valid(i)` first.
     #[inline(always)]
     pub fn get(&self, i: usize) -> ScalarMultiLineString<'_> {
         ScalarMultiLineString {

@@ -76,7 +76,7 @@ def _is_valid_ogc(
 # GeoArrow's rules still hold.
 
 
-def test_a_missing_vertex_is_invalid() -> None:
+def test_a_null_vertex_is_invalid() -> None:
     assert _is_valid_ogc(LineStringXY(), [{"x": 0.0, "y": 0.0}, None]) == [False]
 
 
@@ -364,7 +364,7 @@ def test_an_empty_multi_geometry_is_valid(dtype: GeoArrowType) -> None:
 @pytest.mark.parametrize(
     "dtype", [PointXY(), LineStringXY(), PolygonXY(), MultiPolygonXY()]
 )
-def test_a_missing_geometry_gives_a_missing_result(dtype: GeoArrowType) -> None:
+def test_a_null_geometry_gives_a_null_result(dtype: GeoArrowType) -> None:
     assert _is_valid_ogc(dtype, None) == [None]
 
 

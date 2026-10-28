@@ -117,7 +117,7 @@ def test_a_multipolygon_gives_a_list_per_polygon_per_ring(
 
 
 @XY_AXES
-def test_a_missing_point_has_no_coordinate(axis: str, getter: Getter) -> None:
+def test_a_null_point_has_no_coordinate(axis: str, getter: Getter) -> None:
     df = pl.DataFrame({"x": [1.0, 2.0], "y": [3.0, 4.0]}).select(
         pl.when(pl.col("x") > 1.0).then(XY.point())
     )
@@ -127,7 +127,7 @@ def test_a_missing_point_has_no_coordinate(axis: str, getter: Getter) -> None:
 
 
 @XY_AXES
-def test_missing_and_empty_geometries_stay_so(axis: str, getter: Getter) -> None:
+def test_null_and_empty_geometries_stay_so(axis: str, getter: Getter) -> None:
     xy = pl.Struct({"x": pl.Float64, "y": pl.Float64})
     lines = pl.Series("line", [None, [], [{"x": 1.0, "y": 2.0}]], pl.List(xy))
     polygons = pl.Series("polygon", [None, [], [[]]], pl.List(pl.List(xy)))

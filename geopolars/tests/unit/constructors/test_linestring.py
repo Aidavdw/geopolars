@@ -69,9 +69,9 @@ def test_an_empty_list_is_an_empty_linestring() -> None:
     assert df.select(pl.col("line").ext.storage().list.len())["line"].to_list() == [0]
 
 
-def test_a_missing_vertex_invalidates_the_whole_linestring() -> None:
-    """GeoArrow allows nulls only at the outermost level, so a line that is
-    missing a vertex is a missing line.
+def test_a_null_vertex_nulls_the_whole_linestring() -> None:
+    """GeoArrow allows nulls only at the outermost level, so a line with
+    a null vertex is a null line.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {
@@ -87,7 +87,7 @@ def test_a_missing_vertex_invalidates_the_whole_linestring() -> None:
     assert df["line"].is_null().to_list() == [True, False, True]
 
 
-def test_a_missing_coordinate_invalidates_the_whole_linestring() -> None:
+def test_a_null_coordinate_nulls_the_whole_linestring() -> None:
     """The same rule one level down: a vertex that is present but has no `y` is
     not a vertex, so its line cannot stand either."""
     df = pl.DataFrame(
@@ -185,7 +185,7 @@ def test_an_empty_coordinate_list_is_an_empty_linestring() -> None:
     assert df.select(pl.col("line").ext.storage().list.len())["line"].to_list() == [0]
 
 
-def test_a_missing_coordinate_list_is_a_missing_linestring() -> None:
+def test_a_null_coordinate_list_is_a_null_linestring() -> None:
     df = pl.DataFrame(
         {"lon": [[1.0], None], "lat": [[2.0], None]}, schema=_XY_COORDS
     ).select(geo.line_string("lon", "lat").alias("line"))
@@ -193,8 +193,8 @@ def test_a_missing_coordinate_list_is_a_missing_linestring() -> None:
     assert df["line"].is_null().to_list() == [False, True]
 
 
-def test_a_missing_coordinate_invalidates_the_whole_linestring_of_coords() -> None:
-    """The same rule as for vertices: a vertex missing its `y` is not a vertex,
+def test_a_null_coordinate_nulls_the_whole_linestring_of_coords() -> None:
+    """The same rule as for vertices: a vertex with a null `y` is not a vertex,
     so its line cannot stand.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
@@ -209,7 +209,7 @@ def test_a_missing_coordinate_invalidates_the_whole_linestring_of_coords() -> No
     [
         # Different vertex counts: there is no line the coordinates agree on.
         ([[1.0, 3.0]], [[2.0]]),
-        # One line missing where the other is empty is the same disagreement.
+        # One line null where the other is empty is the same disagreement.
         ([None], [[]]),
     ],
 )

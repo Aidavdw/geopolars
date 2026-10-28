@@ -67,7 +67,7 @@ def test_an_empty_line_is_ccw() -> None:
     assert _lines([]) == [True]
 
 
-def test_a_missing_line_stays_missing() -> None:
+def test_a_null_line_stays_null() -> None:
     assert _lines(None, _CCW) == [None, True]
 
 
@@ -108,7 +108,7 @@ def test_an_empty_polygon_or_ring_is_ccw() -> None:
     assert _polygons([], [_CCW, []], [[]], [_CW, []]) == [True, True, True, False]
 
 
-def test_a_missing_polygon_gives_missing() -> None:
+def test_a_null_polygon_gives_null() -> None:
     assert _polygons(None, [_CCW]) == [None, True]
 
 

@@ -90,7 +90,7 @@ def test_bad_arguments_are_refused() -> None:
         geo.skew_about_centroid("line", 30, unit="rad")  # type: ignore[arg-type]
 
 
-def test_a_geometry_without_a_centroid_comes_out_missing() -> None:
+def test_a_geometry_without_a_centroid_comes_out_null() -> None:
     df = pl.DataFrame(
         {"line": [[{"x": 0.0, "y": 0.0}, {"x": 0.0, "y": 2.0}], [], None]},
         schema={"line": pl.List(pl.Struct({"x": pl.Float64, "y": pl.Float64}))},

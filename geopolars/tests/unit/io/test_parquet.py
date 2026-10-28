@@ -74,11 +74,11 @@ def test_metadata_survives_a_parquet_round_trip(tmp_path: Path) -> None:
     assert back.schema["point"] == dtype
 
 
-def test_a_missing_geometry_survives_a_parquet_round_trip(
+def test_a_null_geometry_survives_a_parquet_round_trip(
     dimension: Dimension, tmp_path: Path
 ) -> None:
     """Nulls live at the outermost level only, and that is where a file has to
-    put them back: an empty line is not a missing one."""
+    put them back: an empty line is not a null one."""
     df = pl.DataFrame(
         {"vertices": [[{name: 1.0 for name in dimension.coords}], [], None]},
         schema={

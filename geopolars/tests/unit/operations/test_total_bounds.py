@@ -59,7 +59,7 @@ def test_the_box_surrounds_every_rows_box(wkts: list[str], dtype: type) -> None:
     assert df.select(geo.total_bounds("g")).dtypes == [BoxXYZM()]
 
 
-def test_a_missing_row_makes_the_box_missing_unless_ignored() -> None:
+def test_a_null_row_makes_the_box_null_unless_ignored() -> None:
     df = _geometries([_POLYGONS[0], None, _POLYGONS[1]], PolygonXYZM)
 
     assert _bounds_of(df) is None
@@ -68,7 +68,7 @@ def test_a_missing_row_makes_the_box_missing_unless_ignored() -> None:
 
 @pytest.mark.parametrize("ignore_nulls", [False, True])
 @pytest.mark.parametrize("wkts", [[], [None, None]])
-def test_no_geometries_give_a_missing_box(
+def test_no_geometries_give_a_null_box(
     wkts: list[str | None], ignore_nulls: bool
 ) -> None:
     assert _bounds_of(_geometries(wkts, PolygonXYZM), ignore_nulls=ignore_nulls) is None

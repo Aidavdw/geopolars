@@ -1,4 +1,4 @@
-"""Emptying, dropping or invalidating the coordinates that are not finite, or empty (A-tier)."""
+"""Emptying, dropping or nulling the coordinates that are not finite, or empty (A-tier)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from geopolars._typing import IntoExprColumn
     from geopolars.datatypes import GeoArrowType
 
-NonFiniteAction = Literal["set_empty", "drop", "set_invalid"]
+NonFiniteAction = Literal["set_empty", "drop", "set_null"]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -33,7 +33,7 @@ class NonFinite:
     ignore_z: bool = False
     ignore_m: bool = False
     action: NonFiniteAction = "drop"
-    too_short: TooShort = "invalid"
+    too_short: TooShort = "null"
 
     def __post_init__(self) -> None:
         for name, allowed in [("action", NonFiniteAction), ("too_short", TooShort)]:
@@ -69,7 +69,7 @@ def filter_coordinates(
     ignore_z: bool = False,
     ignore_m: bool = False,
     action: NonFiniteAction = "drop",
-    too_short: TooShort = "invalid",
+    too_short: TooShort = "null",
 ) -> pl.Expr:
     """Finds coordinates that are not finite (NaN, inf) or empty,
     and performs an action on then (make empty, null, or drop).

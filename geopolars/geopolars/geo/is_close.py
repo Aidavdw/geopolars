@@ -55,7 +55,7 @@ def is_close(
 
     Equal lengths are compared row by row.
     A single geometry on either side is compared against every row of the other.
-    A missing geometry on either side gives a missing result.
+    A null geometry on either side gives a null result.
 
     ```python
     df.filter(geo.is_close("parcel", "surveyed", abs_tol=0.01))

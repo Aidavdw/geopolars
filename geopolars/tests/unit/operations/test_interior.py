@@ -51,7 +51,7 @@ def test_the_interior_is_every_ring_after_the_exterior() -> None:
     assert _interiors(df) == [[_HOLE, _OTHER_HOLE], []]
 
 
-def test_a_missing_or_empty_polygon() -> None:
+def test_a_null_or_empty_polygon() -> None:
     assert _interiors(_polygons(None, [])) == [None, []]
 
 
@@ -124,7 +124,7 @@ def test_the_namespace_matches_the_function() -> None:
     )
 
 
-def test_a_missing_multipolygon_leaves_no_null_inside_the_interiors() -> None:
+def test_a_null_multipolygon_leaves_no_null_inside_the_interiors() -> None:
     """GeoArrow allows nulls only at the outermost level.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = _multipolygons([[_OUTER, _HOLE], []], None)

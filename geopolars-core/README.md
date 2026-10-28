@@ -41,5 +41,5 @@ for the `wkb` and `wkt` writers.
 ('x' may be valid, but 'y' may not be).
 Use it only to check that something is valid GeoArrow.
 `UncheckedStorage` holds a chunk as it comes from Polars, with the validity of every level.
-Use it only to move the missing values below the rows out to the rows
+Use it only to move the null values below the rows out to the rows
 (`inner_nulls` in `geopolars-compute`).

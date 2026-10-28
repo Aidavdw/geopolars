@@ -102,7 +102,7 @@ def test_a_single_linestring_is_a_valid_multilinestring() -> None:
     assert df.schema["multilinestring"] != LineStringXY()
 
 
-def test_a_missing_linestring_invalidates_the_whole_multilinestring() -> None:
+def test_a_null_linestring_nulls_the_whole_multilinestring() -> None:
     """GeoArrow allows nulls only at the outermost level.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
@@ -113,7 +113,7 @@ def test_a_missing_linestring_invalidates_the_whole_multilinestring() -> None:
     assert df["multilinestring"].is_null().to_list() == [True, False, True]
 
 
-def test_a_missing_vertex_invalidates_the_whole_multilinestring() -> None:
+def test_a_null_vertex_nulls_the_whole_multilinestring() -> None:
     df = pl.DataFrame(
         {"lines": [[[{"x": 1.0, "y": 2.0}, None]], _SEGMENT]},
         schema={"lines": _XY_LINES},
@@ -122,7 +122,7 @@ def test_a_missing_vertex_invalidates_the_whole_multilinestring() -> None:
     assert df["multilinestring"].is_null().to_list() == [True, False]
 
 
-def test_a_missing_coordinate_invalidates_the_whole_multilinestring() -> None:
+def test_a_null_coordinate_nulls_the_whole_multilinestring() -> None:
     df = pl.DataFrame(
         {"lines": [[[{"x": 1.0, "y": None}]], _SEGMENT]},
         schema={"lines": _XY_LINES},
@@ -244,7 +244,7 @@ def test_coordinate_columns_are_cast_to_f64() -> None:
     )
 
 
-def test_a_missing_coordinate_invalidates_the_multilinestring_of_coords() -> None:
+def test_a_null_coordinate_nulls_the_multilinestring_of_coords() -> None:
     df = pl.DataFrame(
         {"lon": [[[1.0]], [[1.0]]], "lat": [[[None]], [[2.0]]]}, schema=_XY_COORDS
     ).select(geo.multi_line_string("lon", "lat").alias("multilinestring"))

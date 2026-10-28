@@ -36,7 +36,7 @@ def polygons_from_rings_in_single_column(
 
     Every ring has to be a ring (see [`is_ring`][geopolars.geo.is_ring]):
     at least 4 vertices, the last one repeating the first.
-    A polygon with a ring that is not one is missing in the result.
+    A polygon with a ring that is not one is null in the result.
     The exception is a polygon whose rings are all empty, which is the empty polygon.
     With `close=CloseRings(...)`, an open ring is first closed as `close_rings` does.
     A ring that is still too short after that stays refused.
@@ -80,9 +80,9 @@ def polygons_from_rings_in_separate_columns(
     `holes` holds either one ring per polygon, or a list of them.
     Without `holes`, no polygon has holes.
 
-    A missing exterior gives a missing polygon.
-    A missing `holes` value means the polygon has no holes.
-    A missing ring in a list of holes, or a missing vertex, makes the polygon missing.
+    A null exterior gives a null polygon.
+    A null `holes` value means the polygon has no holes.
+    A null ring in a list of holes, or a null vertex, makes the polygon null.
     The CRS is the exterior's.
     Rings are checked (and closed with `close`)
     as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
@@ -205,7 +205,7 @@ def multi_polygons_from_polygons(
 
     Rings are checked (and closed with `close`)
     as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
-    A multipolygon with a polygon that fails this is missing in the result.
+    A multipolygon with a polygon that fails this is null in the result.
     """
     return _gather("multipolygon", polygons, _polygon_kwargs(crs, close))
 
@@ -232,7 +232,7 @@ def multi_polygons_from_coordinates(
 
     Rings are checked (and closed with `close`)
     as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
-    A multipolygon with a polygon that fails this is missing in the result.
+    A multipolygon with a polygon that fails this is null in the result.
     """
     return _from_columns("multipolygon_coords", x, y, z, m, _polygon_kwargs(crs, close))
 
@@ -258,7 +258,7 @@ def multi_polygons_from_nested_coordinates(
 
     Rings are checked (and closed with `close`)
     as in [`polygons_from_rings_in_single_column`][geopolars.geo.polygons_from_rings_in_single_column].
-    A multipolygon with a polygon that fails this is missing in the result.
+    A multipolygon with a polygon that fails this is null in the result.
     """
     return _from_columns(
         "multipolygon_nested_coords", x, y, z, m, _polygon_kwargs(crs, close)

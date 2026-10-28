@@ -127,8 +127,8 @@ pub fn affine_points(matrix: &AffineMatrix, array: &PointArray, shift: RowShift)
             ),
         }
     });
-    let missing = points.and_then(|points| points.coords.validity());
-    let validity = combine_validities_and(coords.validity(), missing);
+    let origin_validity = points.and_then(|points| points.coords.validity());
+    let validity = combine_validities_and(coords.validity(), origin_validity);
     let values = coords.ignoring_validity().with_positions(positions);
     PointArray::new(Coords::from_valid(values, validity))
 }
@@ -234,8 +234,8 @@ fn affine_nested(
             ),
         }
     });
-    let missing = points.and_then(|points| points.coords.validity());
-    let validity = combine_validities_and(rows.validity(), missing);
+    let origin_validity = points.and_then(|points| points.coords.validity());
+    let validity = combine_validities_and(rows.validity(), origin_validity);
     (
         rows.clone().with_validity(validity),
         coords.with_positions(positions),
@@ -333,7 +333,7 @@ fn transform<const D: usize>(coefficients: [f64; D], position: [f64; D]) -> f64 
 
 /// One output coordinate of each of the `rows` points: `coefficients` times its position
 /// (from `columns`), plus its `shift(i)` if there is one, then `offset`.
-/// A missing point gets `0.0`, and is never read.
+/// A null point gets `0.0`, and is never read.
 fn transform_points<const D: usize, const NULLS: bool>(
     coefficients: [f64; D],
     offset: f64,

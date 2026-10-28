@@ -1,5 +1,5 @@
-//! Moving every missing value below a row out to the row,
-//! so that the views hold to GeoArrow's rule on missing values:
+//! Moving every null value below a row out to the row,
+//! so that the views hold to GeoArrow's rule on null values:
 //! nulls only at the outermost level.
 //! This is a separate pass, before any kernel reads the views.
 
@@ -9,8 +9,8 @@ use geopolars_core::{
 };
 use polars_arrow::bitmap::Bitmap;
 
-/// The validity of the rows of `storage`, with every missing value below a row moved out to it:
-/// a row is also missing where a part or coordinate (or one of its axes) below it is.
+/// The validity of the rows of `storage`, with every null value below a row moved out to it:
+/// a row is also null where a part or coordinate (or one of its axes) below it is.
 /// `None` when every row is there.
 fn propagate_inner_nulls(storage: &UncheckedStorage) -> Option<Bitmap> {
     let coords = storage.coords.validity().cloned();
@@ -42,9 +42,9 @@ fn propagate_inner_nulls_of_lists<const N: usize>(
     (lists, coords)
 }
 
-/// The points of `storage`, missing where one of their axes is.
+/// The points of `storage`, null where one of their axes is.
 /// The other `propagate_inner_nulls_of_*` functions do the same for their kind:
-/// a row is missing where anything below it is.
+/// a row is null where anything below it is.
 pub fn propagate_inner_nulls_of_points(storage: UncheckedStorage) -> PointArray {
     let levels = storage.lists.len();
     assert_eq!(levels, 0, "expected points, got {levels} list levels");

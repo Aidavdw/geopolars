@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from geopolars.datatypes import GeoArrowType
 
 CollapsedLines = Literal["keep_ends", "single_vertex"]
-TooShort = Literal["invalid", "keep", "empty"]
+TooShort = Literal["null", "keep", "empty"]
 
 
 @doc()
@@ -29,7 +29,7 @@ def remove_repeated_points(
     unique_z: bool = True,
     unique_m: bool = False,
     collapsed_lines: CollapsedLines = "keep_ends",
-    too_short: TooShort = "invalid",
+    too_short: TooShort = "null",
 ) -> pl.Expr:
     """Removes coincident points in direct succession, leaving only one.
     If `n` repeating points are all at the same place, all but the first are removed,

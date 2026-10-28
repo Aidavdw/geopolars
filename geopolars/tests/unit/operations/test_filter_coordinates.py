@@ -150,10 +150,10 @@ def test_a_selected_point_becomes_the_empty_point(action: str) -> None:
     ]
 
 
-def test_a_selected_point_can_become_missing() -> None:
+def test_a_selected_point_can_become_null() -> None:
     rows = [*_A, *_NOT_FINITE, *_EMPTY_POINT, None]
 
-    assert _filter(PointXY(), *rows, action="set_invalid") == [
+    assert _filter(PointXY(), *rows, action="set_null") == [
         *_A,
         None,
         None,
@@ -162,13 +162,13 @@ def test_a_selected_point_can_become_missing() -> None:
     ]
 
 
-def test_only_the_rows_holding_a_selected_vertex_become_missing() -> None:
+def test_only_the_rows_holding_a_selected_vertex_become_null() -> None:
     out = _filter(
         MultiPolygonXY(),
         [[_SQUARE], [_SQUARE, _line((1, 1), (2, 1), (NAN, NAN), (1, 1))]],
         [[_SQUARE]],
         None,
-        action="set_invalid",
+        action="set_null",
     )
 
     assert out == [None, [[_SQUARE]], None]
@@ -180,7 +180,7 @@ def test_a_multipoint_can_lose_all_of_its_points() -> None:
 
 @pytest.mark.parametrize(
     ("too_short", "short"),
-    [("invalid", None), ("keep", _A), ("empty", [])],
+    [("null", None), ("keep", _A), ("empty", [])],
 )
 def test_a_line_of_one_vertex_is_too_short(too_short: str, short: Line | None) -> None:
     out = _filter(
@@ -197,7 +197,7 @@ def test_a_line_of_one_vertex_is_too_short(too_short: str, short: Line | None) -
 
 @pytest.mark.parametrize(
     ("too_short", "expected"),
-    [("invalid", None), ("keep", [_A + _B, _A]), ("empty", [_A + _B, []])],
+    [("null", None), ("keep", [_A + _B, _A]), ("empty", [_A + _B, []])],
 )
 def test_a_short_part_of_a_multilinestring(too_short: str, expected: object) -> None:
     out = _filter(MultiLineStringXY(), [_A + _B, _A + _NOT_FINITE], too_short=too_short)
@@ -212,7 +212,7 @@ _OPEN = _line((0, 0), (4, 0), (4, 4), (0, 4))
 @pytest.mark.parametrize(
     ("too_short", "short", "open_"),
     [
-        ("invalid", None, None),
+        ("null", None, None),
         ("keep", [_A + _B + _A], [_OPEN]),
         ("empty", [[]], [[]]),
     ],
@@ -243,7 +243,7 @@ def test_a_ring_that_is_closed_in_x_and_y_but_not_z_is_too_short() -> None:
     assert _filter(PolygonXYZM(), [ring], too_short="empty") == [[[]]]
 
 
-def test_only_the_multipolygon_with_a_short_ring_becomes_missing() -> None:
+def test_only_the_multipolygon_with_a_short_ring_becomes_null() -> None:
     hole = _line((1, 1), (2, 1), (NAN, NAN), (1, 1))
 
     out = _filter(MultiPolygonXY(), [[_SQUARE], [_SQUARE, hole]], [[_SQUARE]])
@@ -268,7 +268,7 @@ def test_a_short_ring_in_a_sliced_column_misses_its_own_row() -> None:
     assert out["g"].to_list() == [None, [[_SQUARE]]]
 
 
-def test_a_missing_row_stays_missing() -> None:
+def test_a_null_row_stays_null() -> None:
     assert _filter(LineStringXY(), None, _A + _NOT_FINITE + _B) == [None, _A + _B]
 
 

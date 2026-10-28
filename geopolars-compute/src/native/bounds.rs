@@ -20,8 +20,8 @@
 //! ## `IGNORE_NULLS`
 //!
 //! The `*_column_extent` functions are generic over `IGNORE_NULLS`.
-//! If `IGNORE_NULLS=false`, a missing row makes the column's box missing.
-//! If `IGNORE_NULLS=true`, a missing row is skipped.
+//! If `IGNORE_NULLS=false`, a null row makes the column's box null.
+//! If `IGNORE_NULLS=true`, a null row is skipped.
 
 use std::convert::Infallible;
 use std::ops::Range;
@@ -202,7 +202,7 @@ pub fn point_bounds<const Z: bool, const M: bool>(
     options: &BoxOptions,
 ) -> StructArray {
     let coords = array.coords.ignoring_validity();
-    // A missing point is bounded too: its box is masked by the validity.
+    // A null point is bounded too: its box is masked by the validity.
     let boxes: Vec<Extent<Z, M>> = (0..coords.len())
         .map(|i| bound(coords, i..i + 1, options))
         .collect();
@@ -283,7 +283,7 @@ pub fn multi_polygon_part_bounds<const Z: bool, const M: bool>(
 
 /// The extent of every row of `rows`, before [BoxOptions::finish].
 /// `vertices_of` maps a run of rows to where their coordinates sit.
-/// `None` when the column's box is missing.
+/// `None` when the column's box is null.
 #[inline(always)]
 fn column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
     rows: &List,

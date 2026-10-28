@@ -134,7 +134,7 @@ fn points_are_close_with<const UNIQUE_Z: bool, const UNIQUE_M: bool, const NANS_
             tolerance,
         )
     };
-    // A missing point is compared too: its result is masked by the validity.
+    // A null point is compared too, but its result is masked by the validity.
     let values = if b.len() == len {
         Bitmap::from_iter((0..len).map(|i| close(i, i)))
     } else {

@@ -166,7 +166,7 @@ def test_the_dtype_and_crs_are_kept(skip_crossing: bool) -> None:
 
 
 @pytest.mark.parametrize("skip_crossing", [False, True])
-def test_missing_and_empty_geometries_pass_through(skip_crossing: bool) -> None:
+def test_null_and_empty_geometries_pass_through(skip_crossing: bool) -> None:
     lines = pl.LazyFrame(
         {"x": [None, [], [190.0]], "y": [None, [], [0.0]]},
         schema={"x": pl.List(pl.Float64), "y": pl.List(pl.Float64)},

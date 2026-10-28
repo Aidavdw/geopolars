@@ -31,7 +31,7 @@ def _endpoints(
     or none if the line is closed (they are equal on `axes`)."""
     first, last = line.list.first(), line.list.last()
     no_points = pl.lit([], dtype=points_storage)
-    # `concat_list` would turn a missing line into two missing points.
+    # `concat_list` would turn a null line into two null points.
     return (
         pl.when(line.is_null())
         .then(None)
@@ -64,7 +64,7 @@ def _boundary(column: pl.Expr, geometry: GeoArrowType) -> pl.Expr:
         # m is a measure along the line, not a position: it doesn't close a line.
         axes = [axis for axis in geometry._dimension if axis != "m"]
         if isinstance(geometry, MultiLineStringType):
-            # One pair of endpoints per part. A missing multilinestring stays missing.
+            # One pair of endpoints per part. A null multilinestring stays null.
             return storage.list.eval(
                 _endpoints(pl.element(), ends_type._geo_storage, axes).ext.to(ends)
             )
@@ -98,7 +98,7 @@ def boundary(geometry: IntoExprColumn) -> pl.Expr:
     A closed linestring, or one with a single vertex, has an empty boundary.
 
     A polygon without rings, or a linestring without vertices, gives an empty boundary.
-    A missing geometry gives a missing boundary.
+    A null geometry gives a null boundary.
     Points and multipoints have no boundary, and are refused.
 
     ```python

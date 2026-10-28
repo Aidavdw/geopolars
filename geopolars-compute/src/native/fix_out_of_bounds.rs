@@ -22,7 +22,7 @@ use super::too_short::TooShort;
 pub enum OutOfBoundsAction {
     SetEmpty,
     Drop,
-    SetInvalid,
+    SetNull,
     Clamp,
 }
 
@@ -32,7 +32,7 @@ impl OutOfBoundsAction {
         match self {
             OutOfBoundsAction::SetEmpty => Some(SelectedAction::SetEmpty),
             OutOfBoundsAction::Drop => Some(SelectedAction::Drop),
-            OutOfBoundsAction::SetInvalid => Some(SelectedAction::SetInvalid),
+            OutOfBoundsAction::SetNull => Some(SelectedAction::SetNull),
             OutOfBoundsAction::Clamp => None,
         }
     }

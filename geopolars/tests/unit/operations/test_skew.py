@@ -142,7 +142,7 @@ def test_every_vertex_of_every_ring_leans(
     )
 
 
-def test_keeps_empty_and_missing_linestrings(dimension: Dimension) -> None:
+def test_keeps_empty_and_null_linestrings(dimension: Dimension) -> None:
     df = pl.DataFrame(
         {"vertices": [[], None]},
         schema={
@@ -219,7 +219,7 @@ def test_points_skew_about_a_single_origin(coords: pl.DataFrame) -> None:
     )
 
 
-def test_a_missing_origin_gives_a_missing_geometry(line_coords: pl.DataFrame) -> None:
+def test_a_null_origin_gives_a_null_geometry(line_coords: pl.DataFrame) -> None:
     df = XY.lines(line_coords).with_columns(
         origin=pl.when(pl.int_range(pl.len()) == 0).then(geo.mean_coordinate("line"))
     )

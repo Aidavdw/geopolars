@@ -107,7 +107,7 @@ def test_a_slice_moves_by_its_own_offsets(ring_coords: pl.DataFrame) -> None:
     )
 
 
-def test_a_missing_offset_gives_a_missing_geometry(ring_coords: pl.DataFrame) -> None:
+def test_a_null_offset_gives_a_null_geometry(ring_coords: pl.DataFrame) -> None:
     df = XY.polygons(ring_coords).with_columns(dx=pl.Series([None, 1.0]))
 
     for offset in [("dx", 0.0), geo.point("dx", pl.lit(0.0))]:

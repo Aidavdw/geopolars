@@ -56,12 +56,12 @@ As a repairing function, it does not require the geometry to be valid (yet).""",
 | - | - |
 | `"drop"` | is removed |
 | `"set_empty"` | gets NaN on every axis |
-| `"set_invalid"` | makes its row missing |
+| `"set_null"` | makes its row null |
 
 A point cannot lose its coordinate, so with `"drop"` it becomes the empty point,
 just as a linestring or ring that loses every vertex becomes empty.
 With `"drop"`, a ring that is no longer closed (see `is_valid_geoarrow`) is too short as well (see below).
-With `"set_empty"` and `"set_invalid"`, every offset is kept, and `too_short` is ignored.
+With `"set_empty"` and `"set_null"`, every offset is kept, and `too_short` is ignored.
 A ring whose ends are emptied is no longer closed.""",
     "too_short": """\
 This operation removes coordinates, which can leave a linestring or ring too short.
@@ -71,7 +71,7 @@ What is done with these is determined by `too_short`:
 
 | `too_short` | a too-short linestring or ring |
 | - | - |
-| `"invalid"` | makes its row missing |
+| `"null"` | makes its row null |
 | `"keep"` | stays as it is, e.g. `[A]`, or a ring `[A, B, A]` |
 | `"empty"` | becomes empty |
 
@@ -80,8 +80,8 @@ unless every hole of it is empty too (the empty polygon).""",
     "constructed_geoarrow_valid": """\
 Every geometry this functions builds is valid by `is_valid_geoarrow`,
 but it might not be valid by `is_valid_ogc`, nor simple (see `is_simple`).""",
-    "empty_and_missing": """\
-An empty geometry gives an empty {output}, and a missing one a missing {output}.""",
+    "empty_and_null": """\
+An empty geometry gives an empty {output}, and a null one a null {output}.""",
     "keeps_type_dimension_and_crs": """\
 The type, dimension and CRS of the output geometry are kept from the input.""",
     "ignores_empty_and_invalid": """\
@@ -89,14 +89,14 @@ This operation ignores empty and invalid geometries.
 Empty and invalid geometries stay empty or invalid.""",
     "geos_errors": """\
 A geometry GEOS fails on raises GEOS's error, failing the query.
-With `ignore_per_row_errors=True`, it gives a missing {output} instead.""",
+With `ignore_per_row_errors=True`, it gives a null {output} instead.""",
     "geos_non_finite": """\
 GEOS supports neither empty points inside a geometry (a vertex with NaN x and y)
 nor any other NaN or infinite x or y.
 By default they go to GEOS as they are.""",
     "early_finite_check": """\
 With `early_finite_check=True`, a geometry with such a vertex is caught before it reaches GEOS.
-It then raises, or gives a missing {output} with `ignore_per_row_errors=True`.
+It then raises, or gives a null {output} with `ignore_per_row_errors=True`.
 This only adds a short path.
 It pays off when you expect many non-finite coordinates in your data.""",
     "ccw_outer": """\
@@ -106,14 +106,14 @@ With `ccw_outer=True`, it runs counter-clockwise instead at a minimal performanc
 - one point for the whole column, as `(x, y)` or `(x, y, z)`, or
 - a `geoarrow.point` column (or a single point) with a point for every geometry,
   such as `geo.mean_coordinate("shape")` to {verb} each geometry about its own middle.
-  A geometry whose origin is missing comes out missing.
+  A geometry whose origin is null comes out null.
   An origin column that declares a CRS has to declare the geometry's.""",
     "about_centroid_accepts": """\
 Only linestrings and polygons are accepted:
 a multi-geometry has a centroid per part rather than one,
 and a point would stay where it is.
-A geometry without a centroid (missing, empty, a line without length,
-or a polygon that encloses nothing) comes out missing.""",
+A geometry without a centroid (null, empty, a line without length,
+or a polygon that encloses nothing) comes out null.""",
     "decode_into_dtype": """\
 {encoding} can mix geometries row by row, but a Polars column has one dtype,
 so `dtype` names the concrete type to decode into, e.g. `PolygonXY`.
@@ -147,9 +147,9 @@ e.g. PROJJSON, WKT or an `AUTH:CODE` format such as `"EPSG:4326"`.""",
     "projected_plane_xy": """\
 This looks at a projected plane.
 Only x and y are looked at. z and m are ignored.""",
-    "missing_ring_input": """\
-A missing {input} gives a missing result,
-and so does one with a missing vertex, or one that is not finite in x or y.""",
+    "null_ring_input": """\
+A null {input} gives a null result,
+and so does one with a null vertex, or one that is not finite in x or y.""",
     "point_measure": """\
 `m` stands for 'measure', an arbitrary per-vertex value.
 Typical uses:

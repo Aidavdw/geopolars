@@ -75,7 +75,7 @@ def bounds(
     {box_of_coordinates}
     {box_around_the_globe}
     {empty_box}
-    A missing geometry gives a missing box.
+    A null geometry gives a null box.
 
     ```python
     df.select(geo.bounds("parcel", margin_x=10.0, margin_y=10.0))
@@ -99,9 +99,9 @@ def total_bounds(geometry: IntoExprColumn, *, ignore_nulls: bool = False) -> pl.
     The column is brought back around the globe as a whole, not row by row.
     {empty_box}
 
-    A missing geometry makes the box missing,
+    A null geometry makes the box null,
     unless `ignore_nulls=True`: then it is skipped.
-    A column without rows, or with only missing ones, gives a missing box.
+    A column without rows, or with only null ones, gives a null box.
 
     ```python
     df.group_by("region").agg(geo.total_bounds("parcel"))

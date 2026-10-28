@@ -160,7 +160,7 @@ def test_every_vertex_of_every_ring_is_transformed(
     )
 
 
-def test_keeps_empty_and_missing_linestrings(dimension: Dimension) -> None:
+def test_keeps_empty_and_null_linestrings(dimension: Dimension) -> None:
     df = pl.DataFrame(
         {"vertices": [[], None]},
         schema={
@@ -274,7 +274,7 @@ def test_the_named_transforms_about_a_column_are_each_one_of_these(
     )
 
 
-def test_a_missing_origin_gives_a_missing_geometry(line_coords: pl.DataFrame) -> None:
+def test_a_null_origin_gives_a_null_geometry(line_coords: pl.DataFrame) -> None:
     df = XY.lines(line_coords).with_columns(
         origin=pl.when(pl.int_range(pl.len()) == 0).then(geo.mean_coordinate("line"))
     )

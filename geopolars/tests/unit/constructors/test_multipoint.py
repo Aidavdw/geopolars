@@ -74,9 +74,9 @@ def test_a_single_point_is_a_valid_multipoint() -> None:
     assert df.schema["multipoint"] != PointXY()
 
 
-def test_a_missing_point_invalidates_the_whole_multipoint() -> None:
+def test_a_null_point_nulls_the_whole_multipoint() -> None:
     """GeoArrow allows nulls only at the outermost level,
-    so a multipoint that is missing one of its points is a missing multipoint.
+    so a multipoint with a null point is a null multipoint.
     See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {
@@ -92,8 +92,8 @@ def test_a_missing_point_invalidates_the_whole_multipoint() -> None:
     assert df["multipoint"].is_null().to_list() == [True, False, True]
 
 
-def test_a_missing_coordinate_invalidates_the_whole_multipoint() -> None:
-    """A missing 'y' in nesting should invalidate the multipoint."""
+def test_a_null_coordinate_nulls_the_whole_multipoint() -> None:
+    """A null 'y' in nesting should null the multipoint."""
     df = pl.DataFrame(
         {"points": [[{"x": 1.0, "y": None}], [{"x": 1.0, "y": 2.0}]]},
         schema={"points": _XY_POINTS},
@@ -206,7 +206,7 @@ def test_an_empty_coordinate_list_is_an_empty_multipoint() -> None:
     ].to_list() == [0]
 
 
-def test_a_missing_coordinate_list_is_a_missing_multipoint() -> None:
+def test_a_null_coordinate_list_is_a_null_multipoint() -> None:
     """See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {"lon": [[1.0], None], "lat": [[2.0], None]}, schema=_XY_COORDS
@@ -215,7 +215,7 @@ def test_a_missing_coordinate_list_is_a_missing_multipoint() -> None:
     assert df["multipoint"].is_null().to_list() == [False, True]
 
 
-def test_a_missing_coordinate_invalidates_the_whole_multipoint_of_coords() -> None:
+def test_a_null_coordinate_nulls_the_whole_multipoint_of_coords() -> None:
     """See https://geoarrow.org/format.html#missing-values-null"""
     df = pl.DataFrame(
         {"lon": [[1.0, 3.0], [1.0]], "lat": [[2.0, None], [2.0]]}, schema=_XY_COORDS
@@ -229,7 +229,7 @@ def test_a_missing_coordinate_invalidates_the_whole_multipoint_of_coords() -> No
     [
         # Different point counts: there is no multipoint the coordinates agree on.
         ([[1.0, 3.0]], [[2.0]]),
-        # One missing where the other is empty is the same disagreement.
+        # One null where the other is empty is the same disagreement.
         ([None], [[]]),
     ],
 )
