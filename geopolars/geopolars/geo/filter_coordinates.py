@@ -80,9 +80,10 @@ def filter_coordinates(
     - `select_non_finite=True`, if it has a NaN or infinite value, but is not empty.
       x and y are always looked at.
       With `ignore_z=True`, z is not, and with `ignore_m=True`, m is not.
-    - `select_empty=True`, if every axis it has is NaN (the empty point).
+    - `select_empty=True`, if it is the empty point.
       `ignore_z` and `ignore_m` do not change this.
-      With z, `(NaN, NaN, 1.0)` is therefore not empty, but it is not finite either.
+
+    {empty_point}
 
     {flag_for_absent_axis}
 

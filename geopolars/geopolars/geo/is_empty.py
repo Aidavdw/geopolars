@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
 
@@ -29,12 +30,13 @@ def _is_empty(
     )
 
 
+@doc()
 def is_empty(geometry: IntoExprColumn, *, check_nested: bool = False) -> pl.Expr:
     """Whether a geometry is empty.
 
     | in | empty when |
     | - | - |
-    | `PointXY[ZM]` | `x` and `y` are both NaN |
+    | `PointXY[ZM]` | it is the empty point (see below) |
     | `LineStringXY[ZM]` | it has no vertices |
     | `PolygonXY[ZM]` | it has no rings, or only rings without vertices |
     | `MultiPointXY[ZM]` | it has no points |
@@ -46,9 +48,11 @@ def is_empty(geometry: IntoExprColumn, *, check_nested: bool = False) -> pl.Expr
     A single non-empty point makes it non-empty.
     A null geometry is neither empty nor not: it gives null.
     With `check_nested=True`, any geometry but a point is also empty
-    when all of its points are empty (NaN `x` and `y`).
+    when all of its points are empty.
     This would catch a case like a linestring with only empty points,
     but as it reads every coordinate, it is much slower.
+
+    {empty_point}
 
     ```python
     df.filter(~geo.is_empty("parcel"))

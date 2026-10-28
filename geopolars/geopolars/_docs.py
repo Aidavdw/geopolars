@@ -49,6 +49,9 @@ A flag for an axis requires only does something if the geometry has that axis.
 If the geometry does not have the specific axis, the flag is ignored. """,
     "repairing_function": """\
 As a repairing function, it does not require the geometry to be valid (yet).""",
+    "empty_point": """\
+The empty point has NaN on every axis it has.
+`(NaN, NaN, 1.0)` is therefore not empty, but it is not finite either.""",
     "selected_coordinate_actions": """\
 `action` says what happens to a coordinate {selected}:
 
@@ -91,7 +94,7 @@ Empty and invalid geometries stay empty or invalid.""",
 A geometry GEOS fails on raises GEOS's error, failing the query.
 With `ignore_per_row_errors=True`, it gives a null {output} instead.""",
     "geos_non_finite": """\
-GEOS supports neither empty points inside a geometry (a vertex with NaN x and y)
+GEOS supports neither empty points inside a geometry (a vertex with NaN on every axis)
 nor any other NaN or infinite x or y.
 By default they go to GEOS as they are.""",
     "early_finite_check": """\

@@ -1,11 +1,11 @@
 //! Fixing the coordinates outside the CRS's bounds,
-//! through `geopolars_compute::native::*_with_fixed_out_of_bounds`.
+//! through `geopolars_compute::native::*_with_selected`, or `*_with_clamped_coords` to clamp.
 //! See `fix_out_of_bounds` in Python for the rules.
 
 use geopolars_compute::native::{
-    line_strings_with_fixed_out_of_bounds, multi_line_strings_with_fixed_out_of_bounds,
-    multi_points_with_fixed_out_of_bounds, multi_polygons_with_fixed_out_of_bounds,
-    points_with_fixed_out_of_bounds, polygons_with_fixed_out_of_bounds, Bounds, OutOfBounds,
+    line_strings_with_clamped_coords, multi_line_strings_with_clamped_coords,
+    multi_points_with_clamped_coords, multi_polygons_with_clamped_coords,
+    points_with_clamped_coords, polygons_with_clamped_coords, Bounds, CoordinateSelection,
     OutOfBoundsAction, TooShort,
 };
 use geopolars_core::{
@@ -18,6 +18,7 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::coords::{kernel_output_type_same_geometry, trimmed};
+use super::filter_coordinates::chunk_with_selected;
 use super::remove_repeated_points::TooShortDef;
 use crate::geoarrow::{describe, Kind};
 
@@ -41,37 +42,37 @@ pub struct FixOutOfBoundsKwargs {
     too_short: TooShort,
 }
 
-/// [`fix_out_of_bounds`] for one chunk of the storage of a `kind`.
-fn chunk_with_fixed_out_of_bounds(
+/// [`fix_out_of_bounds`] with [OutOfBoundsAction::Clamp], for one chunk of the storage of a `kind`.
+fn chunk_with_clamped_coords(
     chunk: &dyn Array,
     kind: Kind,
-    fix: &OutOfBounds,
+    bounds: &Bounds,
 ) -> PolarsResult<Box<dyn Array>> {
     let rows = || downcast::<ListArray<i64>>(chunk, "a list of parts");
     Ok(match kind {
-        Kind::Point => points_with_fixed_out_of_bounds(&PointArray::new(Coords::new(chunk)?), fix)
+        Kind::Point => points_with_clamped_coords(&PointArray::new(Coords::new(chunk)?), bounds)
             .into_struct_array()
             .boxed(),
         Kind::LineString => {
-            line_strings_with_fixed_out_of_bounds(&LineStringArray::new(rows()?)?, fix)
+            line_strings_with_clamped_coords(&LineStringArray::new(rows()?)?, bounds)
                 .into_list_array()
                 .boxed()
         }
         Kind::MultiPoint => {
-            multi_points_with_fixed_out_of_bounds(&MultiPointArray::new(rows()?)?, fix)
+            multi_points_with_clamped_coords(&MultiPointArray::new(rows()?)?, bounds)
                 .into_list_array()
                 .boxed()
         }
-        Kind::Polygon => polygons_with_fixed_out_of_bounds(&PolygonArray::new(rows()?)?, fix)
+        Kind::Polygon => polygons_with_clamped_coords(&PolygonArray::new(rows()?)?, bounds)
             .into_list_array()
             .boxed(),
         Kind::MultiLineString => {
-            multi_line_strings_with_fixed_out_of_bounds(&MultiLineStringArray::new(rows()?)?, fix)
+            multi_line_strings_with_clamped_coords(&MultiLineStringArray::new(rows()?)?, bounds)
                 .into_list_array()
                 .boxed()
         }
         Kind::MultiPolygon => {
-            multi_polygons_with_fixed_out_of_bounds(&MultiPolygonArray::new(rows()?)?, fix)
+            multi_polygons_with_clamped_coords(&MultiPolygonArray::new(rows()?)?, bounds)
                 .into_list_array()
                 .boxed()
         }
@@ -87,16 +88,20 @@ fn fix_out_of_bounds(inputs: &[Series], kwargs: FixOutOfBoundsKwargs) -> PolarsR
         action,
         too_short,
     } = kwargs;
-    let fix = OutOfBounds {
-        bounds,
-        action,
-        too_short,
+    let selection = CoordinateSelection {
+        non_finite: None,
+        bounds: Some(bounds),
     };
     let storage = trimmed(inputs[0].ext()?.storage());
     let chunks = storage
         .chunks()
         .iter()
-        .map(|chunk| chunk_with_fixed_out_of_bounds(chunk.as_ref(), kind, &fix))
+        .map(|chunk| match action.selected_action() {
+            Some(action) => {
+                chunk_with_selected(chunk.as_ref(), kind, &selection, action, too_short)
+            }
+            None => chunk_with_clamped_coords(chunk.as_ref(), kind, &bounds),
+        })
         .collect::<PolarsResult<_>>()?;
     // SAFETY: the geometries keep their kind and dimension, so this is the input's storage.
     Ok(unsafe {

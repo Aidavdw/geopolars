@@ -189,10 +189,10 @@ def test_a_point_that_is_nan_on_every_axis_is_the_empty_point() -> None:
     assert _is_finite(PointXYZM(), dict.fromkeys("xyzm", NAN)) == [True]
 
 
-def test_a_point_that_is_nan_in_x_and_y_is_the_empty_point() -> None:
+def test_a_point_that_is_nan_only_in_x_and_y_is_not_finite() -> None:
     point = {"x": NAN, "y": NAN, "z": 3.0, "m": 4.0}
 
-    assert _is_finite(PointXYZM(), point) == [True]
+    assert _is_finite(PointXYZM(), point) == [False]
 
 
 def test_a_point_that_is_only_partly_nan_is_not_finite() -> None:

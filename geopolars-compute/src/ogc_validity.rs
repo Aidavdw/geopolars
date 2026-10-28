@@ -29,8 +29,8 @@ use polars_arrow::bitmap::Bitmap;
 use crate::geoarrow_validity::{multi_points_are_valid_geoarrow, points_are_valid_geoarrow};
 use crate::geos::{meet_only_at_points_and_no_overlap, polygon_rings_fit, ToGeos};
 use crate::native::{
-    all_coordinates_valid, coordinates_are_valid, line_string_shape_is_valid,
-    polygon_rings_are_closed, polygon_shape_is_valid, Bounds, CoordinateChecks,
+    has_selected, line_string_shape_is_valid, polygon_rings_are_closed, polygon_shape_is_valid,
+    selected_coords, Bounds, CoordinateSelection, NonFinite,
 };
 use crate::per_row::{per_row_bool, try_per_row_bool};
 use crate::GeoComputeResult;
@@ -70,11 +70,17 @@ impl MultiPolygonTopologyChecks {
     }
 }
 
-fn finite_coordinate_checks(bounds: Option<Bounds>, allow_empty_points: bool) -> CoordinateChecks {
-    CoordinateChecks {
+/// Selects every coordinate that is not finite, or lies outside `bounds`.
+/// With `select_empty=true`, the empty point is selected too.
+fn finite_selection(bounds: Option<Bounds>, select_empty: bool) -> CoordinateSelection {
+    CoordinateSelection {
+        non_finite: Some(NonFinite {
+            select_non_finite: true,
+            select_empty,
+            ignore_z: false,
+            ignore_m: false,
+        }),
         bounds,
-        check_finite_coordinates: true,
-        allow_empty_points,
     }
 }
 
@@ -159,18 +165,18 @@ fn multi_polygon_topology_is_valid(
 }
 
 pub fn points_are_valid_ogc(array: &PointArray, bounds: Option<Bounds>) -> BooleanArray {
-    points_are_valid_geoarrow(array, &finite_coordinate_checks(bounds, true))
+    points_are_valid_geoarrow(array, &finite_selection(bounds, false))
 }
 
 pub fn multi_points_are_valid_ogc(array: &MultiPointArray, bounds: Option<Bounds>) -> BooleanArray {
-    multi_points_are_valid_geoarrow(array, &finite_coordinate_checks(bounds, true))
+    multi_points_are_valid_geoarrow(array, &finite_selection(bounds, false))
 }
 
 pub fn line_strings_are_valid_ogc(array: &LineStringArray, bounds: Option<Bounds>) -> BooleanArray {
-    let valid = coordinates_are_valid(&array.coords, &finite_coordinate_checks(bounds, false));
+    let selected = selected_coords(&array.coords, &finite_selection(bounds, true));
     per_row_bool(&array.rows, |i| {
         let vertices = array.rows.range(i);
-        all_coordinates_valid(valid.as_ref(), vertices.clone())
+        !has_selected(selected.as_ref(), vertices.clone())
             && line_string_shape_is_valid(&array.coords, vertices)
     })
 }
@@ -179,10 +185,10 @@ pub fn multi_line_strings_are_valid_ogc(
     array: &MultiLineStringArray,
     bounds: Option<Bounds>,
 ) -> BooleanArray {
-    let valid = coordinates_are_valid(&array.coords, &finite_coordinate_checks(bounds, false));
+    let selected = selected_coords(&array.coords, &finite_selection(bounds, true));
     per_row_bool(&array.rows, |i| {
         let parts = array.rows.range(i);
-        all_coordinates_valid(valid.as_ref(), array.lines.span(parts.clone()))
+        !has_selected(selected.as_ref(), array.lines.span(parts.clone()))
             && parts
                 .clone()
                 .all(|line| line_string_shape_is_valid(&array.coords, array.lines.range(line)))
@@ -193,21 +199,21 @@ pub fn multi_line_strings_are_valid_ogc(
 #[inline(always)]
 fn polygon_is_valid_without_topology<const Z: bool>(
     polygon: &ScalarPolygon,
-    valid: Option<&Bitmap>,
+    selected: Option<&Bitmap>,
 ) -> bool {
-    all_coordinates_valid(valid, polygon.rings.span(polygon.parts.clone()))
+    !has_selected(selected, polygon.rings.span(polygon.parts.clone()))
         && polygon_rings_are_closed::<Z>(polygon)
         && polygon_shape_is_valid(polygon)
 }
 
 fn polygons_are_valid_with<const Z: bool>(
     array: &PolygonArray,
-    valid: Option<&Bitmap>,
+    selected: Option<&Bitmap>,
     topology: Option<&PolygonTopologyChecks>,
 ) -> GeoComputeResult<BooleanArray> {
     try_per_row_bool(&array.rows, |i| {
         let polygon = array.get(i);
-        if !polygon_is_valid_without_topology::<Z>(&polygon, valid) {
+        if !polygon_is_valid_without_topology::<Z>(&polygon, selected) {
             return Ok(false);
         }
         topology.map_or(Ok(true), |checks| {
@@ -222,22 +228,22 @@ pub fn polygons_are_valid_ogc(
     bounds: Option<Bounds>,
     topology: &PolygonTopologyChecks,
 ) -> GeoComputeResult<BooleanArray> {
-    let valid = coordinates_are_valid(&array.coords, &finite_coordinate_checks(bounds, false));
+    let selected = selected_coords(&array.coords, &finite_selection(bounds, true));
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
-    with_const_flags!(polygons_are_valid_with(array, valid.as_ref(), topology); z)
+    with_const_flags!(polygons_are_valid_with(array, selected.as_ref(), topology); z)
 }
 
 fn multi_polygons_are_valid_with<const Z: bool>(
     array: &MultiPolygonArray,
-    valid: Option<&Bitmap>,
+    selected: Option<&Bitmap>,
     topology: Option<&MultiPolygonTopologyChecks>,
 ) -> GeoComputeResult<BooleanArray> {
     try_per_row_bool(&array.rows, |i| {
         let multi = array.get(i);
         if !multi
             .polygons()
-            .all(|polygon| polygon_is_valid_without_topology::<Z>(&polygon, valid))
+            .all(|polygon| polygon_is_valid_without_topology::<Z>(&polygon, selected))
         {
             return Ok(false);
         }
@@ -254,8 +260,8 @@ pub fn multi_polygons_are_valid_ogc(
     bounds: Option<Bounds>,
     topology: &MultiPolygonTopologyChecks,
 ) -> GeoComputeResult<BooleanArray> {
-    let valid = coordinates_are_valid(&array.coords, &finite_coordinate_checks(bounds, false));
+    let selected = selected_coords(&array.coords, &finite_selection(bounds, true));
     let topology = topology.checks_anything().then_some(topology);
     let z = array.coords.dim().has_z();
-    with_const_flags!(multi_polygons_are_valid_with(array, valid.as_ref(), topology); z)
+    with_const_flags!(multi_polygons_are_valid_with(array, selected.as_ref(), topology); z)
 }

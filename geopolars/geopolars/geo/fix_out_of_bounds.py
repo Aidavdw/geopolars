@@ -119,7 +119,8 @@ def fix_out_of_bounds(
 
     `x` is always the longitude and `y` the latitude, as GeoArrow stores them,
     whatever axis order the CRS declares (EPSG:4326 declares latitude first).
-    Only `x` and `y` are looked at. The empty point (NaN in x and y) never lies outside the bounds.
+    Only `x` and `y` are looked at, but the empty point never lies outside the bounds.
+    {empty_point}
 
     {selected_coordinate_actions}
 

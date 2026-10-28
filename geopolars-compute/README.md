@@ -33,9 +33,11 @@ A valid Polygon cannot have null coordinates, but it might still have e.g. a NaN
 They show up in two ways.
 
 - Individual NaN values (e.g. `x = 32.1, y = NaN`).
-- *Empty* points (`x = NaN, y = NaN`).
+- *Empty* points (NaN on every axis).
 
 How to handle these is up to the kernel.
+The rules for single coordinates (empty, not finite, outside the bounds) are in `native/coordinate_selection.rs`:
+reuse those rather than writing them again.
 
 ### Branching inside a loop
 

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
 from geopolars.geo.fix_out_of_bounds import _bounds
@@ -42,6 +43,7 @@ def _kernel(
     return build
 
 
+@doc()
 def is_valid_geoarrow(
     geometry: IntoExprColumn,
     *,
@@ -67,10 +69,12 @@ def is_valid_geoarrow(
 
     - `check_finite_coordinates=True`: every axis (x, y, z and m) has to be finite:
       no NaN, no infinity.
-      The exception is the empty point, which is NaN in x and y. It may stand anywhere, also as a vertex.
+      The exception is the empty point, which may stand anywhere, also as a vertex.
     - `out_of_bounds`: no coordinate may lie outside the bounds `fix_out_of_bounds` would fix.
       Its `crs_bounds` says which bounds those are. Its `action` and `too_short` are ignored here.
       With `out_of_bounds=None`, the default, bounds are not checked, and PROJ is not asked for any.
+
+    {empty_point}
 
     `check_null_coordinates=False` skips looking for null values below the row,
     and trusts the column to hold to GeoArrow's rule on them.
@@ -140,7 +144,7 @@ def is_valid_ogc(
 
     A geometry valid by OGC is valid by `is_valid_geoarrow` as well,
     with every coordinate finite on every axis.
-    Only a point, or a point of a multipoint, may be the empty point (NaN in x and y).
+    Only a point, or a point of a multipoint, may be the empty point (see `is_valid_geoarrow`).
     `out_of_bounds` and `check_null_coordinates` are as for `is_valid_geoarrow`.
 
     On top of that, per geometry

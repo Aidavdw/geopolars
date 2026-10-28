@@ -4,9 +4,9 @@ mod affine;
 mod area;
 mod bounds;
 mod centroid;
+mod coordinate_selection;
 mod count_coordinates;
 pub mod distance;
-mod filter_coordinates;
 mod fix_out_of_bounds;
 mod has_repeated_points;
 mod is_ccw;
@@ -14,7 +14,7 @@ mod is_close;
 mod is_empty;
 mod is_ring;
 mod is_simple;
-// For `geoarrow_validity`, `ogc_validity` and `fix_out_of_bounds`.
+// For `geoarrow_validity` and `ogc_validity`.
 mod is_valid;
 mod length;
 mod remove_repeated_points;
@@ -38,22 +38,18 @@ pub use bounds::{
 pub use centroid::{
     line_string_centroids, multi_line_string_centroids, multi_polygon_centroids, polygon_centroids,
 };
+pub(crate) use coordinate_selection::has_selected;
+pub use coordinate_selection::{selected_coords, Bounds, CoordinateSelection, NonFinite};
 pub use count_coordinates::{
     line_string_coordinate_counts, multi_line_string_coordinate_counts,
     multi_point_coordinate_counts, multi_polygon_coordinate_counts, point_coordinate_counts,
     polygon_coordinate_counts,
 };
 pub use distance::{against_one, pairwise, DistanceMetric};
-pub use filter_coordinates::{
-    line_strings_with_filtered_coordinates, multi_line_strings_with_filtered_coordinates,
-    multi_points_with_filtered_coordinates, multi_polygons_with_filtered_coordinates,
-    points_with_filtered_coordinates, polygons_with_filtered_coordinates, NonFinite,
-};
 pub use fix_out_of_bounds::{
-    line_strings_with_fixed_out_of_bounds, multi_line_strings_with_fixed_out_of_bounds,
-    multi_points_with_fixed_out_of_bounds, multi_polygons_with_fixed_out_of_bounds,
-    points_with_fixed_out_of_bounds, polygons_with_fixed_out_of_bounds, OutOfBounds,
-    OutOfBoundsAction,
+    line_strings_with_clamped_coords, multi_line_strings_with_clamped_coords,
+    multi_points_with_clamped_coords, multi_polygons_with_clamped_coords,
+    points_with_clamped_coords, polygons_with_clamped_coords, OutOfBoundsAction,
 };
 pub use has_repeated_points::{
     line_strings_have_repeated_points, multi_line_strings_have_repeated_points,
@@ -78,8 +74,7 @@ pub use is_ring::{
     polygons_have_only_rings,
 };
 pub use is_simple::{multi_points_are_simple, points_are_simple};
-pub(crate) use is_valid::{all_coordinates_valid, coordinates_are_valid, polygon_rings_are_closed};
-pub use is_valid::{Bounds, CoordinateChecks};
+pub(crate) use is_valid::polygon_rings_are_closed;
 // Only for `ogc_validity`.
 #[cfg(feature = "geos")]
 pub(crate) use is_valid::{line_string_shape_is_valid, polygon_shape_is_valid};
@@ -97,5 +92,8 @@ pub use rings::{
     close_open_rings, multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors,
     polygon_interiors, polygons_from_exteriors_and_holes,
 };
-pub use selected_coords::SelectedAction;
+pub use selected_coords::{
+    line_strings_with_selected, multi_line_strings_with_selected, multi_points_with_selected,
+    multi_polygons_with_selected, points_with_selected, polygons_with_selected, SelectedAction,
+};
 pub use too_short::TooShort;

@@ -1,6 +1,7 @@
 //! What to do with the selected coordinates of a geometry,
 //! shared by `filter_coordinates` and `fix_out_of_bounds`.
-//! See [SelectedAction] for the actions.
+//! Every kernel marks the coordinates its [CoordinateSelection] selects ([selected_coords]),
+//! then acts on them. See [SelectedAction] for the actions.
 //!
 //! [SelectedAction::Drop] copies the kept coordinates once, a run of them at a time.
 //! No part is ever removed, so only the innermost list level gets new offsets.
@@ -24,8 +25,10 @@ use geopolars_core::{
     same_place, Coords, LineStringArray, List, MultiLineStringArray, MultiPointArray,
     MultiPolygonArray, PointArray, PolygonArray, ValidCoords, ValidList, MIN_RING_VERTICES,
 };
+use polars_arrow::bitmap::Bitmap;
 use polars_arrow::offset::OffsetsBuffer;
 
+use super::coordinate_selection::{has_selected, selected_coords, CoordinateSelection};
 use super::rings::offsets_of;
 use super::too_short::{list_holding, without_rows, TooShort};
 
@@ -40,12 +43,17 @@ pub enum SelectedAction {
     SetNull,
 }
 
+/// [selected_coords], with no bit set when `selection` selects nothing.
+fn selected_coords_bitmap(coords: &ValidCoords, selection: &CoordinateSelection) -> Bitmap {
+    selected_coords(coords, selection).unwrap_or_else(|| Bitmap::new_zeroed(coords.len()))
+}
+
 /// `coords`, with every axis NaN where `selected`.
-fn emptied(coords: &ValidCoords, selected: &[bool]) -> ValidCoords {
+fn emptied(coords: &ValidCoords, selected: &Bitmap) -> ValidCoords {
     let emptied = |axis: &[f64]| -> Vec<f64> {
         axis.iter()
-            .zip(selected)
-            .map(|(&value, &selected)| if selected { f64::NAN } else { value })
+            .zip(selected.iter())
+            .map(|(&value, selected)| if selected { f64::NAN } else { value })
             .collect()
     };
     ValidCoords::from_axes((
@@ -69,13 +77,13 @@ enum Lists {
 /// and returns how many vertices they hold.
 #[inline(always)]
 fn push_kept_runs(
-    selected: &[bool],
+    selected: &Bitmap,
     vertices: Range<usize>,
     runs: &mut Vec<Range<usize>>,
 ) -> usize {
     let (mut kept, mut run_start) = (0, vertices.start);
     for i in vertices.clone() {
-        if selected[i] {
+        if selected.get_bit(i) {
             if run_start < i {
                 runs.push(run_start..i);
             }
@@ -119,7 +127,7 @@ fn without_selected<const Z: bool>(
     lists: &ValidList,
     kind: Lists,
     coords: &ValidCoords,
-    selected: &[bool],
+    selected: &Bitmap,
     too_short: TooShort,
 ) -> (OffsetsBuffer<i64>, ValidCoords, Vec<usize>) {
     let (mut runs, mut nulled) = (Vec::new(), Vec::new());
@@ -157,7 +165,7 @@ fn without_selected<const Z: bool>(
 fn without_selected_in_rings(
     rings: &ValidList,
     coords: &ValidCoords,
-    selected: &[bool],
+    selected: &Bitmap,
     too_short: TooShort,
 ) -> (OffsetsBuffer<i64>, ValidCoords, Vec<usize>) {
     let z = coords.dim().has_z();
@@ -166,7 +174,7 @@ fn without_selected_in_rings(
 
 fn line_strings_without_selected(
     array: &LineStringArray,
-    selected: &[bool],
+    selected: &Bitmap,
     too_short: TooShort,
 ) -> LineStringArray {
     let (offsets, coords, nulled) = without_selected::<false>(
@@ -185,7 +193,7 @@ fn line_strings_without_selected(
 
 fn multi_points_without_selected(
     array: &MultiPointArray,
-    selected: &[bool],
+    selected: &Bitmap,
     too_short: TooShort,
 ) -> MultiPointArray {
     let (offsets, coords, _) = without_selected::<false>(
@@ -203,7 +211,7 @@ fn multi_points_without_selected(
 
 fn polygons_without_selected(
     array: &PolygonArray,
-    selected: &[bool],
+    selected: &Bitmap,
     too_short: TooShort,
 ) -> PolygonArray {
     let (rings, coords, nulled) =
@@ -221,7 +229,7 @@ fn polygons_without_selected(
 
 fn multi_line_strings_without_selected(
     array: &MultiLineStringArray,
-    selected: &[bool],
+    selected: &Bitmap,
     too_short: TooShort,
 ) -> MultiLineStringArray {
     let (lines, coords, nulled) = without_selected::<false>(
@@ -244,7 +252,7 @@ fn multi_line_strings_without_selected(
 
 fn multi_polygons_without_selected(
     array: &MultiPolygonArray,
-    selected: &[bool],
+    selected: &Bitmap,
     too_short: TooShort,
 ) -> MultiPolygonArray {
     let (rings, coords, nulled) =
@@ -267,20 +275,21 @@ fn multi_polygons_without_selected(
 fn rows_with_selected(
     len: usize,
     coords_of: impl Fn(usize) -> Range<usize>,
-    selected: &[bool],
+    selected: &Bitmap,
 ) -> Vec<usize> {
     (0..len)
-        .filter(|&i| selected[coords_of(i)].contains(&true))
+        .filter(|&i| has_selected(Some(selected), coords_of(i)))
         .collect()
 }
 
 /// [SelectedAction::Drop] leaves the empty point, as a point cannot lose its coordinate.
-pub(super) fn points_with_selected(
+pub fn points_with_selected(
     array: &PointArray,
-    selected: &[bool],
+    selection: &CoordinateSelection,
     action: SelectedAction,
 ) -> PointArray {
     let (coords, validity) = (array.coords.ignoring_validity(), array.coords.validity());
+    let selected = &selected_coords_bitmap(coords, selection);
     PointArray::new(match action {
         SelectedAction::SetEmpty | SelectedAction::Drop => {
             Coords::from_valid(emptied(coords, selected), validity.cloned())
@@ -295,12 +304,13 @@ pub(super) fn points_with_selected(
     })
 }
 
-pub(super) fn line_strings_with_selected(
+pub fn line_strings_with_selected(
     array: &LineStringArray,
-    selected: &[bool],
+    selection: &CoordinateSelection,
     action: SelectedAction,
     too_short: TooShort,
 ) -> LineStringArray {
+    let selected = &selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => LineStringArray {
             rows: array.rows.clone(),
@@ -317,12 +327,13 @@ pub(super) fn line_strings_with_selected(
     }
 }
 
-pub(super) fn multi_points_with_selected(
+pub fn multi_points_with_selected(
     array: &MultiPointArray,
-    selected: &[bool],
+    selection: &CoordinateSelection,
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiPointArray {
+    let selected = &selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiPointArray {
             rows: array.rows.clone(),
@@ -339,12 +350,13 @@ pub(super) fn multi_points_with_selected(
     }
 }
 
-pub(super) fn polygons_with_selected(
+pub fn polygons_with_selected(
     array: &PolygonArray,
-    selected: &[bool],
+    selection: &CoordinateSelection,
     action: SelectedAction,
     too_short: TooShort,
 ) -> PolygonArray {
+    let selected = &selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => PolygonArray {
             rows: array.rows.clone(),
@@ -364,12 +376,13 @@ pub(super) fn polygons_with_selected(
     }
 }
 
-pub(super) fn multi_line_strings_with_selected(
+pub fn multi_line_strings_with_selected(
     array: &MultiLineStringArray,
-    selected: &[bool],
+    selection: &CoordinateSelection,
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiLineStringArray {
+    let selected = &selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiLineStringArray {
             rows: array.rows.clone(),
@@ -389,12 +402,13 @@ pub(super) fn multi_line_strings_with_selected(
     }
 }
 
-pub(super) fn multi_polygons_with_selected(
+pub fn multi_polygons_with_selected(
     array: &MultiPolygonArray,
-    selected: &[bool],
+    selection: &CoordinateSelection,
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiPolygonArray {
+    let selected = &selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiPolygonArray {
             rows: array.rows.clone(),

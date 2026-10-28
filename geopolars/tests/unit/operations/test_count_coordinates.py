@@ -34,7 +34,7 @@ def _spelled(parts: list | str, dimension: Dimension) -> list | dict[str, float]
     if isinstance(parts, list):
         return [_spelled(part, dimension) for part in parts]
     value = {"empty": math.nan, "a": 0.0, "b": 1.0, "c": 2.0}[parts]
-    return {"x": value, "y": value} | dict.fromkeys(dimension.coords[2:], 0.0)
+    return dict.fromkeys(dimension.coords, value)
 
 
 def test_a_point_counts_one(coords: pl.DataFrame, dimension: Dimension) -> None:
@@ -46,7 +46,7 @@ def test_a_point_counts_one(coords: pl.DataFrame, dimension: Dimension) -> None:
 def test_an_empty_point_counts_zero_and_a_null_one_gives_null(
     dimension: Dimension,
 ) -> None:
-    """GeoArrow spells the empty point as NaN `x` and `y`."""
+    """The empty point has NaN on every axis."""
     nan = math.nan
     df = pl.DataFrame({axis: [nan, 1.0, None] for axis in dimension.coords}).select(
         dimension.point()

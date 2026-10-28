@@ -1,16 +1,14 @@
-//! Whether each geometry is valid by the GeoArrow spec, and passes the coordinate checks.
+//! Whether each geometry is valid by the GeoArrow spec, and holds no selected coordinate.
 //! See `is_valid_geoarrow` in Python for the rules.
 //!
-//! The coordinates are checked first, in one pass that does not know the geometry.
-//! Then every row is checked against that, and every ring for being closed.
+//! The coordinates are selected first ([selected_coords]), in one pass that does not know the geometry.
+//! Then every row is checked for holding one, and every ring for being closed.
 //! Each gives a `bool` per row, `false` for a null row.
 //!
 //! Null values below the rows are not looked at here:
 //! the views have to be built with them moved out to the rows (see [crate::inner_nulls]).
 //!
 //! # Const generic flags
-//!
-//! See [crate::native] (`is_valid`) for those of the coordinate checks.
 //!
 //! ## `Z`
 //!
@@ -25,16 +23,17 @@ use polars_arrow::array::BooleanArray;
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::datatypes::ArrowDataType;
 
-use crate::native::{
-    all_coordinates_valid, coordinates_are_valid, polygon_rings_are_closed, CoordinateChecks,
-};
+use crate::native::{has_selected, polygon_rings_are_closed, selected_coords, CoordinateSelection};
 use crate::per_row::per_row_bool;
 
-pub fn points_are_valid_geoarrow(array: &PointArray, checks: &CoordinateChecks) -> BooleanArray {
+pub fn points_are_valid_geoarrow(
+    array: &PointArray,
+    selection: &CoordinateSelection,
+) -> BooleanArray {
     let coords = &array.coords;
     let len = coords.ignoring_validity().len();
-    let valid = coordinates_are_valid(coords.ignoring_validity(), checks)
-        .unwrap_or_else(|| Bitmap::new_with_value(true, len));
+    let valid = selected_coords(coords.ignoring_validity(), selection)
+        .map_or_else(|| Bitmap::new_with_value(true, len), |selected| !&selected);
     // A null row is `false` in the values too.
     let values = match coords.validity() {
         Some(rows) => &valid & rows,
@@ -45,56 +44,56 @@ pub fn points_are_valid_geoarrow(array: &PointArray, checks: &CoordinateChecks) 
 
 pub fn multi_points_are_valid_geoarrow(
     array: &MultiPointArray,
-    checks: &CoordinateChecks,
+    selection: &CoordinateSelection,
 ) -> BooleanArray {
-    let valid = coordinates_are_valid(&array.coords, checks);
+    let selected = selected_coords(&array.coords, selection);
     per_row_bool(&array.rows, |i| {
-        all_coordinates_valid(valid.as_ref(), array.rows.range(i))
+        !has_selected(selected.as_ref(), array.rows.range(i))
     })
 }
 
 pub fn line_strings_are_valid_geoarrow(
     array: &LineStringArray,
-    checks: &CoordinateChecks,
+    selection: &CoordinateSelection,
 ) -> BooleanArray {
-    let valid = coordinates_are_valid(&array.coords, checks);
+    let selected = selected_coords(&array.coords, selection);
     per_row_bool(&array.rows, |i| {
-        all_coordinates_valid(valid.as_ref(), array.rows.range(i))
+        !has_selected(selected.as_ref(), array.rows.range(i))
     })
 }
 
 pub fn multi_line_strings_are_valid_geoarrow(
     array: &MultiLineStringArray,
-    checks: &CoordinateChecks,
+    selection: &CoordinateSelection,
 ) -> BooleanArray {
-    let valid = coordinates_are_valid(&array.coords, checks);
+    let selected = selected_coords(&array.coords, selection);
     per_row_bool(&array.rows, |i| {
-        all_coordinates_valid(valid.as_ref(), array.lines.span(array.rows.range(i)))
+        !has_selected(selected.as_ref(), array.lines.span(array.rows.range(i)))
     })
 }
 
 fn polygons_are_valid_geoarrow_with<const Z: bool>(
     array: &PolygonArray,
-    valid: Option<&Bitmap>,
+    selected: Option<&Bitmap>,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         polygon_rings_are_closed::<Z>(&array.get(i))
-            && all_coordinates_valid(valid, array.rings.span(array.rows.range(i)))
+            && !has_selected(selected, array.rings.span(array.rows.range(i)))
     })
 }
 
 pub fn polygons_are_valid_geoarrow(
     array: &PolygonArray,
-    checks: &CoordinateChecks,
+    selection: &CoordinateSelection,
 ) -> BooleanArray {
-    let valid = coordinates_are_valid(&array.coords, checks);
+    let selected = selected_coords(&array.coords, selection);
     let z = array.coords.dim().has_z();
-    with_const_flags!(polygons_are_valid_geoarrow_with(array, valid.as_ref()); z)
+    with_const_flags!(polygons_are_valid_geoarrow_with(array, selected.as_ref()); z)
 }
 
 fn multi_polygons_are_valid_geoarrow_with<const Z: bool>(
     array: &MultiPolygonArray,
-    valid: Option<&Bitmap>,
+    selected: Option<&Bitmap>,
 ) -> BooleanArray {
     per_row_bool(&array.rows, |i| {
         let vertices = array.rings.span(array.polygons.span(array.rows.range(i)));
@@ -102,15 +101,15 @@ fn multi_polygons_are_valid_geoarrow_with<const Z: bool>(
             .get(i)
             .polygons()
             .all(|polygon| polygon_rings_are_closed::<Z>(&polygon))
-            && all_coordinates_valid(valid, vertices)
+            && !has_selected(selected, vertices)
     })
 }
 
 pub fn multi_polygons_are_valid_geoarrow(
     array: &MultiPolygonArray,
-    checks: &CoordinateChecks,
+    selection: &CoordinateSelection,
 ) -> BooleanArray {
-    let valid = coordinates_are_valid(&array.coords, checks);
+    let selected = selected_coords(&array.coords, selection);
     let z = array.coords.dim().has_z();
-    with_const_flags!(multi_polygons_are_valid_geoarrow_with(array, valid.as_ref()); z)
+    with_const_flags!(multi_polygons_are_valid_geoarrow_with(array, selected.as_ref()); z)
 }

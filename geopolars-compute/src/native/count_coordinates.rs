@@ -6,7 +6,7 @@
 //! ## `INCLUDE_EMPTY`
 //!
 //! Every function here is generic over `INCLUDE_EMPTY`.
-//! If `INCLUDE_EMPTY=false`, the empty point (NaN in x and y) does not count.
+//! If `INCLUDE_EMPTY=false`, the [empty point](is_empty_point) does not count.
 //! If `INCLUDE_EMPTY=true`, it counts like any other coordinate.
 
 use std::ops::Range;
@@ -17,7 +17,7 @@ use geopolars_core::{
 };
 use polars_arrow::array::PrimitiveArray;
 
-use super::is_valid::is_empty_point;
+use super::coordinate_selection::is_empty_point;
 use crate::per_row::per_row_count;
 
 #[inline(always)]

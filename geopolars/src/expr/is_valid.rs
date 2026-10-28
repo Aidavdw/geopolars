@@ -12,7 +12,7 @@ use geopolars_compute::inner_nulls::{
     propagate_inner_nulls_of_multi_points, propagate_inner_nulls_of_multi_polygons,
     propagate_inner_nulls_of_points, propagate_inner_nulls_of_polygons,
 };
-use geopolars_compute::native::{Bounds, CoordinateChecks};
+use geopolars_compute::native::{Bounds, CoordinateSelection, NonFinite};
 use geopolars_compute::ogc_validity::{
     line_strings_are_valid_ogc, multi_line_strings_are_valid_ogc, multi_points_are_valid_ogc,
     multi_polygons_are_valid_ogc, points_are_valid_ogc, polygons_are_valid_ogc,
@@ -86,7 +86,7 @@ impl IsValidOgcKwargs {
 
 /// Which validity to check, with its checks.
 enum Validity {
-    GeoArrow(CoordinateChecks),
+    GeoArrow(CoordinateSelection),
     Ogc {
         bounds: Option<Bounds>,
         topology: MultiPolygonTopologyChecks,
@@ -119,7 +119,7 @@ fn chunk_is_valid(
                 PointArray::new(Coords::new(chunk)?)
             };
             match validity {
-                Validity::GeoArrow(checks) => points_are_valid_geoarrow(&array, checks),
+                Validity::GeoArrow(selection) => points_are_valid_geoarrow(&array, selection),
                 Validity::Ogc { bounds, .. } => points_are_valid_ogc(&array, *bounds),
             }
         }
@@ -130,7 +130,7 @@ fn chunk_is_valid(
                 LineStringArray::new(rows()?)?
             };
             match validity {
-                Validity::GeoArrow(checks) => line_strings_are_valid_geoarrow(&array, checks),
+                Validity::GeoArrow(selection) => line_strings_are_valid_geoarrow(&array, selection),
                 Validity::Ogc { bounds, .. } => line_strings_are_valid_ogc(&array, *bounds),
             }
         }
@@ -141,7 +141,7 @@ fn chunk_is_valid(
                 MultiPointArray::new(rows()?)?
             };
             match validity {
-                Validity::GeoArrow(checks) => multi_points_are_valid_geoarrow(&array, checks),
+                Validity::GeoArrow(selection) => multi_points_are_valid_geoarrow(&array, selection),
                 Validity::Ogc { bounds, .. } => multi_points_are_valid_ogc(&array, *bounds),
             }
         }
@@ -152,7 +152,9 @@ fn chunk_is_valid(
                 MultiLineStringArray::new(rows()?)?
             };
             match validity {
-                Validity::GeoArrow(checks) => multi_line_strings_are_valid_geoarrow(&array, checks),
+                Validity::GeoArrow(selection) => {
+                    multi_line_strings_are_valid_geoarrow(&array, selection)
+                }
                 Validity::Ogc { bounds, .. } => multi_line_strings_are_valid_ogc(&array, *bounds),
             }
         }
@@ -163,7 +165,7 @@ fn chunk_is_valid(
                 PolygonArray::new(rows()?)?
             };
             match validity {
-                Validity::GeoArrow(checks) => polygons_are_valid_geoarrow(&array, checks),
+                Validity::GeoArrow(selection) => polygons_are_valid_geoarrow(&array, selection),
                 Validity::Ogc { bounds, topology } => {
                     polygons_are_valid_ogc(&array, *bounds, &topology.polygons)
                         .map_err(compute_err)?
@@ -177,7 +179,9 @@ fn chunk_is_valid(
                 MultiPolygonArray::new(rows()?)?
             };
             match validity {
-                Validity::GeoArrow(checks) => multi_polygons_are_valid_geoarrow(&array, checks),
+                Validity::GeoArrow(selection) => {
+                    multi_polygons_are_valid_geoarrow(&array, selection)
+                }
                 Validity::Ogc { bounds, topology } => {
                     multi_polygons_are_valid_ogc(&array, *bounds, topology).map_err(compute_err)?
                 }
@@ -207,15 +211,20 @@ fn are_valid_geoarrow(
     geometries: &Series,
     kwargs: &IsValidGeoArrowKwargs,
 ) -> PolarsResult<BooleanChunked> {
-    let checks = CoordinateChecks {
+    let non_finite = NonFinite {
+        select_non_finite: true,
+        select_empty: false,
+        ignore_z: false,
+        ignore_m: false,
+    };
+    let selection = CoordinateSelection {
+        non_finite: kwargs.check_finite_coordinates.then_some(non_finite),
         bounds: kwargs.bounds,
-        check_finite_coordinates: kwargs.check_finite_coordinates,
-        allow_empty_points: true,
     };
     are_valid(
         geometries,
         kwargs.check_null_coordinates,
-        &Validity::GeoArrow(checks),
+        &Validity::GeoArrow(selection),
     )
 }
 

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from polars.plugins import register_plugin_function
 
+from geopolars._docs import doc
 from geopolars._utils import LIB
 from geopolars.geo._dispatch import on_geometry
 
@@ -29,6 +30,7 @@ def _count_coordinates(
     )
 
 
+@doc()
 def count_coordinates(
     geometry: IntoExprColumn, *, include_empty: bool = False
 ) -> pl.Expr:
@@ -45,7 +47,8 @@ def count_coordinates(
     | `MultiLineStringXY[ZM]` | the non-empty vertices of every linestring |
     | `MultiPolygonXY[ZM]` | the non-empty vertices of every ring of every polygon |
 
-    With `include_empty=True`, an empty point (NaN `x` and `y`) counts like any other.
+    With `include_empty=True`, an empty point counts like any other.
+    {empty_point}
     This skips a ring's last coordinate, as this repeats its first.
     A geometry without coordinates counts `0`; a null geometry gives null.
 

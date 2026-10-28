@@ -87,7 +87,7 @@ def test_a_multipolygon_is_not_empty(
 
 
 def test_a_nan_point_is_empty(dimension: Dimension) -> None:
-    """GeoArrow spells the empty point as NaN `x` and `y`."""
+    """The empty point has NaN on every axis."""
     nan = math.nan
     df = pl.DataFrame(
         {axis: [nan, nan, 1.0, None] for axis in dimension.coords}

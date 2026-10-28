@@ -8,7 +8,7 @@
 //! Every kernel but the one of points is generic over `CHECK_NESTED`.
 //! If `CHECK_NESTED=false`, a geometry is empty when it has no vertices.
 //! This only reads the offsets.
-//! If `CHECK_NESTED=true`, it is also empty when every vertex is the empty point (NaN in x and y).
+//! If `CHECK_NESTED=true`, it is also empty when every vertex is the [empty point](is_empty_point).
 //! This reads every vertex, so it is much more expensive.
 
 use std::ops::Range;
@@ -21,7 +21,7 @@ use polars_arrow::array::BooleanArray;
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::datatypes::ArrowDataType;
 
-use super::is_valid::is_empty_point;
+use super::coordinate_selection::is_empty_point;
 use crate::per_row::per_row_bool;
 
 /// Whether every one of `vertices` is the empty point, which also holds when there are none.
