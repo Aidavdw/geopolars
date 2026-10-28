@@ -38,6 +38,7 @@ mod metric;
 pub mod native;
 #[cfg(all(feature = "native", feature = "geos"))]
 pub mod ogc_validity;
+mod passing;
 #[cfg(any(feature = "native", feature = "rsgeo", feature = "geos"))]
 // Some helpers are only for `native`, others only for `geos` and `rsgeo`.
 #[cfg_attr(

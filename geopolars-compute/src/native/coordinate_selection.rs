@@ -4,7 +4,7 @@
 //!
 //! [selected_coords] marks the coordinates a [CoordinateSelection] selects, in one pass.
 //! [super::selected_coords](mod@super::selected_coords) acts on them.
-//! The validity checks reject the rows holding one.
+//! The validity checks reject the rows holding one ([unselected_coords]).
 
 use std::ops::Range;
 
@@ -174,6 +174,13 @@ pub fn selected_coords(coords: &ValidCoords, selection: &CoordinateSelection) ->
         selected_coords_with(coords, filter, &bounds);
         check_non_finite, check_bounds, dim.has_z(), dim.has_m()
     ))
+}
+
+pub(crate) fn which_are_not_selected(
+    coords: &ValidCoords,
+    selection: &CoordinateSelection,
+) -> Option<Bitmap> {
+    selected_coords(coords, selection).map(|selected| !&selected)
 }
 
 /// Whether any coordinate in `span` is set in `selected`, the output of [selected_coords].

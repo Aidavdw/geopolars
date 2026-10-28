@@ -5,24 +5,22 @@
 
 use geopolars_core::{
     LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PointArray,
-    PolygonArray, UncheckedStorage, ValidCoords,
+    PolygonArray, UncheckedStorage, ValidCoords, ValidList,
 };
 use polars_arrow::bitmap::Bitmap;
+
+use crate::passing::rows_passing;
 
 /// The validity of the rows of `storage`, with every null value below a row moved out to it:
 /// a row is also null where a part or coordinate (or one of its axes) below it is.
 /// `None` when every row is there.
 fn propagate_inner_nulls(storage: &UncheckedStorage) -> Option<Bitmap> {
-    let coords = storage.coords.validity().cloned();
-    storage.lists.iter().rev().fold(coords, |parts, lists| {
-        let Some(parts) = parts else {
-            return lists.validity().cloned();
-        };
-        Some(Bitmap::from_iter((0..lists.len()).map(|i| {
-            let range = lists.range(i);
-            lists.is_valid(i) && parts.null_count_range(range.start, range.len()) == 0
-        })))
-    })
+    let lists: Vec<&ValidList> = storage.lists.iter().map(List::ignoring_validity).collect();
+    let validities = (storage.lists.iter().map(List::validity)).chain([storage.coords.validity()]);
+    rows_passing(
+        &lists,
+        validities.map(|validity| validity.cloned()).collect(),
+    )
 }
 
 /// The `N` list levels of `storage`, the rows with the validity of [propagate_inner_nulls],

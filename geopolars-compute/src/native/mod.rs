@@ -38,7 +38,7 @@ pub use bounds::{
 pub use centroid::{
     line_string_centroids, multi_line_string_centroids, multi_polygon_centroids, polygon_centroids,
 };
-pub(crate) use coordinate_selection::has_selected;
+pub(crate) use coordinate_selection::which_are_not_selected;
 pub use coordinate_selection::{selected_coords, Bounds, CoordinateSelection, NonFinite};
 pub use count_coordinates::{
     line_string_coordinate_counts, multi_line_string_coordinate_counts,
@@ -74,10 +74,10 @@ pub use is_ring::{
     polygons_have_only_rings,
 };
 pub use is_simple::{multi_points_are_simple, points_are_simple};
-pub(crate) use is_valid::polygon_rings_are_closed;
+pub(crate) use is_valid::rings_are_closed;
 // Only for `ogc_validity`.
 #[cfg(feature = "geos")]
-pub(crate) use is_valid::{line_string_shape_is_valid, polygon_shape_is_valid};
+pub(crate) use is_valid::{line_shapes_are_valid, polygon_shapes_are_valid};
 pub use length::{line_string_lengths, multi_line_string_lengths, LengthMetric};
 pub use remove_repeated_points::{
     line_strings_without_repeated_points, multi_line_strings_without_repeated_points,

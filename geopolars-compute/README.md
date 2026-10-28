@@ -11,11 +11,14 @@ The crate holds:
 - kernels forwarding to GEOS in `geos`, behind the `geos` feature.
 - kernels forwarding to rsgeo (the Rust `geo` crate) in `rsgeo`, behind the `rsgeo` feature.
 - kernels forwarding to PROJ in `proj`.
-- `is_valid_geoarrow`'s kernels in `geoarrow_validity`, which check the coordinates, then the rings of every row.
+- `is_valid_geoarrow`'s kernels in `geoarrow_validity`, which check the coordinates and the rings.
   These need the `native` feature.
-- `is_valid_ogc`'s kernels in `ogc_validity`, which run the checks of `native` and `geos` in one pass per row.
+- `is_valid_ogc`'s kernels in `ogc_validity`, which run the checks of `native`.
+  Then they run those of `geos`, on the rows that pass.
   These need both features.
 - the pass that moves every null value below a row out to the row in `inner_nulls`.
+- the fold of each level's mask up to the rows in `passing`.
+  `inner_nulls` and the validity kernels use it.
 
 ## Writing kernels
 

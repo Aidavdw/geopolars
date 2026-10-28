@@ -1,6 +1,7 @@
 //! The ring and shape checks of `is_valid_geoarrow` and `is_valid_ogc`.
 //! See them in Python for the rules.
 //! The coordinate checks are in [super::coordinate_selection].
+//! Each check gives a bitmap over a whole level, set where an item passes.
 //!
 //! # Const generic flags
 //!
@@ -12,17 +13,23 @@
 #[cfg(feature = "geos")]
 use std::ops::Range;
 
-use geopolars_core::{same_place, ScalarPolygon};
+use geopolars_core::{same_place, ValidCoords, ValidList};
 #[cfg(feature = "geos")]
-use geopolars_core::{ValidCoords, MIN_RING_VERTICES};
+use geopolars_core::{ScalarPolygon, MIN_RING_VERTICES};
+use polars_arrow::bitmap::Bitmap;
 
-/// Whether every ring of `polygon` is empty or closed, as GeoArrow asks.
-#[inline(always)]
-pub(crate) fn polygon_rings_are_closed<const Z: bool>(polygon: &ScalarPolygon) -> bool {
-    polygon.rings().all(|ring| {
-        let vertices = ring.vertices;
-        vertices.is_empty() || same_place::<Z>(ring.coords, vertices.start, vertices.end - 1)
-    })
+fn rings_are_closed_with<const Z: bool>(rings: &ValidList, coords: &ValidCoords) -> Bitmap {
+    Bitmap::from_iter(
+        rings
+            .ranges()
+            .map(|ring| ring.is_empty() || same_place::<Z>(coords, ring.start, ring.end - 1)),
+    )
+}
+
+/// Whether each of `rings` is empty or closed, as GeoArrow asks.
+pub(crate) fn rings_are_closed(rings: &ValidList, coords: &ValidCoords) -> Bitmap {
+    let z = coords.dim().has_z();
+    with_const_flags!(rings_are_closed_with(rings, coords); z)
 }
 
 /// Whether `vertices` hold at least `min` vertices that lie elsewhere in x and y than the one before.
@@ -41,22 +48,41 @@ fn has_at_least_distinct_vertices(
         == min
 }
 
-/// Whether `vertices` make a linestring OGC accepts: none, or at least two distinct ones.
+/// OGC accepts lines with at least two distinct vertices (or empty)
 #[cfg(feature = "geos")]
-#[inline(always)]
-pub(crate) fn line_string_shape_is_valid(coords: &ValidCoords, vertices: Range<usize>) -> bool {
-    vertices.is_empty() || has_at_least_distinct_vertices(coords, vertices, 2)
+pub(crate) fn line_shapes_are_valid(lines: &ValidList, coords: &ValidCoords) -> Bitmap {
+    Bitmap::from_iter(
+        lines
+            .ranges()
+            .map(|line| line.is_empty() || has_at_least_distinct_vertices(coords, line, 2)),
+    )
 }
 
 /// Whether `polygon` has a shape OGC accepts:
 /// every ring empty, or every ring with at least 4 distinct vertices.
 #[cfg(feature = "geos")]
 #[inline(always)]
-pub(crate) fn polygon_shape_is_valid(polygon: &ScalarPolygon) -> bool {
+fn polygon_shape_is_valid(polygon: &ScalarPolygon) -> bool {
     if polygon.has_empty_exterior() {
         return polygon.rings().all(|ring| ring.vertices.is_empty());
     }
     polygon
         .rings()
         .all(|ring| has_at_least_distinct_vertices(ring.coords, ring.vertices, MIN_RING_VERTICES))
+}
+
+/// [polygon_shape_is_valid] for each of `polygons`, made of `rings`.
+#[cfg(feature = "geos")]
+pub(crate) fn polygon_shapes_are_valid(
+    polygons: &ValidList,
+    rings: &ValidList,
+    coords: &ValidCoords,
+) -> Bitmap {
+    Bitmap::from_iter(polygons.ranges().map(|parts| {
+        polygon_shape_is_valid(&ScalarPolygon {
+            rings,
+            coords,
+            parts,
+        })
+    }))
 }

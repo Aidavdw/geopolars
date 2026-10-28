@@ -3,20 +3,15 @@
 //!
 //! Every geometry is held to the checks of [crate::geoarrow_validity] first,
 //! with every coordinate finite: only a point or multipoint may hold the empty point.
-//! Then its shape is checked natively, and its topology through GEOS.
-//! Each gives a `bool` per row, `false` for a null row.
+//! Its shape is checked natively too, with a mask per level like those checks.
+//! Then GEOS checks its topology.
+//! It only does so for the rows that pass every other check.
+//! Each kernel gives a `bool` per row, `false` for a null row.
 //! The polygon kernels error when GEOS does.
 //! With every topology check on, GEOS's `is_valid` runs them all at once.
 //! Otherwise, each check runs on its own.
 //!
 //! Null values below the rows are not looked at here, as in [crate::geoarrow_validity].
-//!
-//! # Const generic flags
-//!
-//! ## `Z`
-//!
-//! The polygon kernels are generic over `Z`.
-//! If `Z=true`, a ring has to close in z as well.
 
 use geopolars_core::{
     LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PointArray,
@@ -24,15 +19,16 @@ use geopolars_core::{
 };
 use geos::{Geom, Geometry};
 use polars_arrow::array::BooleanArray;
-use polars_arrow::bitmap::Bitmap;
+use polars_arrow::bitmap::{Bitmap, MutableBitmap};
+use polars_arrow::compute::utils::combine_validities_and;
 
 use crate::geoarrow_validity::{multi_points_are_valid_geoarrow, points_are_valid_geoarrow};
 use crate::geos::{meet_only_at_points_and_no_overlap, polygon_rings_fit, ToGeos};
 use crate::native::{
-    has_selected, line_string_shape_is_valid, polygon_rings_are_closed, polygon_shape_is_valid,
-    selected_coords, Bounds, CoordinateSelection, NonFinite,
+    line_shapes_are_valid, polygon_shapes_are_valid, rings_are_closed, which_are_not_selected,
+    Bounds, CoordinateSelection, NonFinite,
 };
-use crate::per_row::{per_row_bool, try_per_row_bool};
+use crate::passing::{passing_bool_array, rows_passing};
 use crate::GeoComputeResult;
 
 /// The topology checks to run on a polygon. See `is_valid_ogc` in Python.
@@ -157,6 +153,21 @@ fn multi_polygon_topology_is_valid(
     meet_only_at_points_and_no_overlap(&parts)
 }
 
+/// `passing`, without the rows where `test` fails.
+/// `test` only runs on the rows set in `passing`.
+fn try_and_where_passing<E>(
+    len: usize,
+    passing: Option<Bitmap>,
+    test: impl Fn(usize) -> Result<bool, E>,
+) -> Result<Option<Bitmap>, E> {
+    let is_passing = |i: usize| passing.as_ref().is_none_or(|passing| passing.get_bit(i));
+    let mut tested = MutableBitmap::with_capacity(len);
+    for i in 0..len {
+        tested.push(is_passing(i) && test(i)?);
+    }
+    Ok(Some(tested.into()))
+}
+
 pub fn points_are_valid_ogc(array: &PointArray, bounds: Option<Bounds>) -> BooleanArray {
     points_are_valid_geoarrow(array, &finite_selection(bounds, false))
 }
@@ -166,53 +177,32 @@ pub fn multi_points_are_valid_ogc(array: &MultiPointArray, bounds: Option<Bounds
 }
 
 pub fn line_strings_are_valid_ogc(array: &LineStringArray, bounds: Option<Bounds>) -> BooleanArray {
-    let selected = selected_coords(&array.coords, &finite_selection(bounds, true));
-    per_row_bool(&array.rows, |i| {
-        let vertices = array.rows.range(i);
-        !has_selected(selected.as_ref(), vertices.clone())
-            && line_string_shape_is_valid(&array.coords, vertices)
-    })
+    let (rows, coords) = (&array.rows, &array.coords);
+    let shapes = line_shapes_are_valid(rows.ignoring_validity(), coords);
+    let passing = rows_passing(
+        &[rows.ignoring_validity()],
+        vec![
+            combine_validities_and(rows.validity(), Some(&shapes)),
+            which_are_not_selected(coords, &finite_selection(bounds, true)),
+        ],
+    );
+    passing_bool_array(rows.len(), rows.validity(), passing)
 }
 
 pub fn multi_line_strings_are_valid_ogc(
     array: &MultiLineStringArray,
     bounds: Option<Bounds>,
 ) -> BooleanArray {
-    let selected = selected_coords(&array.coords, &finite_selection(bounds, true));
-    per_row_bool(&array.rows, |i| {
-        let parts = array.rows.range(i);
-        !has_selected(selected.as_ref(), array.lines.span(parts.clone()))
-            && parts
-                .clone()
-                .all(|line| line_string_shape_is_valid(&array.coords, array.lines.range(line)))
-    })
-}
-
-/// Whether `polygon` passes the coordinate checks, is closed and has a valid shape.
-#[inline(always)]
-fn polygon_is_valid_without_topology<const Z: bool>(
-    polygon: &ScalarPolygon,
-    selected: Option<&Bitmap>,
-) -> bool {
-    !has_selected(selected, polygon.rings.span(polygon.parts.clone()))
-        && polygon_rings_are_closed::<Z>(polygon)
-        && polygon_shape_is_valid(polygon)
-}
-
-fn polygons_are_valid_with<const Z: bool>(
-    array: &PolygonArray,
-    selected: Option<&Bitmap>,
-    topology: Option<&PolygonTopologyChecks>,
-) -> GeoComputeResult<BooleanArray> {
-    try_per_row_bool(&array.rows, |i| {
-        let polygon = array.get(i);
-        if !polygon_is_valid_without_topology::<Z>(&polygon, selected) {
-            return Ok(false);
-        }
-        topology.map_or(Ok(true), |checks| {
-            polygon_topology_is_valid(&polygon, checks)
-        })
-    })
+    let (rows, lines, coords) = (&array.rows, &array.lines, &array.coords);
+    let passing = rows_passing(
+        &[rows.ignoring_validity(), lines],
+        vec![
+            rows.validity().cloned(),
+            Some(line_shapes_are_valid(lines, coords)),
+            which_are_not_selected(coords, &finite_selection(bounds, true)),
+        ],
+    );
+    passing_bool_array(rows.len(), rows.validity(), passing)
 }
 
 /// A polygon that fails one of the `topology` checks is invalid, if there are any.
@@ -221,29 +211,22 @@ pub fn polygons_are_valid_ogc(
     bounds: Option<Bounds>,
     topology: &PolygonTopologyChecks,
 ) -> GeoComputeResult<BooleanArray> {
-    let selected = selected_coords(&array.coords, &finite_selection(bounds, true));
-    let topology = topology.checks_anything().then_some(topology);
-    let z = array.coords.dim().has_z();
-    with_const_flags!(polygons_are_valid_with(array, selected.as_ref(), topology); z)
-}
-
-fn multi_polygons_are_valid_with<const Z: bool>(
-    array: &MultiPolygonArray,
-    selected: Option<&Bitmap>,
-    topology: Option<&MultiPolygonTopologyChecks>,
-) -> GeoComputeResult<BooleanArray> {
-    try_per_row_bool(&array.rows, |i| {
-        let multi = array.get(i);
-        if !multi
-            .polygons()
-            .all(|polygon| polygon_is_valid_without_topology::<Z>(&polygon, selected))
-        {
-            return Ok(false);
-        }
-        topology.map_or(Ok(true), |checks| {
-            multi_polygon_topology_is_valid(&multi, checks)
-        })
-    })
+    let (rows, rings, coords) = (&array.rows, &array.rings, &array.coords);
+    let shapes = polygon_shapes_are_valid(rows.ignoring_validity(), rings, coords);
+    let mut passing = rows_passing(
+        &[rows.ignoring_validity(), rings],
+        vec![
+            combine_validities_and(rows.validity(), Some(&shapes)),
+            Some(rings_are_closed(rings, coords)),
+            which_are_not_selected(coords, &finite_selection(bounds, true)),
+        ],
+    );
+    if topology.checks_anything() {
+        passing = try_and_where_passing(rows.len(), passing, |i| {
+            polygon_topology_is_valid(&array.get(i), topology)
+        })?;
+    }
+    Ok(passing_bool_array(rows.len(), rows.validity(), passing))
 }
 
 /// [polygons_are_valid_ogc] for every part.
@@ -253,8 +236,21 @@ pub fn multi_polygons_are_valid_ogc(
     bounds: Option<Bounds>,
     topology: &MultiPolygonTopologyChecks,
 ) -> GeoComputeResult<BooleanArray> {
-    let selected = selected_coords(&array.coords, &finite_selection(bounds, true));
-    let topology = topology.checks_anything().then_some(topology);
-    let z = array.coords.dim().has_z();
-    with_const_flags!(multi_polygons_are_valid_with(array, selected.as_ref(), topology); z)
+    let (rows, polygons, rings, coords) =
+        (&array.rows, &array.polygons, &array.rings, &array.coords);
+    let mut passing = rows_passing(
+        &[rows.ignoring_validity(), polygons, rings],
+        vec![
+            rows.validity().cloned(),
+            Some(polygon_shapes_are_valid(polygons, rings, coords)),
+            Some(rings_are_closed(rings, coords)),
+            which_are_not_selected(coords, &finite_selection(bounds, true)),
+        ],
+    );
+    if topology.checks_anything() {
+        passing = try_and_where_passing(rows.len(), passing, |i| {
+            multi_polygon_topology_is_valid(&array.get(i), topology)
+        })?;
+    }
+    Ok(passing_bool_array(rows.len(), rows.validity(), passing))
 }
