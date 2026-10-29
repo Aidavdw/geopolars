@@ -43,3 +43,18 @@ Use it only to check that something is valid GeoArrow.
 `UncheckedStorage` holds a chunk as it comes from Polars, with the validity of every level.
 Use it only to move the null values below the rows out to the rows
 (`inner_nulls` in `geopolars-compute`).
+
+## Trimming
+
+A chunk can be a slice of a larger array, such as a streaming morsel or the result of `slice`.
+Then only its rows are sliced.
+The levels below them still hold every list and coordinate of the larger array,
+so a view built from it does too.
+A kernel that reads the items of its rows never notices.
+A kernel that walks a whole level would also process everything outside the chunk.
+
+`is_trimmed` says whether every list and coordinate of a view belongs to one of its rows.
+Polars' `trim_lists_to_normalized_offsets` makes it so (`trimmed` in the plugin).
+It slices every level to what the rows use.
+This copies the offsets of a level when they do not start at zero.
+A `PointArray` is always trimmed, as slicing a struct array slices its fields.

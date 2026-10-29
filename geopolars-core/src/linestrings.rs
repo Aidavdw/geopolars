@@ -6,6 +6,7 @@ use std::ops::Range;
 use polars_arrow::array::ListArray;
 use polars_core::prelude::PolarsResult;
 
+use crate::lists::UNTRIMMED;
 use crate::output::{coords_struct, list_array};
 use crate::{downcast, List, ValidCoords, ValidList};
 
@@ -68,6 +69,21 @@ impl LineStringArray {
         })
     }
 
+    /// Whether every list and coordinate this holds belongs to one of its rows.
+    /// A chunk sliced from a larger array is not: see the README on trimming.
+    pub fn is_trimmed(&self) -> bool {
+        self.rows
+            .ignoring_validity()
+            .spans_all_of(self.coords.len())
+    }
+
+    /// For a kernel that walks a whole level: debug-asserts [is_trimmed](Self::is_trimmed).
+    #[track_caller]
+    #[inline]
+    pub fn debug_assert_trimmed(&self) {
+        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
+    }
+
     /// The polars storage of the column, taking over its buffers.
     pub fn into_list_array(self) -> ListArray<i64> {
         let dim = self.coords.dim();
@@ -101,6 +117,19 @@ impl MultiLineStringArray {
             lines: ValidList::new(lines),
             coords: ValidCoords::new(lines.values().as_ref())?,
         })
+    }
+
+    /// See [`LineStringArray::is_trimmed`].
+    pub fn is_trimmed(&self) -> bool {
+        self.rows.ignoring_validity().spans_all_of(self.lines.len())
+            && self.lines.spans_all_of(self.coords.len())
+    }
+
+    /// See [`LineStringArray::debug_assert_trimmed`].
+    #[track_caller]
+    #[inline]
+    pub fn debug_assert_trimmed(&self) {
+        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
     }
 
     /// See [`LineStringArray::into_list_array`].

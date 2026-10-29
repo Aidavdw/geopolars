@@ -721,10 +721,10 @@ fn polygon_rings_in_separate_columns(
     kwargs: PolygonKwargs,
 ) -> PolarsResult<Series> {
     let (geo, listed) = separate_rings(&fields_of(inputs), &kwargs.metadata())?;
-    let exteriors = storage_of(&inputs[0])?.rechunk();
+    let exteriors = trimmed(&storage_of(&inputs[0])?.rechunk());
     let holes = inputs
         .get(1)
-        .map(|holes| Ok::<_, PolarsError>(storage_of(holes)?.rechunk()))
+        .map(|holes| Ok::<_, PolarsError>(trimmed(&storage_of(holes)?.rechunk())))
         .transpose()?;
     if let Some(holes) = &holes {
         polars_ensure!(

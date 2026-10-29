@@ -177,6 +177,7 @@ pub fn multi_points_are_valid_ogc(array: &MultiPointArray, bounds: Option<Bounds
 }
 
 pub fn line_strings_are_valid_ogc(array: &LineStringArray, bounds: Option<Bounds>) -> BooleanArray {
+    array.debug_assert_trimmed();
     let (rows, coords) = (&array.rows, &array.coords);
     let shapes = line_shapes_are_valid(rows.ignoring_validity(), coords);
     let passing = rows_passing(
@@ -193,6 +194,7 @@ pub fn multi_line_strings_are_valid_ogc(
     array: &MultiLineStringArray,
     bounds: Option<Bounds>,
 ) -> BooleanArray {
+    array.debug_assert_trimmed();
     let (rows, lines, coords) = (&array.rows, &array.lines, &array.coords);
     let passing = rows_passing(
         &[rows.ignoring_validity(), lines],
@@ -211,6 +213,7 @@ pub fn polygons_are_valid_ogc(
     bounds: Option<Bounds>,
     topology: &PolygonTopologyChecks,
 ) -> GeoComputeResult<BooleanArray> {
+    array.debug_assert_trimmed();
     let (rows, rings, coords) = (&array.rows, &array.rings, &array.coords);
     let shapes = polygon_shapes_are_valid(rows.ignoring_validity(), rings, coords);
     let mut passing = rows_passing(
@@ -236,6 +239,7 @@ pub fn multi_polygons_are_valid_ogc(
     bounds: Option<Bounds>,
     topology: &MultiPolygonTopologyChecks,
 ) -> GeoComputeResult<BooleanArray> {
+    array.debug_assert_trimmed();
     let (rows, polygons, rings, coords) =
         (&array.rows, &array.polygons, &array.rings, &array.coords);
     let mut passing = rows_passing(

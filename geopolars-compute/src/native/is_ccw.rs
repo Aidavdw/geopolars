@@ -128,6 +128,7 @@ fn rings_to_flip<const HOLES_CW: bool>(
 }
 
 pub fn line_strings_to_ccw(array: &LineStringArray) -> LineStringArray {
+    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity().ranges();
     let flipped = lines_to_flip(rows, &array.coords);
     LineStringArray {
@@ -137,6 +138,7 @@ pub fn line_strings_to_ccw(array: &LineStringArray) -> LineStringArray {
 }
 
 pub fn polygons_to_ccw<const HOLES_CW: bool>(array: &PolygonArray) -> PolygonArray {
+    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity().ranges();
     let flipped = rings_to_flip::<HOLES_CW>(rows, &array.rings, &array.coords);
     PolygonArray {
@@ -147,6 +149,7 @@ pub fn polygons_to_ccw<const HOLES_CW: bool>(array: &PolygonArray) -> PolygonArr
 }
 
 pub fn multi_line_strings_to_ccw(array: &MultiLineStringArray) -> MultiLineStringArray {
+    array.debug_assert_trimmed();
     let flipped = lines_to_flip(array.lines.ranges(), &array.coords);
     MultiLineStringArray {
         rows: array.rows.clone(),
@@ -156,6 +159,7 @@ pub fn multi_line_strings_to_ccw(array: &MultiLineStringArray) -> MultiLineStrin
 }
 
 pub fn multi_polygons_to_ccw<const HOLES_CW: bool>(array: &MultiPolygonArray) -> MultiPolygonArray {
+    array.debug_assert_trimmed();
     let polygons = array.polygons.ranges();
     let flipped = rings_to_flip::<HOLES_CW>(polygons, &array.rings, &array.coords);
     MultiPolygonArray {

@@ -59,6 +59,7 @@ pub fn line_strings_with_clamped_coords(
     array: &LineStringArray,
     bounds: &Bounds,
 ) -> LineStringArray {
+    array.debug_assert_trimmed();
     LineStringArray {
         rows: array.rows.clone(),
         coords: clamped(&array.coords, bounds),
@@ -69,6 +70,7 @@ pub fn multi_points_with_clamped_coords(
     array: &MultiPointArray,
     bounds: &Bounds,
 ) -> MultiPointArray {
+    array.debug_assert_trimmed();
     MultiPointArray {
         rows: array.rows.clone(),
         coords: clamped(&array.coords, bounds),
@@ -76,6 +78,7 @@ pub fn multi_points_with_clamped_coords(
 }
 
 pub fn polygons_with_clamped_coords(array: &PolygonArray, bounds: &Bounds) -> PolygonArray {
+    array.debug_assert_trimmed();
     PolygonArray {
         rows: array.rows.clone(),
         rings: array.rings.clone(),
@@ -87,6 +90,7 @@ pub fn multi_line_strings_with_clamped_coords(
     array: &MultiLineStringArray,
     bounds: &Bounds,
 ) -> MultiLineStringArray {
+    array.debug_assert_trimmed();
     MultiLineStringArray {
         rows: array.rows.clone(),
         lines: array.lines.clone(),
@@ -98,6 +102,7 @@ pub fn multi_polygons_with_clamped_coords(
     array: &MultiPolygonArray,
     bounds: &Bounds,
 ) -> MultiPolygonArray {
+    array.debug_assert_trimmed();
     MultiPolygonArray {
         rows: array.rows.clone(),
         polygons: array.polygons.clone(),

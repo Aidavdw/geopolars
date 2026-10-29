@@ -29,12 +29,24 @@ fn lists_passing(lists: &ValidList, items: &Bitmap) -> Bitmap {
     )
 }
 
+/// Whether each of `lists` spans all of the level below it (see [ValidList::spans_all_of]).
+/// The innermost one is only checked when there is a mask for the `coords`.
+fn are_trimmed(lists: &[&ValidList], coords: Option<&Bitmap>) -> bool {
+    let below = (lists[1..].iter().map(|lists| Some(lists.len()))).chain([coords.map(Bitmap::len)]);
+    (lists.iter().zip(below))
+        .all(|(lists, items)| items.is_none_or(|items| lists.spans_all_of(items)))
+}
+
 /// The rows passing every mask in `passing`.
 /// `lists` are the list levels, outermost first.
 /// `passing` holds a mask per list level, in the same order.
 /// Its last mask is for the coordinates.
 pub(crate) fn rows_passing(lists: &[&ValidList], passing: Vec<Option<Bitmap>>) -> Option<Bitmap> {
     assert_eq!(passing.len(), lists.len() + 1, "a mask per level");
+    debug_assert!(
+        are_trimmed(lists, passing[lists.len()].as_ref()),
+        "the lists have to be trimmed (see the geopolars-core README on trimming)"
+    );
     let mut levels = passing.into_iter().rev();
     let coords = unless_all_set(levels.next().flatten());
     lists

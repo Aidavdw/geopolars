@@ -71,6 +71,7 @@ pub fn line_strings_without_repeats_in_succession(
     unique_m: bool,
     options: LineOptions,
 ) -> LineStringArray {
+    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity();
     let mut repeated = repeats_in_succession(rows, &array.coords, tolerance, unique_z, unique_m);
     keep_last_vertices(
@@ -88,6 +89,7 @@ pub fn multi_points_without_repeats_in_succession(
     unique_z: bool,
     unique_m: bool,
 ) -> MultiPointArray {
+    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity();
     let repeated = repeats_in_succession(rows, &array.coords, tolerance, unique_z, unique_m);
     multi_points_without_selected(array, &repeated.freeze(), TooShort::Keep)
@@ -101,6 +103,7 @@ pub fn polygons_without_repeats_in_succession(
     unique_m: bool,
     too_short: TooShort,
 ) -> PolygonArray {
+    array.debug_assert_trimmed();
     let rings = &array.rings;
     let mut repeated = repeats_in_succession(rings, &array.coords, tolerance, unique_z, unique_m);
     keep_last_vertices(rings, &mut repeated, true);
@@ -114,6 +117,7 @@ pub fn multi_line_strings_without_repeats_in_succession(
     unique_m: bool,
     options: LineOptions,
 ) -> MultiLineStringArray {
+    array.debug_assert_trimmed();
     let lines = &array.lines;
     let mut repeated = repeats_in_succession(lines, &array.coords, tolerance, unique_z, unique_m);
     keep_last_vertices(
@@ -132,6 +136,7 @@ pub fn multi_polygons_without_repeats_in_succession(
     unique_m: bool,
     too_short: TooShort,
 ) -> MultiPolygonArray {
+    array.debug_assert_trimmed();
     let rings = &array.rings;
     let mut repeated = repeats_in_succession(rings, &array.coords, tolerance, unique_z, unique_m);
     keep_last_vertices(rings, &mut repeated, true);

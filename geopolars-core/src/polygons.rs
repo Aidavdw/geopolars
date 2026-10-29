@@ -6,6 +6,7 @@ use std::ops::Range;
 use polars_arrow::array::ListArray;
 use polars_core::prelude::PolarsResult;
 
+use crate::lists::UNTRIMMED;
 use crate::output::{coords_struct, list_array};
 use crate::{downcast, List, ScalarLineString, ValidCoords, ValidList};
 
@@ -51,6 +52,19 @@ impl PolygonArray {
             rings: ValidList::new(rings),
             coords: ValidCoords::new(rings.values().as_ref())?,
         })
+    }
+
+    /// See [`LineStringArray::is_trimmed`](crate::LineStringArray::is_trimmed).
+    pub fn is_trimmed(&self) -> bool {
+        self.rows.ignoring_validity().spans_all_of(self.rings.len())
+            && self.rings.spans_all_of(self.coords.len())
+    }
+
+    /// See [`LineStringArray::debug_assert_trimmed`](crate::LineStringArray::debug_assert_trimmed).
+    #[track_caller]
+    #[inline]
+    pub fn debug_assert_trimmed(&self) {
+        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
     }
 
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).
@@ -111,6 +125,22 @@ impl MultiPolygonArray {
             rings: ValidList::new(rings),
             coords: ValidCoords::new(rings.values().as_ref())?,
         })
+    }
+
+    /// See [`LineStringArray::is_trimmed`](crate::LineStringArray::is_trimmed).
+    pub fn is_trimmed(&self) -> bool {
+        self.rows
+            .ignoring_validity()
+            .spans_all_of(self.polygons.len())
+            && self.polygons.spans_all_of(self.rings.len())
+            && self.rings.spans_all_of(self.coords.len())
+    }
+
+    /// See [`LineStringArray::debug_assert_trimmed`](crate::LineStringArray::debug_assert_trimmed).
+    #[track_caller]
+    #[inline]
+    pub fn debug_assert_trimmed(&self) {
+        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
     }
 
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).

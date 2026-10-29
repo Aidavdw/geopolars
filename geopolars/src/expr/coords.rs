@@ -12,9 +12,8 @@ pub fn kernel_output_type_same_geometry(input_fields: &[Field]) -> PolarsResult<
     Ok(field.clone())
 }
 
-/// `storage`, holding only the coordinates its rows use.
-/// A streaming morsel still holds every coordinate of the column it was sliced from,
-/// which the kernels would otherwise all process. Trimming is zero-copy.
+/// `storage`, holding only the lists and coordinates its rows use.
+/// See the geopolars-core README on trimming.
 pub fn trimmed(storage: &Series) -> Series {
     storage
         .trim_lists_to_normalized_offsets()

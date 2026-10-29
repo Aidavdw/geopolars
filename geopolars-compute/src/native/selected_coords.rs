@@ -348,6 +348,7 @@ pub fn line_strings_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> LineStringArray {
+    array.debug_assert_trimmed();
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => LineStringArray {
@@ -368,6 +369,7 @@ pub fn multi_points_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiPointArray {
+    array.debug_assert_trimmed();
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiPointArray {
@@ -388,6 +390,7 @@ pub fn polygons_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> PolygonArray {
+    array.debug_assert_trimmed();
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => PolygonArray {
@@ -415,6 +418,7 @@ pub fn multi_line_strings_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiLineStringArray {
+    array.debug_assert_trimmed();
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiLineStringArray {
@@ -442,6 +446,7 @@ pub fn multi_polygons_with_selected(
     action: SelectedAction,
     too_short: TooShort,
 ) -> MultiPolygonArray {
+    array.debug_assert_trimmed();
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
         SelectedAction::SetEmpty => MultiPolygonArray {

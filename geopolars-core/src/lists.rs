@@ -62,7 +62,18 @@ impl ValidList {
     pub fn ranges(&self) -> impl Iterator<Item = Range<usize>> + Clone + '_ {
         (0..self.len()).map(move |i| self.range(i))
     }
+
+    /// Whether these lists hold all `items` of the child array, from the first one on.
+    /// See the README on trimming.
+    #[inline]
+    pub fn spans_all_of(&self, items: usize) -> bool {
+        *self.offsets.first() == 0 && *self.offsets.last() as usize == items
+    }
 }
+
+/// The message when a kernel that walks a whole level gets a chunk that is not trimmed.
+pub(crate) const UNTRIMMED: &str =
+    "this kernel walks a whole level, so its chunk has to be trimmed first (see the README on trimming)";
 
 /// Lists where individual lists can be null: the outer level of a geometry column.
 /// Otherwise, use [ValidList].

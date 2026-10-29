@@ -37,6 +37,7 @@ fn chunk_with_closed_rings(
         }
         Kind::LineString => {
             let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
+            array.debug_assert_trimmed();
             let z = array.coords.dim().has_z();
             let rows = array.rows.ignoring_validity();
             with_const_flags!(
@@ -54,6 +55,7 @@ fn chunk_with_closed_rings(
         }
         Kind::Polygon => {
             let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            array.debug_assert_trimmed();
             closed_rings(&array.rings, &array.coords, *kwargs).map(|(rings, coords)| {
                 (array.rings, array.coords) = (rings, coords);
                 array.into_list_array().boxed()
@@ -61,6 +63,7 @@ fn chunk_with_closed_rings(
         }
         Kind::MultiLineString => {
             let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            array.debug_assert_trimmed();
             closed_rings(&array.lines, &array.coords, *kwargs).map(|(lines, coords)| {
                 (array.lines, array.coords) = (lines, coords);
                 array.into_list_array().boxed()
@@ -68,6 +71,7 @@ fn chunk_with_closed_rings(
         }
         Kind::MultiPolygon => {
             let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            array.debug_assert_trimmed();
             closed_rings(&array.rings, &array.coords, *kwargs).map(|(rings, coords)| {
                 (array.rings, array.coords) = (rings, coords);
                 array.into_list_array().boxed()
