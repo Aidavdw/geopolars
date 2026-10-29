@@ -16,7 +16,6 @@ use polars_arrow::array::{Array, BooleanArray, ListArray};
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::trimmed;
 use crate::geoarrow::{describe, Kind};
 
 /// See python
@@ -97,7 +96,7 @@ fn has_repeats_in_succession(
     let geometries = &inputs[0];
     let kind = describe(geometries.dtype())?.kind;
     let tolerance = tolerance(kwargs.abs_tol, kwargs.rel_tol);
-    let storage = &trimmed(geometries.ext()?.storage());
+    let storage = geometries.ext()?.storage();
     let chunks = storage.chunks().iter().map(|chunk| {
         chunk_has_repeats_in_succession(
             chunk.as_ref(),

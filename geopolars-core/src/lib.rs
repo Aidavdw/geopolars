@@ -12,6 +12,7 @@ pub mod output;
 mod points;
 mod polygons;
 mod unchecked;
+mod untrimmed;
 
 use polars_arrow::array::Array;
 use polars_core::prelude::{polars_err, PolarsResult};
@@ -29,6 +30,7 @@ pub use lists::{List, ValidList};
 pub use points::{MultiPointArray, PointArray, ScalarMultiPoint, ScalarPoint};
 pub use polygons::{MultiPolygonArray, PolygonArray, ScalarMultiPolygon, ScalarPolygon};
 pub use unchecked::UncheckedStorage;
+pub use untrimmed::Untrimmed;
 
 /// Downcast one level of the storage to the array it has to be.
 /// The dtype was already checked, so this failing is a bug.

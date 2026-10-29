@@ -36,9 +36,23 @@ impl UncheckedStorage {
             .fold(coords.validity().cloned(), |validity, axis| {
                 combine_validities_and(validity.as_ref(), axis.validity())
             });
-        Ok(Self {
+        let coords = Coords::from_valid(ValidCoords::new(coords)?, validity);
+        Ok(Self { lists, coords }.trimmed())
+    }
+
+    /// This storage, with every level sliced to what its rows use (see the README on trimming).
+    fn trimmed(self) -> Self {
+        let mut items = 0..self.lists.first().map_or(self.coords.len(), List::len);
+        let lists = (self.lists.iter())
+            .map(|list| {
+                let (list, inner) = list.sliced(items.clone());
+                items = inner;
+                list
+            })
+            .collect();
+        Self {
             lists,
-            coords: Coords::from_valid(ValidCoords::new(coords)?, validity),
-        })
+            coords: self.coords.sliced(items),
+        }
     }
 }

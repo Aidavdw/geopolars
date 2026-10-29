@@ -1,7 +1,7 @@
-"""Kernels that walk a whole level, on a chunk sliced from a larger one.
+"""Kernels on a chunk sliced from a larger one.
 
-Such a chunk still holds every list and coordinate of the larger one below its rows.
-A debug build asserts that it was trimmed before the kernel saw it.
+Such a chunk still holds every list and coordinate of the larger one below its rows,
+until its view is trimmed (see the geopolars-core README on trimming).
 """
 
 from __future__ import annotations
@@ -80,6 +80,9 @@ KERNELS: dict[str, tuple[Kernel, set[type[GeoArrowType]]]] = {
     ),
     "is_valid_ogc": (lambda g: geo.is_valid_ogc(g), set()),
     "to_crs": (lambda g: geo.to_crs(g, "EPSG:3857"), set()),
+    # These two read untrimmed views.
+    "is_empty": (lambda g: geo.is_empty(g, check_nested=True), set()),
+    "count_coordinates": (lambda g: geo.count_coordinates(g), set()),
 }
 
 

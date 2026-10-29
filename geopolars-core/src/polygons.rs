@@ -6,9 +6,8 @@ use std::ops::Range;
 use polars_arrow::array::ListArray;
 use polars_core::prelude::PolarsResult;
 
-use crate::lists::UNTRIMMED;
 use crate::output::{coords_struct, list_array};
-use crate::{downcast, List, ScalarLineString, ValidCoords, ValidList};
+use crate::{downcast, List, ScalarLineString, Untrimmed, ValidCoords, ValidList};
 
 /// One polygon: a run of rings, the first of which is the exterior.
 pub struct ScalarPolygon<'a> {
@@ -45,26 +44,25 @@ pub struct PolygonArray {
 }
 
 impl PolygonArray {
+    /// See [`LineStringArray::new`](crate::LineStringArray::new).
     pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
+        Ok(Self::new_untrimmed(rows)?.trimmed())
+    }
+
+    /// See [`LineStringArray::new_untrimmed`](crate::LineStringArray::new_untrimmed).
+    pub fn new_untrimmed(rows: &ListArray<i64>) -> PolarsResult<Untrimmed<Self>> {
         let rings: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of rings")?;
-        Ok(Self {
+        Ok(Untrimmed(Self {
             rows: List::new(rows),
             rings: ValidList::new(rings),
             coords: ValidCoords::new(rings.values().as_ref())?,
-        })
+        }))
     }
 
     /// See [`LineStringArray::is_trimmed`](crate::LineStringArray::is_trimmed).
-    pub fn is_trimmed(&self) -> bool {
+    pub(crate) fn is_trimmed(&self) -> bool {
         self.rows.ignoring_validity().spans_all_of(self.rings.len())
             && self.rings.spans_all_of(self.coords.len())
-    }
-
-    /// See [`LineStringArray::debug_assert_trimmed`](crate::LineStringArray::debug_assert_trimmed).
-    #[track_caller]
-    #[inline]
-    pub fn debug_assert_trimmed(&self) {
-        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
     }
 
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).
@@ -116,31 +114,30 @@ pub struct MultiPolygonArray {
 }
 
 impl MultiPolygonArray {
+    /// See [`LineStringArray::new`](crate::LineStringArray::new).
     pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
+        Ok(Self::new_untrimmed(rows)?.trimmed())
+    }
+
+    /// See [`LineStringArray::new_untrimmed`](crate::LineStringArray::new_untrimmed).
+    pub fn new_untrimmed(rows: &ListArray<i64>) -> PolarsResult<Untrimmed<Self>> {
         let polygons: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of polygons")?;
         let rings: &ListArray<i64> = downcast(polygons.values().as_ref(), "a list of rings")?;
-        Ok(Self {
+        Ok(Untrimmed(Self {
             rows: List::new(rows),
             polygons: ValidList::new(polygons),
             rings: ValidList::new(rings),
             coords: ValidCoords::new(rings.values().as_ref())?,
-        })
+        }))
     }
 
     /// See [`LineStringArray::is_trimmed`](crate::LineStringArray::is_trimmed).
-    pub fn is_trimmed(&self) -> bool {
+    pub(crate) fn is_trimmed(&self) -> bool {
         self.rows
             .ignoring_validity()
             .spans_all_of(self.polygons.len())
             && self.polygons.spans_all_of(self.rings.len())
             && self.rings.spans_all_of(self.coords.len())
-    }
-
-    /// See [`LineStringArray::debug_assert_trimmed`](crate::LineStringArray::debug_assert_trimmed).
-    #[track_caller]
-    #[inline]
-    pub fn debug_assert_trimmed(&self) {
-        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
     }
 
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).

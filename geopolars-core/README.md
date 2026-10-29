@@ -48,13 +48,15 @@ Use it only to move the null values below the rows out to the rows
 
 A chunk can be a slice of a larger array, such as a streaming morsel or the result of `slice`.
 Then only its rows are sliced.
-The levels below them still hold every list and coordinate of the larger array,
-so a view built from it does too.
-A kernel that reads the items of its rows never notices.
+The levels below them still hold every list and coordinate of the larger array.
 A kernel that walks a whole level would also process everything outside the chunk.
 
-`is_trimmed` says whether every list and coordinate of a view belongs to one of its rows.
-Polars' `trim_lists_to_normalized_offsets` makes it so (`trimmed` in the plugin).
-It slices every level to what the rows use.
-This copies the offsets of a level when they do not start at zero.
-A `PointArray` is always trimmed, as slicing a struct array slices its fields.
+So `new` trims: it slices every level of the view to what its rows use.
+This shares the buffers, but copies the offsets of a level when they do not start at zero.
+Every view a kernel builds is trimmed too, so a kernel can walk any level of any view.
+A `PointArray` is never sliced this way, as slicing a struct array slices its fields.
+`UncheckedStorage::new` trims as well.
+
+A kernel that only reads the items of its rows does not need this.
+To skip the cost of trimming, it can take an `Untrimmed` view instead, built with `new_untrimmed`.
+Only do this where the trim is a noticeable part of the kernel's cost.

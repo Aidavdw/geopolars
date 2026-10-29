@@ -17,7 +17,7 @@ use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{kernel_output_type_same_geometry, trimmed};
+use super::coords::kernel_output_type_same_geometry;
 use super::filter_coordinates::chunk_with_selected;
 use super::remove_repeats_in_succession::TooShortDef;
 use crate::geoarrow::{describe, Kind};
@@ -92,7 +92,7 @@ fn fix_out_of_bounds(inputs: &[Series], kwargs: FixOutOfBoundsKwargs) -> PolarsR
         non_finite: None,
         bounds: Some(bounds),
     };
-    let storage = trimmed(inputs[0].ext()?.storage());
+    let storage = inputs[0].ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()

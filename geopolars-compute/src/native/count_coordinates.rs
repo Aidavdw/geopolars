@@ -13,7 +13,7 @@ use std::ops::Range;
 
 use geopolars_core::{
     LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PointArray,
-    PolygonArray, ScalarPolygon, ValidCoords,
+    PolygonArray, ScalarPolygon, Untrimmed, ValidCoords,
 };
 use polars_arrow::array::PrimitiveArray;
 
@@ -59,40 +59,45 @@ pub fn point_coordinate_counts<const INCLUDE_EMPTY: bool>(
 }
 
 pub fn line_string_coordinate_counts<const INCLUDE_EMPTY: bool>(
-    array: &LineStringArray,
+    array: &Untrimmed<LineStringArray>,
 ) -> PrimitiveArray<u32> {
+    let array = array.rows_only();
     per_row_count(&array.rows, |i| {
         count_vertices::<INCLUDE_EMPTY>(&array.coords, array.rows.range(i))
     })
 }
 
 pub fn multi_point_coordinate_counts<const INCLUDE_EMPTY: bool>(
-    array: &MultiPointArray,
+    array: &Untrimmed<MultiPointArray>,
 ) -> PrimitiveArray<u32> {
+    let array = array.rows_only();
     per_row_count(&array.rows, |i| {
         count_vertices::<INCLUDE_EMPTY>(&array.coords, array.rows.range(i))
     })
 }
 
 pub fn multi_line_string_coordinate_counts<const INCLUDE_EMPTY: bool>(
-    array: &MultiLineStringArray,
+    array: &Untrimmed<MultiLineStringArray>,
 ) -> PrimitiveArray<u32> {
+    let array = array.rows_only();
     per_row_count(&array.rows, |i| {
         count_vertices::<INCLUDE_EMPTY>(&array.coords, array.lines.span(array.rows.range(i)))
     })
 }
 
 pub fn polygon_coordinate_counts<const INCLUDE_EMPTY: bool>(
-    array: &PolygonArray,
+    array: &Untrimmed<PolygonArray>,
 ) -> PrimitiveArray<u32> {
+    let array = array.rows_only();
     per_row_count(&array.rows, |i| {
         count_polygon_vertices::<INCLUDE_EMPTY>(&array.get(i))
     })
 }
 
 pub fn multi_polygon_coordinate_counts<const INCLUDE_EMPTY: bool>(
-    array: &MultiPolygonArray,
+    array: &Untrimmed<MultiPolygonArray>,
 ) -> PrimitiveArray<u32> {
+    let array = array.rows_only();
     per_row_count(&array.rows, |i| {
         array
             .get(i)

@@ -195,6 +195,17 @@ impl ValidCoords {
         self.x.len()
     }
 
+    /// Coordinates `range` of these, sharing their buffers.
+    pub(crate) fn sliced(&self, range: Range<usize>) -> Self {
+        let sliced = |axis: &Buffer<f64>| axis.clone().sliced(range.clone());
+        Self {
+            x: sliced(&self.x),
+            y: sliced(&self.y),
+            z: self.z.as_ref().map(sliced),
+            m: self.m.as_ref().map(sliced),
+        }
+    }
+
     /// The position of coordinate `i`: x, y, and with `Z` its z (`0.0` without).
     #[inline(always)]
     pub fn position<const Z: bool>(&self, i: usize) -> [f64; 3] {
@@ -369,6 +380,16 @@ impl Coords {
     #[inline]
     pub fn len(&self) -> usize {
         self.axes.len()
+    }
+
+    /// See [`ValidCoords::sliced`].
+    pub(crate) fn sliced(&self, range: Range<usize>) -> Self {
+        let validity =
+            (self.validity.clone()).map(|validity| validity.sliced(range.start, range.len()));
+        Self {
+            validity,
+            axes: self.axes.sliced(range),
+        }
     }
 
     /// See [`ValidCoords::nth`].

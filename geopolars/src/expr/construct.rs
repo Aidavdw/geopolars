@@ -8,7 +8,6 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::close_rings::CloseRingsKwargs;
-use super::coords::trimmed;
 use crate::geoarrow::crs::{ExtensionMetadata, MetadataKwargs};
 use crate::geoarrow::{coord, describe, Geo, GeoDimension, Kind};
 use geopolars_compute::inner_nulls::{
@@ -238,7 +237,6 @@ fn validated_chunk(
 
 /// [validated_chunk] for every chunk of `storage`.
 fn validated(storage: Series, kind: Kind, close: Option<CloseRingsKwargs>) -> PolarsResult<Series> {
-    let storage = trimmed(&storage);
     let chunks = storage
         .chunks()
         .iter()
@@ -514,7 +512,7 @@ fn linestring_coords(inputs: &[Series], kwargs: MetadataKwargs) -> PolarsResult<
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_polygon_coords)]
 fn polygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     let geo = zipped_exteriors(&fields_of(inputs), &kwargs.metadata(), Kind::Polygon)?;
-    let exteriors = trimmed(&interleaved_columns(inputs, Kind::LineString.nesting())?);
+    let exteriors = interleaved_columns(inputs, Kind::LineString.nesting())?;
     let chunks = exteriors
         .chunks()
         .iter()
@@ -563,10 +561,7 @@ fn one_ring_per_polygon(rows: &ListArray<i64>) -> ListArray<i64> {
 #[polars_expr(output_type_func_with_kwargs=kernel_output_type_multipolygon_coords)]
 fn multipolygon_coords(inputs: &[Series], kwargs: PolygonKwargs) -> PolarsResult<Series> {
     let geo = zipped_exteriors(&fields_of(inputs), &kwargs.metadata(), Kind::MultiPolygon)?;
-    let exteriors = trimmed(&interleaved_columns(
-        inputs,
-        Kind::MultiLineString.nesting(),
-    )?);
+    let exteriors = interleaved_columns(inputs, Kind::MultiLineString.nesting())?;
     let chunks = exteriors
         .list()?
         .downcast_iter()
@@ -721,10 +716,10 @@ fn polygon_rings_in_separate_columns(
     kwargs: PolygonKwargs,
 ) -> PolarsResult<Series> {
     let (geo, listed) = separate_rings(&fields_of(inputs), &kwargs.metadata())?;
-    let exteriors = trimmed(&storage_of(&inputs[0])?.rechunk());
+    let exteriors = storage_of(&inputs[0])?.rechunk();
     let holes = inputs
         .get(1)
-        .map(|holes| Ok::<_, PolarsError>(trimmed(&storage_of(holes)?.rechunk())))
+        .map(|holes| Ok::<_, PolarsError>(storage_of(holes)?.rechunk()))
         .transpose()?;
     if let Some(holes) = &holes {
         polars_ensure!(

@@ -27,7 +27,7 @@ use polars_arrow::array::{Array, BooleanArray, ListArray};
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{kernel_output_type_same_geometry, trimmed};
+use super::coords::kernel_output_type_same_geometry;
 use crate::geoarrow::{describe, Kind};
 
 /// See python
@@ -199,7 +199,7 @@ fn are_valid(
     validity: &Validity,
 ) -> PolarsResult<BooleanChunked> {
     let kind = describe(geometries.dtype())?.kind;
-    let storage = trimmed(geometries.ext()?.storage());
+    let storage = geometries.ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()

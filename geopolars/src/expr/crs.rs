@@ -13,7 +13,6 @@ use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::trimmed;
 use crate::geoarrow::{describe, Geo, Kind};
 use crate::proj::specifies_z;
 
@@ -103,31 +102,26 @@ fn chunk_reprojected(
         }
         Kind::LineString => {
             let mut array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.debug_assert_trimmed();
             array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiPoint => {
             let mut array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.debug_assert_trimmed();
             array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::Polygon => {
             let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            array.debug_assert_trimmed();
             array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiLineString => {
             let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            array.debug_assert_trimmed();
             array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
         Kind::MultiPolygon => {
             let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            array.debug_assert_trimmed();
             array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
             array.into_list_array().boxed()
         }
@@ -141,7 +135,7 @@ fn to_crs(inputs: &[Series], kwargs: ToCrsKwargs) -> PolarsResult<Series> {
     let transformation = transformation(inputs[0].dtype(), &kwargs.to)?;
     let z = reprojects_z(inputs[0].dtype(), &kwargs)?;
 
-    let storage = trimmed(inputs[0].ext()?.storage());
+    let storage = inputs[0].ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()

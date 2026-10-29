@@ -42,12 +42,11 @@ How to handle these is up to the kernel.
 The rules for single coordinates (empty, not finite, outside the bounds) are in `native/coordinate_selection.rs`:
 reuse those rather than writing them again.
 
-### Walking a whole level
+### Untrimmed views
 
-A kernel that walks a whole level (every ring, or every coordinate) rather than the items of its rows
-needs a trimmed chunk (see the [geopolars-core README](../geopolars-core/README.md#trimming)).
-Such a kernel starts with `array.debug_assert_trimmed()`, and its plugin trims the storage with `trimmed`.
-A kernel that only takes the parts of a view (`rings` and `coords`) leaves the assertion to whoever builds the view.
+A kernel can walk any level of a view: every view is trimmed
+(see the [geopolars-core README](../geopolars-core/README.md#trimming)).
+A cheap kernel that only reads the items of its rows may take an `Untrimmed` view instead, to skip the trim.
 
 ### Branching inside a loop
 

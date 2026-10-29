@@ -11,11 +11,3 @@ pub fn kernel_output_type_same_geometry(input_fields: &[Field]) -> PolarsResult<
     describe(field.dtype())?;
     Ok(field.clone())
 }
-
-/// `storage`, holding only the lists and coordinates its rows use.
-/// See the geopolars-core README on trimming.
-pub fn trimmed(storage: &Series) -> Series {
-    storage
-        .trim_lists_to_normalized_offsets()
-        .unwrap_or_else(|| storage.clone())
-}

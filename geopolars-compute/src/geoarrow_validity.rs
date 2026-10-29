@@ -34,7 +34,6 @@ pub fn multi_points_are_valid_geoarrow(
     array: &MultiPointArray,
     selection: &CoordinateSelection,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let rows = &array.rows;
     let passing = rows_passing(
         &[rows.ignoring_validity()],
@@ -50,7 +49,6 @@ pub fn line_strings_are_valid_geoarrow(
     array: &LineStringArray,
     selection: &CoordinateSelection,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let rows = &array.rows;
     let passing = rows_passing(
         &[rows.ignoring_validity()],
@@ -66,7 +64,6 @@ pub fn multi_line_strings_are_valid_geoarrow(
     array: &MultiLineStringArray,
     selection: &CoordinateSelection,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let rows = &array.rows;
     let passing = rows_passing(
         &[rows.ignoring_validity(), &array.lines],
@@ -83,7 +80,6 @@ pub fn polygons_are_valid_geoarrow(
     array: &PolygonArray,
     selection: &CoordinateSelection,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let rows = &array.rows;
     let passing = rows_passing(
         &[rows.ignoring_validity(), &array.rings],
@@ -100,7 +96,6 @@ pub fn multi_polygons_are_valid_geoarrow(
     array: &MultiPolygonArray,
     selection: &CoordinateSelection,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let rows = &array.rows;
     let passing = rows_passing(
         &[rows.ignoring_validity(), &array.polygons, &array.rings],

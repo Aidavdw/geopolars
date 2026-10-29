@@ -12,7 +12,7 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use super::construct::closed_rings;
-use super::coords::{kernel_output_type_same_geometry, trimmed};
+use super::coords::kernel_output_type_same_geometry;
 use crate::geoarrow::{describe, Kind};
 
 /// See python
@@ -37,7 +37,6 @@ fn chunk_with_closed_rings(
         }
         Kind::LineString => {
             let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.debug_assert_trimmed();
             let z = array.coords.dim().has_z();
             let rows = array.rows.ignoring_validity();
             with_const_flags!(
@@ -55,7 +54,6 @@ fn chunk_with_closed_rings(
         }
         Kind::Polygon => {
             let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            array.debug_assert_trimmed();
             closed_rings(&array.rings, &array.coords, *kwargs).map(|(rings, coords)| {
                 (array.rings, array.coords) = (rings, coords);
                 array.into_list_array().boxed()
@@ -63,7 +61,6 @@ fn chunk_with_closed_rings(
         }
         Kind::MultiLineString => {
             let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            array.debug_assert_trimmed();
             closed_rings(&array.lines, &array.coords, *kwargs).map(|(lines, coords)| {
                 (array.lines, array.coords) = (lines, coords);
                 array.into_list_array().boxed()
@@ -71,7 +68,6 @@ fn chunk_with_closed_rings(
         }
         Kind::MultiPolygon => {
             let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            array.debug_assert_trimmed();
             closed_rings(&array.rings, &array.coords, *kwargs).map(|(rings, coords)| {
                 (array.rings, array.coords) = (rings, coords);
                 array.into_list_array().boxed()
@@ -84,7 +80,7 @@ fn chunk_with_closed_rings(
 #[polars_expr(output_type_func=kernel_output_type_same_geometry)]
 fn close_rings(inputs: &[Series], kwargs: CloseRingsKwargs) -> PolarsResult<Series> {
     let kind = describe(inputs[0].dtype())?.kind;
-    let storage = trimmed(inputs[0].ext()?.storage());
+    let storage = inputs[0].ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()

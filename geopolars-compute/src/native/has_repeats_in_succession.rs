@@ -146,7 +146,6 @@ pub fn multi_points_have_repeats_in_succession(
     unique_z: bool,
     unique_m: bool,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity();
     let repeated = repeats_in_succession(rows, &array.coords, tolerance, unique_z, unique_m);
     rows_with_repeats(&array.rows, &[], repeated)
@@ -158,7 +157,6 @@ pub fn line_strings_have_repeats_in_succession(
     unique_z: bool,
     unique_m: bool,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity();
     let repeated = repeats_in_succession(rows, &array.coords, tolerance, unique_z, unique_m);
     rows_with_repeats(&array.rows, &[], repeated)
@@ -170,7 +168,6 @@ pub fn multi_line_strings_have_repeats_in_succession(
     unique_z: bool,
     unique_m: bool,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let repeated =
         repeats_in_succession(&array.lines, &array.coords, tolerance, unique_z, unique_m);
     rows_with_repeats(&array.rows, &[&array.lines], repeated)
@@ -182,7 +179,6 @@ pub fn polygons_have_repeats_in_succession(
     unique_z: bool,
     unique_m: bool,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let repeated =
         repeats_in_succession(&array.rings, &array.coords, tolerance, unique_z, unique_m);
     rows_with_repeats(&array.rows, &[&array.rings], repeated)
@@ -194,7 +190,6 @@ pub fn multi_polygons_have_repeats_in_succession(
     unique_z: bool,
     unique_m: bool,
 ) -> BooleanArray {
-    array.debug_assert_trimmed();
     let repeated =
         repeats_in_succession(&array.rings, &array.coords, tolerance, unique_z, unique_m);
     rows_with_repeats(&array.rows, &[&array.polygons, &array.rings], repeated)

@@ -5,9 +5,8 @@ use std::ops::Range;
 use polars_arrow::array::{ListArray, StructArray};
 use polars_core::prelude::PolarsResult;
 
-use crate::lists::UNTRIMMED;
 use crate::output::{coords_struct, list_array};
-use crate::{Coords, List, ValidCoords};
+use crate::{Coords, List, Untrimmed, ValidCoords};
 
 /// One point: a single coordinate, which may be null.
 pub struct ScalarPoint<'a> {
@@ -68,25 +67,24 @@ pub struct MultiPointArray {
 }
 
 impl MultiPointArray {
+    /// See [`LineStringArray::new`](crate::LineStringArray::new).
     pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
-        Ok(Self {
+        Ok(Self::new_untrimmed(rows)?.trimmed())
+    }
+
+    /// See [`LineStringArray::new_untrimmed`](crate::LineStringArray::new_untrimmed).
+    pub fn new_untrimmed(rows: &ListArray<i64>) -> PolarsResult<Untrimmed<Self>> {
+        Ok(Untrimmed(Self {
             rows: List::new(rows),
             coords: ValidCoords::new(rows.values().as_ref())?,
-        })
+        }))
     }
 
     /// See [`LineStringArray::is_trimmed`](crate::LineStringArray::is_trimmed).
-    pub fn is_trimmed(&self) -> bool {
+    pub(crate) fn is_trimmed(&self) -> bool {
         self.rows
             .ignoring_validity()
             .spans_all_of(self.coords.len())
-    }
-
-    /// See [`LineStringArray::debug_assert_trimmed`](crate::LineStringArray::debug_assert_trimmed).
-    #[track_caller]
-    #[inline]
-    pub fn debug_assert_trimmed(&self) {
-        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
     }
 
     /// See [`LineStringArray::into_list_array`](crate::LineStringArray::into_list_array).

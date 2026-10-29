@@ -15,7 +15,7 @@ use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{kernel_output_type_same_geometry, trimmed};
+use super::coords::kernel_output_type_same_geometry;
 use crate::geoarrow::{describe, Kind};
 
 /// See python
@@ -73,7 +73,7 @@ fn chunk_reversed(
 #[polars_expr(output_type_func=kernel_output_type_same_geometry)]
 fn reverse(inputs: &[Series], kwargs: ReverseKwargs) -> PolarsResult<Series> {
     let kind = describe(inputs[0].dtype())?.kind;
-    let storage = trimmed(inputs[0].ext()?.storage());
+    let storage = inputs[0].ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()

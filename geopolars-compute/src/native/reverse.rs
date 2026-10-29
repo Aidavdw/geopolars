@@ -91,7 +91,6 @@ fn polygons_in_reverse_order(array: &MultiPolygonArray) -> MultiPolygonArray {
 }
 
 pub fn reverse_line_strings(array: &LineStringArray) -> LineStringArray {
-    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity().ranges();
     LineStringArray {
         rows: array.rows.clone(),
@@ -100,7 +99,6 @@ pub fn reverse_line_strings(array: &LineStringArray) -> LineStringArray {
 }
 
 pub fn reverse_multi_points(array: &MultiPointArray) -> MultiPointArray {
-    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity().ranges();
     MultiPointArray {
         rows: array.rows.clone(),
@@ -109,7 +107,6 @@ pub fn reverse_multi_points(array: &MultiPointArray) -> MultiPointArray {
 }
 
 pub fn reverse_polygons<const REVERSE_HOLES: bool>(array: &PolygonArray) -> PolygonArray {
-    array.debug_assert_trimmed();
     let rows = array.rows.ignoring_validity().ranges();
     PolygonArray {
         rows: array.rows.clone(),
@@ -121,7 +118,6 @@ pub fn reverse_polygons<const REVERSE_HOLES: bool>(array: &PolygonArray) -> Poly
 pub fn reverse_multi_line_strings<const NESTED: bool>(
     array: &MultiLineStringArray,
 ) -> MultiLineStringArray {
-    array.debug_assert_trimmed();
     let (rows, lines) = (array.rows.ignoring_validity(), &array.lines);
     if NESTED {
         let spans = rows.ranges().map(|parts| lines.span(parts));
@@ -144,7 +140,6 @@ pub fn reverse_multi_line_strings<const NESTED: bool>(
 pub fn reverse_multi_polygons<const REVERSE_HOLES: bool, const NESTED: bool>(
     array: &MultiPolygonArray,
 ) -> MultiPolygonArray {
-    array.debug_assert_trimmed();
     if NESTED {
         return reverse_multi_polygons::<REVERSE_HOLES, false>(&polygons_in_reverse_order(array));
     }

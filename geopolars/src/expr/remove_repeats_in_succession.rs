@@ -16,7 +16,7 @@ use polars_arrow::array::{Array, ListArray};
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{kernel_output_type_same_geometry, trimmed};
+use super::coords::kernel_output_type_same_geometry;
 use super::has_repeats_in_succession::tolerance;
 use crate::geoarrow::{describe, Kind};
 
@@ -118,7 +118,7 @@ fn remove_repeats_in_succession(
     kwargs: RemoveRepeatsInSuccessionKwargs,
 ) -> PolarsResult<Series> {
     let kind = describe(inputs[0].dtype())?.kind;
-    let storage = trimmed(inputs[0].ext()?.storage());
+    let storage = inputs[0].ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()

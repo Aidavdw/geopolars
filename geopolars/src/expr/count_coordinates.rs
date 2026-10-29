@@ -47,35 +47,36 @@ fn chunk_coordinate_counts(
             )
         }
         Kind::LineString => {
-            let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
+            let array = LineStringArray::new_untrimmed(downcast(chunk, "a list of coordinates")?)?;
             with_const_flags!(
                 INCLUDE_EMPTY = include_empty;
                 line_string_coordinate_counts::<INCLUDE_EMPTY>(&array)
             )
         }
         Kind::MultiPoint => {
-            let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
+            let array = MultiPointArray::new_untrimmed(downcast(chunk, "a list of coordinates")?)?;
             with_const_flags!(
                 INCLUDE_EMPTY = include_empty;
                 multi_point_coordinate_counts::<INCLUDE_EMPTY>(&array)
             )
         }
         Kind::Polygon => {
-            let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            let array = PolygonArray::new_untrimmed(downcast(chunk, "a list of rings")?)?;
             with_const_flags!(
                 INCLUDE_EMPTY = include_empty;
                 polygon_coordinate_counts::<INCLUDE_EMPTY>(&array)
             )
         }
         Kind::MultiLineString => {
-            let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            let array =
+                MultiLineStringArray::new_untrimmed(downcast(chunk, "a list of linestrings")?)?;
             with_const_flags!(
                 INCLUDE_EMPTY = include_empty;
                 multi_line_string_coordinate_counts::<INCLUDE_EMPTY>(&array)
             )
         }
         Kind::MultiPolygon => {
-            let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            let array = MultiPolygonArray::new_untrimmed(downcast(chunk, "a list of polygons")?)?;
             with_const_flags!(
                 INCLUDE_EMPTY = include_empty;
                 multi_polygon_coordinate_counts::<INCLUDE_EMPTY>(&array)

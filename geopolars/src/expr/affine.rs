@@ -15,7 +15,7 @@ use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
-use super::coords::{kernel_output_type_same_geometry, trimmed};
+use super::coords::kernel_output_type_same_geometry;
 use crate::geoarrow::{describe, Kind};
 
 // TODO: (Blocked until z-centroid is implemented): allow rotation around x/y for polygon
@@ -87,7 +87,7 @@ fn chunk_transformed(
 fn affine(inputs: &[Series], kwargs: AffineMatrix) -> PolarsResult<Series> {
     let kind = describe(inputs[0].dtype())?.kind;
     let matrix = native::AffineMatrix::from(&kwargs);
-    let storage = trimmed(inputs[0].ext()?.storage());
+    let storage = inputs[0].ext()?.storage();
     let chunks = storage
         .chunks()
         .iter()
@@ -146,7 +146,7 @@ fn affine_by_points(
     shift: for<'a> fn(&'a PointArray) -> RowShift<'a>,
 ) -> PolarsResult<Series> {
     let kind = describe(inputs[0].dtype())?.kind;
-    let storage = trimmed(inputs[0].ext()?.storage()).rechunk();
+    let storage = inputs[0].ext()?.storage().rechunk();
     let points = inputs[1].ext()?.storage();
     let points = match (storage.len(), points.len()) {
         (n, m) if n == m => points.rechunk(),

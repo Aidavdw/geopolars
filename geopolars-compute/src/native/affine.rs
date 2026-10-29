@@ -138,7 +138,6 @@ pub fn affine_line_strings(
     array: &LineStringArray,
     shift: RowShift,
 ) -> LineStringArray {
-    array.debug_assert_trimmed();
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.rows.range(i)
     });
@@ -150,7 +149,6 @@ pub fn affine_multi_points(
     array: &MultiPointArray,
     shift: RowShift,
 ) -> MultiPointArray {
-    array.debug_assert_trimmed();
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.rows.range(i)
     });
@@ -162,7 +160,6 @@ pub fn affine_polygons(
     array: &PolygonArray,
     shift: RowShift,
 ) -> PolygonArray {
-    array.debug_assert_trimmed();
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.rings.span(array.rows.range(i))
     });
@@ -178,7 +175,6 @@ pub fn affine_multi_line_strings(
     array: &MultiLineStringArray,
     shift: RowShift,
 ) -> MultiLineStringArray {
-    array.debug_assert_trimmed();
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.lines.span(array.rows.range(i))
     });
@@ -194,7 +190,6 @@ pub fn affine_multi_polygons(
     array: &MultiPolygonArray,
     shift: RowShift,
 ) -> MultiPolygonArray {
-    array.debug_assert_trimmed();
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.rings.span(array.polygons.span(array.rows.range(i)))
     });

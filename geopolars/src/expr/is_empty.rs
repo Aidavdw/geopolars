@@ -40,35 +40,36 @@ fn chunk_emptiness(
     Ok(match kind {
         Kind::Point => points_are_empty(&PointArray::new(Coords::new(chunk)?)),
         Kind::LineString => {
-            let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
+            let array = LineStringArray::new_untrimmed(downcast(chunk, "a list of coordinates")?)?;
             with_const_flags!(
                 CHECK_NESTED = check_nested;
                 line_strings_are_empty::<CHECK_NESTED>(&array)
             )
         }
         Kind::MultiPoint => {
-            let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
+            let array = MultiPointArray::new_untrimmed(downcast(chunk, "a list of coordinates")?)?;
             with_const_flags!(
                 CHECK_NESTED = check_nested;
                 multi_points_are_empty::<CHECK_NESTED>(&array)
             )
         }
         Kind::Polygon => {
-            let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            let array = PolygonArray::new_untrimmed(downcast(chunk, "a list of rings")?)?;
             with_const_flags!(
                 CHECK_NESTED = check_nested;
                 polygons_are_empty::<CHECK_NESTED>(&array)
             )
         }
         Kind::MultiLineString => {
-            let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            let array =
+                MultiLineStringArray::new_untrimmed(downcast(chunk, "a list of linestrings")?)?;
             with_const_flags!(
                 CHECK_NESTED = check_nested;
                 multi_line_strings_are_empty::<CHECK_NESTED>(&array)
             )
         }
         Kind::MultiPolygon => {
-            let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            let array = MultiPolygonArray::new_untrimmed(downcast(chunk, "a list of polygons")?)?;
             with_const_flags!(
                 CHECK_NESTED = check_nested;
                 multi_polygons_are_empty::<CHECK_NESTED>(&array)

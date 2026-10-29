@@ -66,14 +66,29 @@ impl ValidList {
     /// Whether these lists hold all `items` of the child array, from the first one on.
     /// See the README on trimming.
     #[inline]
-    pub fn spans_all_of(&self, items: usize) -> bool {
+    pub(crate) fn spans_all_of(&self, items: usize) -> bool {
         *self.offsets.first() == 0 && *self.offsets.last() as usize == items
     }
-}
 
-/// The message when a kernel that walks a whole level gets a chunk that is not trimmed.
-pub(crate) const UNTRIMMED: &str =
-    "this kernel walks a whole level, so its chunk has to be trimmed first (see the README on trimming)";
+    /// Lists `lists` of these, with their offsets rebased to start at zero,
+    /// and where their items sit in the child array.
+    /// Only rebasing copies the offsets, when the first of `lists` does not start at zero.
+    pub(crate) fn sliced(&self, lists: Range<usize>) -> (Self, Range<usize>) {
+        let mut offsets = self.offsets.clone();
+        offsets.slice(lists.start, lists.len() + 1);
+        let (first, last) = (*offsets.first(), *offsets.last());
+        if first != 0 {
+            let rebased: Vec<i64> = offsets
+                .buffer()
+                .iter()
+                .map(|offset| offset - first)
+                .collect();
+            // SAFETY: subtracting the first offset keeps them growing, and starts them at zero.
+            offsets = unsafe { OffsetsBuffer::new_unchecked(rebased.into()) };
+        }
+        (Self { offsets }, first as usize..last as usize)
+    }
+}
 
 /// Lists where individual lists can be null: the outer level of a geometry column.
 /// Otherwise, use [ValidList].
@@ -154,5 +169,13 @@ impl List {
         self.validity
             .as_ref()
             .is_none_or(|validity| validity.unset_bits() == 0)
+    }
+
+    /// See [`ValidList::sliced`].
+    pub(crate) fn sliced(&self, lists: Range<usize>) -> (Self, Range<usize>) {
+        let validity =
+            (self.validity.clone()).map(|validity| validity.sliced(lists.start, lists.len()));
+        let (lists, items) = self.lists.sliced(lists);
+        (Self { validity, lists }, items)
     }
 }

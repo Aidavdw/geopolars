@@ -6,9 +6,8 @@ use std::ops::Range;
 use polars_arrow::array::ListArray;
 use polars_core::prelude::PolarsResult;
 
-use crate::lists::UNTRIMMED;
 use crate::output::{coords_struct, list_array};
-use crate::{downcast, List, ValidCoords, ValidList};
+use crate::{downcast, List, Untrimmed, ValidCoords, ValidList};
 
 /// One linestring: a run of coordinates.
 pub struct ScalarLineString<'a> {
@@ -62,26 +61,25 @@ pub struct LineStringArray {
 }
 
 impl LineStringArray {
+    /// The view of `rows`, trimmed (see the README on trimming).
     pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
-        Ok(Self {
+        Ok(Self::new_untrimmed(rows)?.trimmed())
+    }
+
+    /// [new](Self::new), without trimming (see [Untrimmed]).
+    pub fn new_untrimmed(rows: &ListArray<i64>) -> PolarsResult<Untrimmed<Self>> {
+        Ok(Untrimmed(Self {
             rows: List::new(rows),
             coords: ValidCoords::new(rows.values().as_ref())?,
-        })
+        }))
     }
 
     /// Whether every list and coordinate this holds belongs to one of its rows.
     /// A chunk sliced from a larger array is not: see the README on trimming.
-    pub fn is_trimmed(&self) -> bool {
+    pub(crate) fn is_trimmed(&self) -> bool {
         self.rows
             .ignoring_validity()
             .spans_all_of(self.coords.len())
-    }
-
-    /// For a kernel that walks a whole level: debug-asserts [is_trimmed](Self::is_trimmed).
-    #[track_caller]
-    #[inline]
-    pub fn debug_assert_trimmed(&self) {
-        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
     }
 
     /// The polars storage of the column, taking over its buffers.
@@ -110,26 +108,25 @@ pub struct MultiLineStringArray {
 }
 
 impl MultiLineStringArray {
+    /// See [`LineStringArray::new`].
     pub fn new(rows: &ListArray<i64>) -> PolarsResult<Self> {
+        Ok(Self::new_untrimmed(rows)?.trimmed())
+    }
+
+    /// See [`LineStringArray::new_untrimmed`].
+    pub fn new_untrimmed(rows: &ListArray<i64>) -> PolarsResult<Untrimmed<Self>> {
         let lines: &ListArray<i64> = downcast(rows.values().as_ref(), "a list of linestrings")?;
-        Ok(Self {
+        Ok(Untrimmed(Self {
             rows: List::new(rows),
             lines: ValidList::new(lines),
             coords: ValidCoords::new(lines.values().as_ref())?,
-        })
+        }))
     }
 
     /// See [`LineStringArray::is_trimmed`].
-    pub fn is_trimmed(&self) -> bool {
+    pub(crate) fn is_trimmed(&self) -> bool {
         self.rows.ignoring_validity().spans_all_of(self.lines.len())
             && self.lines.spans_all_of(self.coords.len())
-    }
-
-    /// See [`LineStringArray::debug_assert_trimmed`].
-    #[track_caller]
-    #[inline]
-    pub fn debug_assert_trimmed(&self) {
-        debug_assert!(self.is_trimmed(), "{UNTRIMMED}");
     }
 
     /// See [`LineStringArray::into_list_array`].
