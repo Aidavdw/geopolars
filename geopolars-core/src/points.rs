@@ -61,6 +61,7 @@ pub struct ScalarMultiPoint<'a> {
 
 /// A column of multipoints: rows of coordinates.
 /// The points of a multipoint are never null, only a whole row is.
+#[non_exhaustive]
 pub struct MultiPointArray {
     pub rows: List,
     pub coords: ValidCoords,
@@ -78,6 +79,13 @@ impl MultiPointArray {
             rows: List::new(rows),
             coords: ValidCoords::new(rows.values().as_ref())?,
         }))
+    }
+
+    /// See [`LineStringArray::from_parts`](crate::LineStringArray::from_parts).
+    pub fn from_parts(rows: List, coords: ValidCoords) -> Self {
+        let array = Self { rows, coords };
+        debug_assert!(array.is_trimmed(), "the parts of a view have to be trimmed");
+        array
     }
 
     /// See [`LineStringArray::is_trimmed`](crate::LineStringArray::is_trimmed).

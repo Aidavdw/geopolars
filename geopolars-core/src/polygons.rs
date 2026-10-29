@@ -37,6 +37,7 @@ impl<'a> ScalarPolygon<'a> {
 }
 
 /// A column of polygons: rows of rings of coordinates.
+#[non_exhaustive]
 pub struct PolygonArray {
     pub rows: List,
     pub rings: ValidList,
@@ -57,6 +58,17 @@ impl PolygonArray {
             rings: ValidList::new(rings),
             coords: ValidCoords::new(rings.values().as_ref())?,
         }))
+    }
+
+    /// See [`LineStringArray::from_parts`](crate::LineStringArray::from_parts).
+    pub fn from_parts(rows: List, rings: ValidList, coords: ValidCoords) -> Self {
+        let array = Self {
+            rows,
+            rings,
+            coords,
+        };
+        debug_assert!(array.is_trimmed(), "the parts of a view have to be trimmed");
+        array
     }
 
     /// See [`LineStringArray::is_trimmed`](crate::LineStringArray::is_trimmed).
@@ -106,6 +118,7 @@ impl<'a> ScalarMultiPolygon<'a> {
 }
 
 /// A column of multipolygons: rows of polygons of rings of coordinates.
+#[non_exhaustive]
 pub struct MultiPolygonArray {
     pub rows: List,
     pub polygons: ValidList,
@@ -129,6 +142,23 @@ impl MultiPolygonArray {
             rings: ValidList::new(rings),
             coords: ValidCoords::new(rings.values().as_ref())?,
         }))
+    }
+
+    /// See [`LineStringArray::from_parts`](crate::LineStringArray::from_parts).
+    pub fn from_parts(
+        rows: List,
+        polygons: ValidList,
+        rings: ValidList,
+        coords: ValidCoords,
+    ) -> Self {
+        let array = Self {
+            rows,
+            polygons,
+            rings,
+            coords,
+        };
+        debug_assert!(array.is_trimmed(), "the parts of a view have to be trimmed");
+        array
     }
 
     /// See [`LineStringArray::is_trimmed`](crate::LineStringArray::is_trimmed).

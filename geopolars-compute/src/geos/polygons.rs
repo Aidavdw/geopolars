@@ -209,12 +209,12 @@ fn into_multi_polygon_array_with<const Z: bool, const REVERSED: bool>(
         validity.push(is_valid);
         rows.push(polygons.len());
     }
-    Ok(MultiPolygonArray {
-        rows: List::from_offsets(rows.finish(), validity.finish()),
-        polygons: ValidList::from_offsets(polygons.finish()),
-        rings: ValidList::from_offsets(rings.finish()),
-        coords: coords.finish(),
-    })
+    Ok(MultiPolygonArray::from_parts(
+        List::from_offsets(rows.finish(), validity.finish()),
+        ValidList::from_offsets(polygons.finish()),
+        ValidList::from_offsets(rings.finish()),
+        coords.finish(),
+    ))
 }
 
 /// See [`GeosGeometries::into_polygon_array`].
@@ -241,11 +241,11 @@ fn into_polygon_array_with<const Z: bool, const REVERSED: bool>(
         validity.push(is_valid);
         rows.push(rings.len());
     }
-    Ok(PolygonArray {
-        rows: List::from_offsets(rows.finish(), validity.finish()),
-        rings: ValidList::from_offsets(rings.finish()),
-        coords: coords.finish(),
-    })
+    Ok(PolygonArray::from_parts(
+        List::from_offsets(rows.finish(), validity.finish()),
+        ValidList::from_offsets(rings.finish()),
+        coords.finish(),
+    ))
 }
 
 /// Appends the rings of `polygon`, each ended in `rings`.

@@ -101,29 +101,39 @@ fn chunk_reprojected(
             PointArray::new(coords).into_struct_array().boxed()
         }
         Kind::LineString => {
-            let mut array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
-            array.into_list_array().boxed()
+            let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
+            let coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
+            LineStringArray::from_parts(array.rows, coords)
+                .into_list_array()
+                .boxed()
         }
         Kind::MultiPoint => {
-            let mut array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
-            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
-            array.into_list_array().boxed()
+            let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
+            let coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
+            MultiPointArray::from_parts(array.rows, coords)
+                .into_list_array()
+                .boxed()
         }
         Kind::Polygon => {
-            let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
-            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
-            array.into_list_array().boxed()
+            let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            let coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
+            PolygonArray::from_parts(array.rows, array.rings, coords)
+                .into_list_array()
+                .boxed()
         }
         Kind::MultiLineString => {
-            let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
-            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
-            array.into_list_array().boxed()
+            let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            let coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
+            MultiLineStringArray::from_parts(array.rows, array.lines, coords)
+                .into_list_array()
+                .boxed()
         }
         Kind::MultiPolygon => {
-            let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
-            array.coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
-            array.into_list_array().boxed()
+            let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            let coords = reproject_valid_coords(transformation, &array.coords, z).map_err(err)?;
+            MultiPolygonArray::from_parts(array.rows, array.polygons, array.rings, coords)
+                .into_list_array()
+                .boxed()
         }
     })
 }

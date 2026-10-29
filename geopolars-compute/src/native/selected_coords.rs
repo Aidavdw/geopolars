@@ -239,10 +239,7 @@ pub(super) fn line_strings_without_selected(
         too_short,
     );
     let validity = validity_without(array.rows.validity(), array.rows.len(), &nulled);
-    LineStringArray {
-        rows: List::from_offsets(offsets, validity),
-        coords,
-    }
+    LineStringArray::from_parts(List::from_offsets(offsets, validity), coords)
 }
 
 pub(super) fn multi_points_without_selected(
@@ -257,10 +254,10 @@ pub(super) fn multi_points_without_selected(
         selected,
         too_short,
     );
-    MultiPointArray {
-        rows: List::from_offsets(offsets, array.rows.validity().cloned()),
+    MultiPointArray::from_parts(
+        List::from_offsets(offsets, array.rows.validity().cloned()),
         coords,
-    }
+    )
 }
 
 pub(super) fn polygons_without_selected(
@@ -280,11 +277,11 @@ pub(super) fn polygons_without_selected(
         .into_iter()
         .filter_map(|ring| list_holding(array.rows.ignoring_validity(), ring))
         .collect();
-    PolygonArray {
-        rows: without_rows(&array.rows, &failed),
-        rings: ValidList::from_offsets(rings),
+    PolygonArray::from_parts(
+        without_rows(&array.rows, &failed),
+        ValidList::from_offsets(rings),
         coords,
-    }
+    )
 }
 
 pub(super) fn multi_line_strings_without_selected(
@@ -303,11 +300,11 @@ pub(super) fn multi_line_strings_without_selected(
         .into_iter()
         .filter_map(|line| list_holding(array.rows.ignoring_validity(), line))
         .collect();
-    MultiLineStringArray {
-        rows: without_rows(&array.rows, &failed),
-        lines: ValidList::from_offsets(lines),
+    MultiLineStringArray::from_parts(
+        without_rows(&array.rows, &failed),
+        ValidList::from_offsets(lines),
         coords,
-    }
+    )
 }
 
 pub(super) fn multi_polygons_without_selected(
@@ -328,12 +325,12 @@ pub(super) fn multi_polygons_without_selected(
         .filter_map(|ring| list_holding(&array.polygons, ring))
         .filter_map(|polygon| list_holding(array.rows.ignoring_validity(), polygon))
         .collect();
-    MultiPolygonArray {
-        rows: without_rows(&array.rows, &failed),
-        polygons: array.polygons.clone(),
-        rings: ValidList::from_offsets(rings),
+    MultiPolygonArray::from_parts(
+        without_rows(&array.rows, &failed),
+        array.polygons.clone(),
+        ValidList::from_offsets(rings),
         coords,
-    }
+    )
 }
 
 /// `rows`, null too where a row holds a coordinate `selection` selects.
@@ -377,15 +374,14 @@ pub fn line_strings_with_selected(
 ) -> LineStringArray {
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
-        SelectedAction::SetEmpty => LineStringArray {
-            rows: array.rows.clone(),
-            coords: emptied(&array.coords, &selected()),
-        },
+        SelectedAction::SetEmpty => {
+            LineStringArray::from_parts(array.rows.clone(), emptied(&array.coords, &selected()))
+        }
         SelectedAction::Drop => line_strings_without_selected(array, &selected(), too_short),
-        SelectedAction::SetNull => LineStringArray {
-            rows: rows_nulled_where_selected(&array.rows, &[], &array.coords, selection),
-            coords: array.coords.clone(),
-        },
+        SelectedAction::SetNull => LineStringArray::from_parts(
+            rows_nulled_where_selected(&array.rows, &[], &array.coords, selection),
+            array.coords.clone(),
+        ),
     }
 }
 
@@ -397,15 +393,14 @@ pub fn multi_points_with_selected(
 ) -> MultiPointArray {
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
-        SelectedAction::SetEmpty => MultiPointArray {
-            rows: array.rows.clone(),
-            coords: emptied(&array.coords, &selected()),
-        },
+        SelectedAction::SetEmpty => {
+            MultiPointArray::from_parts(array.rows.clone(), emptied(&array.coords, &selected()))
+        }
         SelectedAction::Drop => multi_points_without_selected(array, &selected(), too_short),
-        SelectedAction::SetNull => MultiPointArray {
-            rows: rows_nulled_where_selected(&array.rows, &[], &array.coords, selection),
-            coords: array.coords.clone(),
-        },
+        SelectedAction::SetNull => MultiPointArray::from_parts(
+            rows_nulled_where_selected(&array.rows, &[], &array.coords, selection),
+            array.coords.clone(),
+        ),
     }
 }
 
@@ -417,22 +412,17 @@ pub fn polygons_with_selected(
 ) -> PolygonArray {
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
-        SelectedAction::SetEmpty => PolygonArray {
-            rows: array.rows.clone(),
-            rings: array.rings.clone(),
-            coords: emptied(&array.coords, &selected()),
-        },
+        SelectedAction::SetEmpty => PolygonArray::from_parts(
+            array.rows.clone(),
+            array.rings.clone(),
+            emptied(&array.coords, &selected()),
+        ),
         SelectedAction::Drop => polygons_without_selected(array, &selected(), too_short, true),
-        SelectedAction::SetNull => PolygonArray {
-            rows: rows_nulled_where_selected(
-                &array.rows,
-                &[&array.rings],
-                &array.coords,
-                selection,
-            ),
-            rings: array.rings.clone(),
-            coords: array.coords.clone(),
-        },
+        SelectedAction::SetNull => PolygonArray::from_parts(
+            rows_nulled_where_selected(&array.rows, &[&array.rings], &array.coords, selection),
+            array.rings.clone(),
+            array.coords.clone(),
+        ),
     }
 }
 
@@ -444,22 +434,17 @@ pub fn multi_line_strings_with_selected(
 ) -> MultiLineStringArray {
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
-        SelectedAction::SetEmpty => MultiLineStringArray {
-            rows: array.rows.clone(),
-            lines: array.lines.clone(),
-            coords: emptied(&array.coords, &selected()),
-        },
+        SelectedAction::SetEmpty => MultiLineStringArray::from_parts(
+            array.rows.clone(),
+            array.lines.clone(),
+            emptied(&array.coords, &selected()),
+        ),
         SelectedAction::Drop => multi_line_strings_without_selected(array, &selected(), too_short),
-        SelectedAction::SetNull => MultiLineStringArray {
-            rows: rows_nulled_where_selected(
-                &array.rows,
-                &[&array.lines],
-                &array.coords,
-                selection,
-            ),
-            lines: array.lines.clone(),
-            coords: array.coords.clone(),
-        },
+        SelectedAction::SetNull => MultiLineStringArray::from_parts(
+            rows_nulled_where_selected(&array.rows, &[&array.lines], &array.coords, selection),
+            array.lines.clone(),
+            array.coords.clone(),
+        ),
     }
 }
 
@@ -471,25 +456,25 @@ pub fn multi_polygons_with_selected(
 ) -> MultiPolygonArray {
     let selected = || selected_coords_bitmap(&array.coords, selection);
     match action {
-        SelectedAction::SetEmpty => MultiPolygonArray {
-            rows: array.rows.clone(),
-            polygons: array.polygons.clone(),
-            rings: array.rings.clone(),
-            coords: emptied(&array.coords, &selected()),
-        },
+        SelectedAction::SetEmpty => MultiPolygonArray::from_parts(
+            array.rows.clone(),
+            array.polygons.clone(),
+            array.rings.clone(),
+            emptied(&array.coords, &selected()),
+        ),
         SelectedAction::Drop => {
             multi_polygons_without_selected(array, &selected(), too_short, true)
         }
-        SelectedAction::SetNull => MultiPolygonArray {
-            rows: rows_nulled_where_selected(
+        SelectedAction::SetNull => MultiPolygonArray::from_parts(
+            rows_nulled_where_selected(
                 &array.rows,
                 &[&array.polygons, &array.rings],
                 &array.coords,
                 selection,
             ),
-            polygons: array.polygons.clone(),
-            rings: array.rings.clone(),
-            coords: array.coords.clone(),
-        },
+            array.polygons.clone(),
+            array.rings.clone(),
+            array.coords.clone(),
+        ),
     }
 }

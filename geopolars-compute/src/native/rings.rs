@@ -95,10 +95,10 @@ fn exteriors(
     // This is much faster than Polars' own `take` on the rings,
     // which copies ring by ring (~1.5 µs per ring).
     let spans = kept.map(|kept| rings.span(kept));
-    LineStringArray {
-        rows: List::from_offsets(offsets_of(spans.clone().map(|span| span.len())), validity),
-        coords: coords.copy_ranges(spans),
-    }
+    LineStringArray::from_parts(
+        List::from_offsets(offsets_of(spans.clone().map(|span| span.len())), validity),
+        coords.copy_ranges(spans),
+    )
 }
 
 /// One multilinestring per item of `kept`,
@@ -113,12 +113,12 @@ fn interiors(
     let ring_lengths = kept
         .clone()
         .flat_map(|kept| kept.map(|ring| rings.range(ring).len()));
-    MultiLineStringArray {
-        rows: List::from_offsets(offsets_of(kept.clone().map(|kept| kept.len())), validity),
-        lines: ValidList::from_offsets(offsets_of(ring_lengths)),
+    MultiLineStringArray::from_parts(
+        List::from_offsets(offsets_of(kept.clone().map(|kept| kept.len())), validity),
+        ValidList::from_offsets(offsets_of(ring_lengths)),
         // Copied as in `exteriors`.
-        coords: coords.copy_ranges(kept.map(|kept| rings.span(kept))),
-    }
+        coords.copy_ranges(kept.map(|kept| rings.span(kept))),
+    )
 }
 
 /// `parts`, one list per row of `rows`.
@@ -253,15 +253,15 @@ pub fn close_open_rings<const Z: bool>(
     let offsets = offsets_of(lengths);
     let len = *offsets.last() as usize;
     let closed = |axis: &[f64], snaps: bool| closed_axis(axis, rings, &closing, snaps, len);
-    Some(LineStringArray {
-        rows: List::from_offsets(offsets, None),
-        coords: ValidCoords::from_axes((
+    Some(LineStringArray::from_parts(
+        List::from_offsets(offsets, None),
+        ValidCoords::from_axes((
             closed(coords.x(), false),
             closed(coords.y(), false),
             coords.z().map(|z| closed(z, snap_z)),
             coords.m().map(|m| closed(m, snap_m)),
         )),
-    })
+    ))
 }
 
 /// The vertices one row of [polygons_from_exteriors_and_holes] takes.
@@ -358,14 +358,14 @@ pub fn polygons_from_exteriors_and_holes(
     let axis = |exterior: &[f64], holes: Option<&[f64]>| {
         assembled_axis(exterior, holes.unwrap_or_default(), &rows, coords_len)
     };
-    PolygonArray {
-        rows: List::from_offsets(offsets_of(ring_counts), validity),
-        rings: ValidList::from_offsets(offsets_of(ring_lengths)),
-        coords: ValidCoords::from_axes((
+    PolygonArray::from_parts(
+        List::from_offsets(offsets_of(ring_counts), validity),
+        ValidList::from_offsets(offsets_of(ring_lengths)),
+        ValidCoords::from_axes((
             axis(exterior.x(), hole.map(ValidCoords::x)),
             axis(exterior.y(), hole.map(ValidCoords::y)),
             exterior.z().map(|z| axis(z, hole.and_then(ValidCoords::z))),
             exterior.m().map(|m| axis(m, hole.and_then(ValidCoords::m))),
         )),
-    }
+    )
 }

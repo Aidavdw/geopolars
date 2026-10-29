@@ -44,33 +44,36 @@ fn chunk_with_closed_rings(
                 close_open_rings::<Z>(rows, &array.coords, snap_z, snap_m)
             )
             .map(|closed| {
-                LineStringArray {
-                    rows: closed.rows.with_validity(array.rows.validity().cloned()),
-                    coords: closed.coords,
-                }
+                LineStringArray::from_parts(
+                    closed.rows.with_validity(array.rows.validity().cloned()),
+                    closed.coords,
+                )
                 .into_list_array()
                 .boxed()
             })
         }
         Kind::Polygon => {
-            let mut array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
             closed_rings(&array.rings, &array.coords, *kwargs).map(|(rings, coords)| {
-                (array.rings, array.coords) = (rings, coords);
-                array.into_list_array().boxed()
+                PolygonArray::from_parts(array.rows, rings, coords)
+                    .into_list_array()
+                    .boxed()
             })
         }
         Kind::MultiLineString => {
-            let mut array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
             closed_rings(&array.lines, &array.coords, *kwargs).map(|(lines, coords)| {
-                (array.lines, array.coords) = (lines, coords);
-                array.into_list_array().boxed()
+                MultiLineStringArray::from_parts(array.rows, lines, coords)
+                    .into_list_array()
+                    .boxed()
             })
         }
         Kind::MultiPolygon => {
-            let mut array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
             closed_rings(&array.rings, &array.coords, *kwargs).map(|(rings, coords)| {
-                (array.rings, array.coords) = (rings, coords);
-                array.into_list_array().boxed()
+                MultiPolygonArray::from_parts(array.rows, array.polygons, rings, coords)
+                    .into_list_array()
+                    .boxed()
             })
         }
     })

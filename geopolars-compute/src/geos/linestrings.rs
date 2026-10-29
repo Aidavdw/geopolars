@@ -132,10 +132,10 @@ impl GeosGeometries {
             validity.push(is_valid);
             rows.push(coords.len());
         }
-        Ok(LineStringArray {
-            rows: List::from_offsets(rows.finish(), validity.finish()),
-            coords: coords.finish(),
-        })
+        Ok(LineStringArray::from_parts(
+            List::from_offsets(rows.finish(), validity.finish()),
+            coords.finish(),
+        ))
     }
 
     /// See [`GeosGeometries::into_line_string_array`].
@@ -174,10 +174,10 @@ impl GeosGeometries {
             validity.push(is_valid);
             rows.push(lines.len());
         }
-        Ok(MultiLineStringArray {
-            rows: List::from_offsets(rows.finish(), validity.finish()),
-            lines: ValidList::from_offsets(lines.finish()),
-            coords: coords.finish(),
-        })
+        Ok(MultiLineStringArray::from_parts(
+            List::from_offsets(rows.finish(), validity.finish()),
+            ValidList::from_offsets(lines.finish()),
+            coords.finish(),
+        ))
     }
 }

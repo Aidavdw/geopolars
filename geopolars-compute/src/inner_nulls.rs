@@ -52,40 +52,32 @@ pub fn propagate_inner_nulls_of_points(storage: UncheckedStorage) -> PointArray 
 
 pub fn propagate_inner_nulls_of_multi_points(storage: UncheckedStorage) -> MultiPointArray {
     let ([rows], coords) = propagate_inner_nulls_of_lists(storage);
-    MultiPointArray { rows, coords }
+    MultiPointArray::from_parts(rows, coords)
 }
 
 pub fn propagate_inner_nulls_of_line_strings(storage: UncheckedStorage) -> LineStringArray {
     let ([rows], coords) = propagate_inner_nulls_of_lists(storage);
-    LineStringArray { rows, coords }
+    LineStringArray::from_parts(rows, coords)
 }
 
 pub fn propagate_inner_nulls_of_multi_line_strings(
     storage: UncheckedStorage,
 ) -> MultiLineStringArray {
     let ([rows, lines], coords) = propagate_inner_nulls_of_lists(storage);
-    MultiLineStringArray {
-        rows,
-        lines: lines.ignoring_validity().clone(),
-        coords,
-    }
+    MultiLineStringArray::from_parts(rows, lines.ignoring_validity().clone(), coords)
 }
 
 pub fn propagate_inner_nulls_of_polygons(storage: UncheckedStorage) -> PolygonArray {
     let ([rows, rings], coords) = propagate_inner_nulls_of_lists(storage);
-    PolygonArray {
-        rows,
-        rings: rings.ignoring_validity().clone(),
-        coords,
-    }
+    PolygonArray::from_parts(rows, rings.ignoring_validity().clone(), coords)
 }
 
 pub fn propagate_inner_nulls_of_multi_polygons(storage: UncheckedStorage) -> MultiPolygonArray {
     let ([rows, polygons, rings], coords) = propagate_inner_nulls_of_lists(storage);
-    MultiPolygonArray {
+    MultiPolygonArray::from_parts(
         rows,
-        polygons: polygons.ignoring_validity().clone(),
-        rings: rings.ignoring_validity().clone(),
+        polygons.ignoring_validity().clone(),
+        rings.ignoring_validity().clone(),
         coords,
-    }
+    )
 }

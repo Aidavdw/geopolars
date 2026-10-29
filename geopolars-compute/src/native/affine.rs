@@ -141,7 +141,7 @@ pub fn affine_line_strings(
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.rows.range(i)
     });
-    LineStringArray { rows, coords }
+    LineStringArray::from_parts(rows, coords)
 }
 
 pub fn affine_multi_points(
@@ -152,7 +152,7 @@ pub fn affine_multi_points(
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.rows.range(i)
     });
-    MultiPointArray { rows, coords }
+    MultiPointArray::from_parts(rows, coords)
 }
 
 pub fn affine_polygons(
@@ -163,11 +163,7 @@ pub fn affine_polygons(
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.rings.span(array.rows.range(i))
     });
-    PolygonArray {
-        rows,
-        rings: array.rings.clone(),
-        coords,
-    }
+    PolygonArray::from_parts(rows, array.rings.clone(), coords)
 }
 
 pub fn affine_multi_line_strings(
@@ -178,11 +174,7 @@ pub fn affine_multi_line_strings(
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.lines.span(array.rows.range(i))
     });
-    MultiLineStringArray {
-        rows,
-        lines: array.lines.clone(),
-        coords,
-    }
+    MultiLineStringArray::from_parts(rows, array.lines.clone(), coords)
 }
 
 pub fn affine_multi_polygons(
@@ -193,12 +185,7 @@ pub fn affine_multi_polygons(
     let (rows, coords) = affine_nested(matrix, &array.rows, &array.coords, &shift, |i| {
         array.rings.span(array.polygons.span(array.rows.range(i)))
     });
-    MultiPolygonArray {
-        rows,
-        polygons: array.polygons.clone(),
-        rings: array.rings.clone(),
-        coords,
-    }
+    MultiPolygonArray::from_parts(rows, array.polygons.clone(), array.rings.clone(), coords)
 }
 
 /// The new `rows` and `coords` of a nested kind, whose row `i` is coordinates `row_coords(i)`.
@@ -433,10 +420,10 @@ mod tests {
             }))
             .collect();
         let axes = (x.to_vec(), y.to_vec(), Some(z.to_vec()), None);
-        LineStringArray {
-            rows: List::from_offsets(OffsetsBuffer::try_from(offsets).unwrap(), None),
-            coords: ValidCoords::from_axes(axes),
-        }
+        LineStringArray::from_parts(
+            List::from_offsets(OffsetsBuffer::try_from(offsets).unwrap(), None),
+            ValidCoords::from_axes(axes),
+        )
     }
 
     #[test]

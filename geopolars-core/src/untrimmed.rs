@@ -5,13 +5,6 @@ use crate::{
     LineStringArray, MultiLineStringArray, MultiPointArray, MultiPolygonArray, PolygonArray,
 };
 
-// FIXME: the fields of the views are `pub`.
-// So a struct literal outside this crate can build a plain view from untrimmed parts
-// (e.g. those of `rows_only()`), which then claims to be trimmed.
-// Close this with `#[non_exhaustive]` on the views,
-// and a `from_parts` constructor that debug-asserts `is_trimmed`.
-// The few field assignments outside this crate should go through it too.
-
 /// A view that may hold lists and coordinates outside its rows (see the README on trimming).
 /// A kernel reaches the levels below the rows only through the offsets of the rows.
 pub struct Untrimmed<T>(pub(crate) T);

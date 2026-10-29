@@ -56,6 +56,7 @@ This shares the buffers, but copies the offsets of a level when they do not star
 `UncheckedStorage::new` trims as well.
 A `PointArray` needs no trimming, as slicing a struct array slices its fields.
 A view a kernel builds has to be trimmed too: build its levels fresh, or reuse those of a trimmed view.
+Build it with `from_parts`, which checks this in debug builds.
 Then a kernel can walk any level of a view it is given, unless that view is `Untrimmed`.
 
 A kernel that only reads the items of its rows does not need this.

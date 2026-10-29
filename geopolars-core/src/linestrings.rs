@@ -55,6 +55,7 @@ impl<'a> ScalarMultiLineString<'a> {
 }
 
 /// A column of linestrings: rows of coordinates.
+#[non_exhaustive]
 pub struct LineStringArray {
     pub rows: List,
     pub coords: ValidCoords,
@@ -72,6 +73,13 @@ impl LineStringArray {
             rows: List::new(rows),
             coords: ValidCoords::new(rows.values().as_ref())?,
         }))
+    }
+
+    /// The view of these parts, which have to be trimmed (see the README on trimming).
+    pub fn from_parts(rows: List, coords: ValidCoords) -> Self {
+        let array = Self { rows, coords };
+        debug_assert!(array.is_trimmed(), "the parts of a view have to be trimmed");
+        array
     }
 
     /// Whether every list and coordinate this holds belongs to one of its rows.
@@ -101,6 +109,7 @@ impl LineStringArray {
 }
 
 /// A column of multilinestrings: rows of linestrings of coordinates.
+#[non_exhaustive]
 pub struct MultiLineStringArray {
     pub rows: List,
     pub lines: ValidList,
@@ -121,6 +130,17 @@ impl MultiLineStringArray {
             lines: ValidList::new(lines),
             coords: ValidCoords::new(lines.values().as_ref())?,
         }))
+    }
+
+    /// See [`LineStringArray::from_parts`].
+    pub fn from_parts(rows: List, lines: ValidList, coords: ValidCoords) -> Self {
+        let array = Self {
+            rows,
+            lines,
+            coords,
+        };
+        debug_assert!(array.is_trimmed(), "the parts of a view have to be trimmed");
+        array
     }
 
     /// See [`LineStringArray::is_trimmed`].

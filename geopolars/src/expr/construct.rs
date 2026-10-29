@@ -21,8 +21,8 @@ use geopolars_compute::native::{
 };
 use geopolars_compute::with_const_flags;
 use geopolars_core::{
-    LineStringArray, List, MultiLineStringArray, PolygonArray, UncheckedStorage, ValidCoords,
-    ValidList,
+    LineStringArray, List, MultiLineStringArray, MultiPolygonArray, PolygonArray, UncheckedStorage,
+    ValidCoords, ValidList,
 };
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::compute::utils::combine_validities_and;
@@ -185,15 +185,20 @@ fn validated_polygons(mut array: PolygonArray, close: Option<CloseRingsKwargs>) 
     if let Some((rings, coords)) =
         close.and_then(|closing| closed_rings(&array.rings, &array.coords, closing))
     {
-        (array.rings, array.coords) = (rings, coords);
+        array = PolygonArray::from_parts(array.rows, rings, coords);
     }
     // A null row is `false` in the values too.
     let z = array.coords.dim().has_z();
     let valid = with_const_flags!(Z = z; polygons_have_only_rings::<Z>(&array))
         .values()
         .clone();
-    array.rows = array.rows.with_validity(Some(valid));
-    array.into_list_array().boxed()
+    PolygonArray::from_parts(
+        array.rows.with_validity(Some(valid)),
+        array.rings,
+        array.coords,
+    )
+    .into_list_array()
+    .boxed()
 }
 
 /// One chunk of the storage of a `kind`, with every null value below a row moved out to it.
@@ -222,15 +227,21 @@ fn validated_chunk(
             if let Some((rings, coords)) =
                 close.and_then(|closing| closed_rings(&array.rings, &array.coords, closing))
             {
-                (array.rings, array.coords) = (rings, coords);
+                array = MultiPolygonArray::from_parts(array.rows, array.polygons, rings, coords);
             }
             // A null row is `false` in the values too.
             let z = array.coords.dim().has_z();
             let valid = with_const_flags!(Z = z; multi_polygons_have_only_rings::<Z>(&array))
                 .values()
                 .clone();
-            array.rows = array.rows.with_validity(Some(valid));
-            array.into_list_array().boxed()
+            MultiPolygonArray::from_parts(
+                array.rows.with_validity(Some(valid)),
+                array.polygons,
+                array.rings,
+                array.coords,
+            )
+            .into_list_array()
+            .boxed()
         }
     })
 }
@@ -659,11 +670,11 @@ fn storage_of(series: &Series) -> PolarsResult<Series> {
 fn one_hole_per_row(holes: LineStringArray) -> MultiLineStringArray {
     let lengths = std::iter::repeat_n(1, holes.rows.len());
     let offsets = Offsets::try_from_lengths(lengths).expect("one per row");
-    MultiLineStringArray {
-        rows: List::from_offsets(offsets.into(), holes.rows.validity().cloned()),
-        lines: holes.rows.ignoring_validity().clone(),
-        coords: holes.coords,
-    }
+    MultiLineStringArray::from_parts(
+        List::from_offsets(offsets.into(), holes.rows.validity().cloned()),
+        holes.rows.ignoring_validity().clone(),
+        holes.coords,
+    )
 }
 
 /// Which polygons are there: null where the exterior is,

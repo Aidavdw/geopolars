@@ -136,38 +136,38 @@ fn rings_to_flip<const HOLES_CW: bool>(
 pub fn line_strings_to_ccw(array: &LineStringArray) -> LineStringArray {
     let rows = array.rows.ignoring_validity().ranges();
     let flipped = lines_to_flip(rows, &array.coords);
-    LineStringArray {
-        rows: array.rows.clone(),
-        coords: array.coords.with_ranges_reversed(flipped.into_iter()),
-    }
+    LineStringArray::from_parts(
+        array.rows.clone(),
+        array.coords.with_ranges_reversed(flipped.into_iter()),
+    )
 }
 
 pub fn polygons_to_ccw<const HOLES_CW: bool>(array: &PolygonArray) -> PolygonArray {
     let rows = array.rows.ignoring_validity().ranges();
     let flipped = rings_to_flip::<HOLES_CW>(rows, &array.rings, &array.coords);
-    PolygonArray {
-        rows: array.rows.clone(),
-        rings: array.rings.clone(),
-        coords: array.coords.with_ranges_reversed(flipped.into_iter()),
-    }
+    PolygonArray::from_parts(
+        array.rows.clone(),
+        array.rings.clone(),
+        array.coords.with_ranges_reversed(flipped.into_iter()),
+    )
 }
 
 pub fn multi_line_strings_to_ccw(array: &MultiLineStringArray) -> MultiLineStringArray {
     let flipped = lines_to_flip(array.lines.ranges(), &array.coords);
-    MultiLineStringArray {
-        rows: array.rows.clone(),
-        lines: array.lines.clone(),
-        coords: array.coords.with_ranges_reversed(flipped.into_iter()),
-    }
+    MultiLineStringArray::from_parts(
+        array.rows.clone(),
+        array.lines.clone(),
+        array.coords.with_ranges_reversed(flipped.into_iter()),
+    )
 }
 
 pub fn multi_polygons_to_ccw<const HOLES_CW: bool>(array: &MultiPolygonArray) -> MultiPolygonArray {
     let polygons = array.polygons.ranges();
     let flipped = rings_to_flip::<HOLES_CW>(polygons, &array.rings, &array.coords);
-    MultiPolygonArray {
-        rows: array.rows.clone(),
-        polygons: array.polygons.clone(),
-        rings: array.rings.clone(),
-        coords: array.coords.with_ranges_reversed(flipped.into_iter()),
-    }
+    MultiPolygonArray::from_parts(
+        array.rows.clone(),
+        array.polygons.clone(),
+        array.rings.clone(),
+        array.coords.with_ranges_reversed(flipped.into_iter()),
+    )
 }
