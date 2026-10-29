@@ -125,7 +125,8 @@ def test_a_sliced_chunk_gives_what_its_rows_alone_give(
         _geometry(dtype, 0.0, with_nan=True),
         _geometry(dtype, 1.0),
     ]
-    padding = [_geometry(dtype, -5.0 - i) for i in range(3)]
+    # A NaN in the padding changes what a kernel gives when it reaches outside the rows.
+    padding = [_geometry(dtype, -5.0 - i, with_nan=True) for i in range(3)]
     whole = _frame(dtype, padding + rows + padding)
     sliced = whole.slice(len(padding), len(rows))
 

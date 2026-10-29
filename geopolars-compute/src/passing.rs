@@ -20,7 +20,7 @@ fn unless_all_set(passing: Option<Bitmap>) -> Option<Bitmap> {
     passing.filter(|passing| passing.unset_bits() > 0)
 }
 
-/// [lists_passing] takes the sparse way when fewer than 1 in `SPARSE_RATIO` lists can fail.
+/// [lists_passing] takes the sparse way when there is fewer than 1 unset item per `SPARSE_RATIO` lists.
 /// The sparse way costs a short search per unset item, the dense way a count per list.
 const SPARSE_RATIO: usize = 8;
 
@@ -38,7 +38,12 @@ fn ends_before(ends: &[i64], item: usize) -> usize {
 }
 
 /// Which of `lists` hold only items set in `items`.
+/// `lists` have to span all of `items` (be trimmed): the sparse way finds an item's list by the offsets.
 fn lists_passing(lists: &ValidList, items: &Bitmap) -> Bitmap {
+    debug_assert!(
+        lists.spans_all_of(items.len()),
+        "the lists have to be trimmed (see the geopolars-core README on trimming)"
+    );
     if items.unset_bits() * SPARSE_RATIO < lists.len() {
         lists_passing_sparse(lists, items)
     } else {

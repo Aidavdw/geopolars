@@ -12,13 +12,11 @@ use crate::{
 // and a `from_parts` constructor that debug-asserts `is_trimmed`.
 // The few field assignments outside this crate should go through it too.
 
-/// A view that may hold lists and coordinates outside its rows:
-/// a chunk sliced from a larger one, before trimming.
-/// Only for kernels that go row by row, so they can skip the cost of trimming.
+/// A view that may hold lists and coordinates outside its rows (see the README on trimming).
+/// A kernel reaches the levels below the rows only through the offsets of the rows.
 pub struct Untrimmed<T>(pub(crate) T);
 
 impl<T> Untrimmed<T> {
-    /// The view, to be read row by row only.
     #[inline]
     pub fn rows_only(&self) -> &T {
         &self.0

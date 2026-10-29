@@ -300,7 +300,6 @@ fn column_extent<const Z: bool, const M: bool, const IGNORE_NULLS: bool>(
 ) -> Option<Extent<Z, M>> {
     let mut extent = Extent::EMPTY;
     if rows.is_all_valid() {
-        // Only this chunk's rows: it can be a slice of a larger array.
         extent.add_range(coords, vertices_of(0..rows.len()));
     } else if IGNORE_NULLS {
         for i in (0..rows.len()).filter(|&i| rows.is_valid(i)) {

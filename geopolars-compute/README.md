@@ -44,9 +44,9 @@ reuse those rather than writing them again.
 
 ### Untrimmed views
 
-A kernel can walk any level of a view: every view is trimmed
-(see the [geopolars-core README](../geopolars-core/README.md#trimming)).
-A cheap kernel that only reads the items of its rows may take an `Untrimmed` view instead, to skip the trim.
+Views from `new` are trimmed, and a view a kernel builds has to be too.
+A cheap kernel may take an `Untrimmed` view instead.
+See the [geopolars-core README](../geopolars-core/README.md#trimming).
 
 ### Branching inside a loop
 

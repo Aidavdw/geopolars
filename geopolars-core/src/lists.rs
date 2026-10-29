@@ -66,13 +66,13 @@ impl ValidList {
     /// Whether these lists hold all `items` of the child array, from the first one on.
     /// See the README on trimming.
     #[inline]
-    pub(crate) fn spans_all_of(&self, items: usize) -> bool {
+    pub fn spans_all_of(&self, items: usize) -> bool {
         *self.offsets.first() == 0 && *self.offsets.last() as usize == items
     }
 
-    /// Lists `lists` of these, with their offsets rebased to start at zero,
-    /// and where their items sit in the child array.
-    /// Only rebasing copies the offsets, when the first of `lists` does not start at zero.
+    /// The lists in range `lists`, with their offsets rebased to start at zero.
+    /// Also returns the range their items take up in the child array.
+    /// This copies the offsets only when the first one is not zero.
     pub(crate) fn sliced(&self, lists: Range<usize>) -> (Self, Range<usize>) {
         let mut offsets = self.offsets.clone();
         offsets.slice(lists.start, lists.len() + 1);

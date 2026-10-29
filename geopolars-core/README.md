@@ -53,10 +53,12 @@ A kernel that walks a whole level would also process everything outside the chun
 
 So `new` trims: it slices every level of the view to what its rows use.
 This shares the buffers, but copies the offsets of a level when they do not start at zero.
-Every view a kernel builds is trimmed too, so a kernel can walk any level of any view.
-A `PointArray` is never sliced this way, as slicing a struct array slices its fields.
 `UncheckedStorage::new` trims as well.
+A `PointArray` needs no trimming, as slicing a struct array slices its fields.
+A view a kernel builds has to be trimmed too: build its levels fresh, or reuse those of a trimmed view.
+Then a kernel can walk any level of a view it is given, unless that view is `Untrimmed`.
 
 A kernel that only reads the items of its rows does not need this.
 To skip the cost of trimming, it can take an `Untrimmed` view instead, built with `new_untrimmed`.
+It reaches the levels below the rows only through the offsets of the rows.
 Only do this where the trim is a noticeable part of the kernel's cost.

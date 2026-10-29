@@ -87,8 +87,8 @@ enum Lists {
 
 /// Pushes the runs of `vertices` without a vertex from `selected` onto `runs`,
 /// and returns how many vertices they hold.
-/// `selected` gives the selected vertices in order.
-/// The lists of a view cover its coordinates in order, so they can share it, in order.
+/// `selected` yields the selected vertices in order, and this takes those before `vertices.end`.
+/// So it must be called on every list of a trimmed level in turn, with the same `selected`.
 #[inline(always)]
 fn push_kept_runs(
     selected: &mut Peekable<TrueIdxIter<'_>>,
@@ -110,12 +110,13 @@ fn push_kept_runs(
 }
 
 /// The most coordinates [merged_where_contiguous] merges runs up to.
-/// Copying more than about 4 KB at once, glibc's `memcpy` switches to `rep movsb`.
-/// That is slow here, as a dropped vertex shifts the copy against its source.
+/// `copy_ranges` copies a run one axis at a time, so this is 2 KB per copy.
+/// From about 4 KB on (depending on the CPU), glibc's `memcpy` switches to `rep movsb`.
+/// That is slow here: after a dropped vertex, the copy's destination is no longer aligned like its source.
 const MAX_MERGED_RUN: usize = 256;
 
-/// `runs`, with each that starts where the one before ends merged into it,
-/// up to [MAX_MERGED_RUN] coordinates.
+/// `runs`, with neighbouring runs merged: one that starts where the previous one ends is joined to it.
+/// A merged run holds at most [MAX_MERGED_RUN] coordinates; a longer run stays as it is.
 /// Most lists are kept whole, so this turns their runs into far fewer copies.
 fn merged_where_contiguous(
     runs: impl Iterator<Item = Range<usize>> + Clone,
@@ -165,6 +166,10 @@ fn without_selected<const CHECK_CLOSED: bool, const Z: bool>(
     selected: &Bitmap,
     too_short: TooShort,
 ) -> (OffsetsBuffer<i64>, ValidCoords, Vec<usize>) {
+    debug_assert!(
+        lists.spans_all_of(coords.len()),
+        "the lists have to be trimmed (see the geopolars-core README on trimming)"
+    );
     let (mut runs, mut nulled) = (Vec::new(), Vec::new());
     let mut selected = selected.true_idx_iter().peekable();
     let lengths: Vec<usize> = lists
