@@ -26,6 +26,7 @@
 //! See [same_place] for `Z`.
 //! Only the kernels of rings with `CHECK_CLOSED=true` dispatch on it.
 
+use std::iter::Peekable;
 use std::ops::Range;
 
 use geopolars_core::output::validity_without;
@@ -33,6 +34,7 @@ use geopolars_core::{
     same_place, Coords, LineStringArray, List, MultiLineStringArray, MultiPointArray,
     MultiPolygonArray, PointArray, PolygonArray, ValidCoords, ValidList, MIN_RING_VERTICES,
 };
+use polars_arrow::bitmap::iterator::TrueIdxIter;
 use polars_arrow::bitmap::Bitmap;
 use polars_arrow::compute::utils::combine_validities_and;
 use polars_arrow::offset::OffsetsBuffer;
@@ -83,36 +85,51 @@ enum Lists {
     Rings,
 }
 
-/// Pushes the runs of `vertices` that are not `selected` onto `runs`,
+/// Pushes the runs of `vertices` without a vertex from `selected` onto `runs`,
 /// and returns how many vertices they hold.
+/// `selected` gives the selected vertices in order.
+/// The lists of a view cover its coordinates in order, so they can share it, in order.
 #[inline(always)]
 fn push_kept_runs(
-    selected: &Bitmap,
+    selected: &mut Peekable<TrueIdxIter<'_>>,
     vertices: Range<usize>,
     runs: &mut Vec<Range<usize>>,
 ) -> usize {
-    // Selected vertices are rare, so most lists are kept whole.
-    if selected.null_count_range(vertices.start, vertices.len()) == vertices.len() {
-        if !vertices.is_empty() {
-            runs.push(vertices.clone());
+    let (mut kept, mut run_start) = (vertices.len(), vertices.start);
+    while let Some(i) = selected.next_if(|&i| i < vertices.end) {
+        if run_start < i {
+            runs.push(run_start..i);
         }
-        return vertices.len();
-    }
-    let (mut kept, mut run_start) = (0, vertices.start);
-    for i in vertices.clone() {
-        if selected.get_bit(i) {
-            if run_start < i {
-                runs.push(run_start..i);
-            }
-            run_start = i + 1;
-        } else {
-            kept += 1;
-        }
+        run_start = i + 1;
+        kept -= 1;
     }
     if run_start < vertices.end {
         runs.push(run_start..vertices.end);
     }
     kept
+}
+
+/// The most coordinates [merged_where_contiguous] merges runs up to.
+/// Copying more than about 4 KB at once, glibc's `memcpy` switches to `rep movsb`.
+/// That is slow here, as a dropped vertex shifts the copy against its source.
+const MAX_MERGED_RUN: usize = 256;
+
+/// `runs`, with each that starts where the one before ends merged into it,
+/// up to [MAX_MERGED_RUN] coordinates.
+/// Most lists are kept whole, so this turns their runs into far fewer copies.
+fn merged_where_contiguous(
+    runs: impl Iterator<Item = Range<usize>> + Clone,
+) -> impl Iterator<Item = Range<usize>> + Clone {
+    let mut runs = runs.peekable();
+    std::iter::from_fn(move || {
+        let mut merged = runs.next()?;
+        while let Some(next) = runs
+            .next_if(|next| next.start == merged.end && next.end - merged.start <= MAX_MERGED_RUN)
+        {
+            merged.end = next.end;
+        }
+        Some(merged)
+    })
 }
 
 /// Whether the `kept` vertices in `runs` are too short for `lists`:
@@ -149,12 +166,13 @@ fn without_selected<const CHECK_CLOSED: bool, const Z: bool>(
     too_short: TooShort,
 ) -> (OffsetsBuffer<i64>, ValidCoords, Vec<usize>) {
     let (mut runs, mut nulled) = (Vec::new(), Vec::new());
+    let mut selected = selected.true_idx_iter().peekable();
     let lengths: Vec<usize> = lists
         .ranges()
         .enumerate()
         .map(|(j, list)| {
             let first_run = runs.len();
-            let kept = push_kept_runs(selected, list, &mut runs);
+            let kept = push_kept_runs(&mut selected, list, &mut runs);
             if !is_too_short::<CHECK_CLOSED, Z>(coords, kind, &runs[first_run..], kept) {
                 return kept;
             }
@@ -172,9 +190,13 @@ fn without_selected<const CHECK_CLOSED: bool, const Z: bool>(
             }
         })
         .collect();
+    // Every list kept every vertex, so the coordinates and offsets are shared rather than copied.
+    if lengths.iter().sum::<usize>() == coords.len() {
+        return (lists.offsets().clone(), coords.clone(), nulled);
+    }
     (
         offsets_of(lengths.into_iter()),
-        coords.copy_ranges(runs.into_iter()),
+        coords.copy_ranges(merged_where_contiguous(runs.iter().cloned())),
         nulled,
     )
 }
