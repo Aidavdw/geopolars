@@ -61,35 +61,31 @@ pub fn point_coordinate_counts<const INCLUDE_EMPTY: bool>(
 pub fn line_string_coordinate_counts<const INCLUDE_EMPTY: bool>(
     array: &Untrimmed<LineStringArray>,
 ) -> PrimitiveArray<u32> {
-    let array = array.rows_only();
-    per_row_count(&array.rows, |i| {
-        count_vertices::<INCLUDE_EMPTY>(&array.coords, array.rows.range(i))
+    per_row_count(array.rows(), |i| {
+        count_vertices::<INCLUDE_EMPTY>(array.coords(), array.rows().range(i))
     })
 }
 
 pub fn multi_point_coordinate_counts<const INCLUDE_EMPTY: bool>(
     array: &Untrimmed<MultiPointArray>,
 ) -> PrimitiveArray<u32> {
-    let array = array.rows_only();
-    per_row_count(&array.rows, |i| {
-        count_vertices::<INCLUDE_EMPTY>(&array.coords, array.rows.range(i))
+    per_row_count(array.rows(), |i| {
+        count_vertices::<INCLUDE_EMPTY>(array.coords(), array.rows().range(i))
     })
 }
 
 pub fn multi_line_string_coordinate_counts<const INCLUDE_EMPTY: bool>(
     array: &Untrimmed<MultiLineStringArray>,
 ) -> PrimitiveArray<u32> {
-    let array = array.rows_only();
-    per_row_count(&array.rows, |i| {
-        count_vertices::<INCLUDE_EMPTY>(&array.coords, array.lines.span(array.rows.range(i)))
+    per_row_count(array.rows(), |i| {
+        count_vertices::<INCLUDE_EMPTY>(array.coords(), array.lines().span(array.rows().range(i)))
     })
 }
 
 pub fn polygon_coordinate_counts<const INCLUDE_EMPTY: bool>(
     array: &Untrimmed<PolygonArray>,
 ) -> PrimitiveArray<u32> {
-    let array = array.rows_only();
-    per_row_count(&array.rows, |i| {
+    per_row_count(array.rows(), |i| {
         count_polygon_vertices::<INCLUDE_EMPTY>(&array.get(i))
     })
 }
@@ -97,8 +93,7 @@ pub fn polygon_coordinate_counts<const INCLUDE_EMPTY: bool>(
 pub fn multi_polygon_coordinate_counts<const INCLUDE_EMPTY: bool>(
     array: &Untrimmed<MultiPolygonArray>,
 ) -> PrimitiveArray<u32> {
-    let array = array.rows_only();
-    per_row_count(&array.rows, |i| {
+    per_row_count(array.rows(), |i| {
         array
             .get(i)
             .polygons()

@@ -53,20 +53,17 @@ fn polygon_is_ccw<const HOLES_CW: bool>(polygon: &ScalarPolygon) -> bool {
 }
 
 pub fn line_strings_are_ccw(array: &Untrimmed<LineStringArray>) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| ring_runs::<false>(&array.get(i)))
+    per_row_bool(array.rows(), |i| ring_runs::<false>(&array.get(i)))
 }
 
 pub fn polygons_are_ccw<const HOLES_CW: bool>(array: &Untrimmed<PolygonArray>) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| polygon_is_ccw::<HOLES_CW>(&array.get(i)))
+    per_row_bool(array.rows(), |i| polygon_is_ccw::<HOLES_CW>(&array.get(i)))
 }
 
 /// Whether every linestring of a multilinestring runs counter-clockwise, for every row of a chunk.
 /// No linestrings at all runs either way.
 pub fn multi_line_strings_are_ccw(array: &Untrimmed<MultiLineStringArray>) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| {
+    per_row_bool(array.rows(), |i| {
         array
             .get(i)
             .line_strings()
@@ -79,8 +76,7 @@ pub fn multi_line_strings_are_ccw(array: &Untrimmed<MultiLineStringArray>) -> Bo
 pub fn multi_polygons_are_ccw<const HOLES_CW: bool>(
     array: &Untrimmed<MultiPolygonArray>,
 ) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| {
+    per_row_bool(array.rows(), |i| {
         array
             .get(i)
             .polygons()

@@ -149,16 +149,16 @@ fn line_strings_are_close_with<
     const UNIQUE_M: bool,
     const NANS_EQUAL: bool,
 >(
-    a: &LineStringArray,
-    b: &LineStringArray,
+    a: &Untrimmed<LineStringArray>,
+    b: &Untrimmed<LineStringArray>,
     tolerance: Tolerance,
 ) -> BooleanArray {
-    per_compared_row(&a.rows, &b.rows, |i, j| {
+    per_compared_row(a.rows(), b.rows(), |i, j| {
         coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
-            &a.coords,
-            a.rows.range(i),
-            &b.coords,
-            b.rows.range(j),
+            a.coords(),
+            a.rows().range(i),
+            b.coords(),
+            b.rows().range(j),
             tolerance,
         )
     })
@@ -169,16 +169,16 @@ fn multi_points_are_close_with<
     const UNIQUE_M: bool,
     const NANS_EQUAL: bool,
 >(
-    a: &MultiPointArray,
-    b: &MultiPointArray,
+    a: &Untrimmed<MultiPointArray>,
+    b: &Untrimmed<MultiPointArray>,
     tolerance: Tolerance,
 ) -> BooleanArray {
-    per_compared_row(&a.rows, &b.rows, |i, j| {
+    per_compared_row(a.rows(), b.rows(), |i, j| {
         coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
-            &a.coords,
-            a.rows.range(i),
-            &b.coords,
-            b.rows.range(j),
+            a.coords(),
+            a.rows().range(i),
+            b.coords(),
+            b.rows().range(j),
             tolerance,
         )
     })
@@ -189,36 +189,36 @@ fn multi_line_strings_are_close_with<
     const UNIQUE_M: bool,
     const NANS_EQUAL: bool,
 >(
-    a: &MultiLineStringArray,
-    b: &MultiLineStringArray,
+    a: &Untrimmed<MultiLineStringArray>,
+    b: &Untrimmed<MultiLineStringArray>,
     tolerance: Tolerance,
 ) -> BooleanArray {
-    per_compared_row(&a.rows, &b.rows, |i, j| {
-        let (a_parts, b_parts) = (a.rows.range(i), b.rows.range(j));
-        lists_match(&a.lines, a_parts.clone(), &b.lines, b_parts.clone())
+    per_compared_row(a.rows(), b.rows(), |i, j| {
+        let (a_parts, b_parts) = (a.rows().range(i), b.rows().range(j));
+        lists_match(a.lines(), a_parts.clone(), b.lines(), b_parts.clone())
             && coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
-                &a.coords,
-                a.lines.span(a_parts),
-                &b.coords,
-                b.lines.span(b_parts),
+                a.coords(),
+                a.lines().span(a_parts),
+                b.coords(),
+                b.lines().span(b_parts),
                 tolerance,
             )
     })
 }
 
 fn polygons_are_close_with<const UNIQUE_Z: bool, const UNIQUE_M: bool, const NANS_EQUAL: bool>(
-    a: &PolygonArray,
-    b: &PolygonArray,
+    a: &Untrimmed<PolygonArray>,
+    b: &Untrimmed<PolygonArray>,
     tolerance: Tolerance,
 ) -> BooleanArray {
-    per_compared_row(&a.rows, &b.rows, |i, j| {
-        let (a_rings, b_rings) = (a.rows.range(i), b.rows.range(j));
-        lists_match(&a.rings, a_rings.clone(), &b.rings, b_rings.clone())
+    per_compared_row(a.rows(), b.rows(), |i, j| {
+        let (a_rings, b_rings) = (a.rows().range(i), b.rows().range(j));
+        lists_match(a.rings(), a_rings.clone(), b.rings(), b_rings.clone())
             && coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
-                &a.coords,
-                a.rings.span(a_rings),
-                &b.coords,
-                b.rings.span(b_rings),
+                a.coords(),
+                a.rings().span(a_rings),
+                b.coords(),
+                b.rings().span(b_rings),
                 tolerance,
             )
     })
@@ -229,37 +229,37 @@ fn multi_polygons_are_close_with<
     const UNIQUE_M: bool,
     const NANS_EQUAL: bool,
 >(
-    a: &MultiPolygonArray,
-    b: &MultiPolygonArray,
+    a: &Untrimmed<MultiPolygonArray>,
+    b: &Untrimmed<MultiPolygonArray>,
     tolerance: Tolerance,
 ) -> BooleanArray {
-    per_compared_row(&a.rows, &b.rows, |i, j| {
-        let (a_polygons, b_polygons) = (a.rows.range(i), b.rows.range(j));
+    per_compared_row(a.rows(), b.rows(), |i, j| {
+        let (a_polygons, b_polygons) = (a.rows().range(i), b.rows().range(j));
         if !lists_match(
-            &a.polygons,
+            a.polygons(),
             a_polygons.clone(),
-            &b.polygons,
+            b.polygons(),
             b_polygons.clone(),
         ) {
             return false;
         }
-        let (a_rings, b_rings) = (a.polygons.span(a_polygons), b.polygons.span(b_polygons));
-        lists_match(&a.rings, a_rings.clone(), &b.rings, b_rings.clone())
+        let (a_rings, b_rings) = (a.polygons().span(a_polygons), b.polygons().span(b_polygons));
+        lists_match(a.rings(), a_rings.clone(), b.rings(), b_rings.clone())
             && coordinates_are_close::<UNIQUE_Z, UNIQUE_M, NANS_EQUAL>(
-                &a.coords,
-                a.rings.span(a_rings),
-                &b.coords,
-                b.rings.span(b_rings),
+                a.coords(),
+                a.rings().span(a_rings),
+                b.coords(),
+                b.rings().span(b_rings),
                 tolerance,
             )
     })
 }
 
 /// Dispatches a `*_are_close_with` kernel on `unique_z` and `unique_m`
-/// (each only for an axis `$a` has) and `nans_equal`.
+/// (each only for an axis in `$dim`) and `nans_equal`.
 macro_rules! are_close {
-    ($kernel:ident, $a:expr, $b:expr, $tolerance:expr, $unique_z:expr, $unique_m:expr, $nans_equal:expr) => {{
-        let dim = $a.coords.dim();
+    ($kernel:ident, $dim:expr, $a:expr, $b:expr, $tolerance:expr, $unique_z:expr, $unique_m:expr, $nans_equal:expr) => {{
+        let dim = $dim;
         with_const_flags!(
             UNIQUE_Z = $unique_z && dim.has_z(),
             UNIQUE_M = $unique_m && dim.has_m(),
@@ -279,6 +279,7 @@ pub fn points_are_close(
 ) -> BooleanArray {
     are_close!(
         points_are_close_with,
+        a.coords.dim(),
         a,
         b,
         tolerance,
@@ -296,9 +297,9 @@ pub fn multi_points_are_close(
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
-    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         multi_points_are_close_with,
+        a.coords().dim(),
         a,
         b,
         tolerance,
@@ -316,9 +317,9 @@ pub fn line_strings_are_close(
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
-    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         line_strings_are_close_with,
+        a.coords().dim(),
         a,
         b,
         tolerance,
@@ -337,9 +338,9 @@ pub fn multi_line_strings_are_close(
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
-    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         multi_line_strings_are_close_with,
+        a.coords().dim(),
         a,
         b,
         tolerance,
@@ -358,9 +359,9 @@ pub fn polygons_are_close(
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
-    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         polygons_are_close_with,
+        a.coords().dim(),
         a,
         b,
         tolerance,
@@ -379,9 +380,9 @@ pub fn multi_polygons_are_close(
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
-    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         multi_polygons_are_close_with,
+        a.coords().dim(),
         a,
         b,
         tolerance,

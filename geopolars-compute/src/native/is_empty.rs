@@ -53,45 +53,42 @@ pub fn points_are_empty(array: &PointArray) -> BooleanArray {
 pub fn line_strings_are_empty<const CHECK_NESTED: bool>(
     array: &Untrimmed<LineStringArray>,
 ) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| {
-        has_no_points::<CHECK_NESTED>(&array.coords, array.rows.range(i))
+    per_row_bool(array.rows(), |i| {
+        has_no_points::<CHECK_NESTED>(array.coords(), array.rows().range(i))
     })
 }
 
 pub fn multi_points_are_empty<const CHECK_NESTED: bool>(
     array: &Untrimmed<MultiPointArray>,
 ) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| {
-        has_no_points::<CHECK_NESTED>(&array.coords, array.rows.range(i))
+    per_row_bool(array.rows(), |i| {
+        has_no_points::<CHECK_NESTED>(array.coords(), array.rows().range(i))
     })
 }
 
 pub fn multi_line_strings_are_empty<const CHECK_NESTED: bool>(
     array: &Untrimmed<MultiLineStringArray>,
 ) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| {
-        has_no_points::<CHECK_NESTED>(&array.coords, array.lines.span(array.rows.range(i)))
+    per_row_bool(array.rows(), |i| {
+        has_no_points::<CHECK_NESTED>(array.coords(), array.lines().span(array.rows().range(i)))
     })
 }
 
 pub fn polygons_are_empty<const CHECK_NESTED: bool>(
     array: &Untrimmed<PolygonArray>,
 ) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| {
-        has_no_points::<CHECK_NESTED>(&array.coords, array.rings.span(array.rows.range(i)))
+    per_row_bool(array.rows(), |i| {
+        has_no_points::<CHECK_NESTED>(array.coords(), array.rings().span(array.rows().range(i)))
     })
 }
 
 pub fn multi_polygons_are_empty<const CHECK_NESTED: bool>(
     array: &Untrimmed<MultiPolygonArray>,
 ) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| {
-        let vertices = array.rings.span(array.polygons.span(array.rows.range(i)));
-        has_no_points::<CHECK_NESTED>(&array.coords, vertices)
+    per_row_bool(array.rows(), |i| {
+        let vertices = array
+            .rings()
+            .span(array.polygons().span(array.rows().range(i)));
+        has_no_points::<CHECK_NESTED>(array.coords(), vertices)
     })
 }

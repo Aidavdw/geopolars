@@ -181,15 +181,13 @@ fn centroids<const Z: bool, const M: bool>(
 pub fn line_string_centroids<const Z: bool, const M: bool>(
     array: &Untrimmed<LineStringArray>,
 ) -> PointArray {
-    let array = array.rows_only();
-    centroids::<Z, M>(&array.rows, |moment, i| add_line(moment, &array.get(i)))
+    centroids::<Z, M>(array.rows(), |moment, i| add_line(moment, &array.get(i)))
 }
 
 pub fn multi_line_string_centroids<const Z: bool, const M: bool>(
     array: &Untrimmed<MultiLineStringArray>,
 ) -> PointArray {
-    let array = array.rows_only();
-    centroids::<Z, M>(&array.rows, |moment, i| {
+    centroids::<Z, M>(array.rows(), |moment, i| {
         for line in array.get(i).line_strings() {
             add_line(moment, &line);
         }
@@ -199,15 +197,13 @@ pub fn multi_line_string_centroids<const Z: bool, const M: bool>(
 pub fn polygon_centroids<const Z: bool, const M: bool>(
     array: &Untrimmed<PolygonArray>,
 ) -> PointArray {
-    let array = array.rows_only();
-    centroids::<Z, M>(&array.rows, |moment, i| add_polygon(moment, &array.get(i)))
+    centroids::<Z, M>(array.rows(), |moment, i| add_polygon(moment, &array.get(i)))
 }
 
 pub fn multi_polygon_centroids<const Z: bool, const M: bool>(
     array: &Untrimmed<MultiPolygonArray>,
 ) -> PointArray {
-    let array = array.rows_only();
-    centroids::<Z, M>(&array.rows, |moment, i| {
+    centroids::<Z, M>(array.rows(), |moment, i| {
         for polygon in array.get(i).polygons() {
             add_polygon(moment, &polygon);
         }

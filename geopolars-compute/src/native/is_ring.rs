@@ -17,9 +17,8 @@ use polars_arrow::array::BooleanArray;
 use crate::per_row::per_row_bool;
 
 pub fn line_strings_are_rings<const Z: bool>(array: &Untrimmed<LineStringArray>) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| {
-        is_ring::<Z>(&array.coords, array.rows.range(i))
+    per_row_bool(array.rows(), |i| {
+        is_ring::<Z>(array.coords(), array.rows().range(i))
     })
 }
 
@@ -52,8 +51,7 @@ fn parts_form_ring<const Z: bool>(multi: &ScalarMultiLineString) -> bool {
 pub fn multi_line_strings_are_rings<const Z: bool>(
     array: &Untrimmed<MultiLineStringArray>,
 ) -> BooleanArray {
-    let array = array.rows_only();
-    per_row_bool(&array.rows, |i| parts_form_ring::<Z>(&array.get(i)))
+    per_row_bool(array.rows(), |i| parts_form_ring::<Z>(&array.get(i)))
 }
 
 /// Whether every ring of `polygon` is a ring, or every one is empty (the empty polygon).

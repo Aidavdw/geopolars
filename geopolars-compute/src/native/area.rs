@@ -85,8 +85,7 @@ pub fn polygon_areas<M: AreaMetric>(
     metric: &M,
     array: &Untrimmed<PolygonArray>,
 ) -> Result<PrimitiveArray<f64>, M::Error> {
-    let array = array.rows_only();
-    per_row(&array.rows, |i| polygon_area(metric, &array.get(i)))
+    per_row(array.rows(), |i| polygon_area(metric, &array.get(i)))
 }
 
 /// The area of every multipolygon of a chunk, as the sum of its parts.
@@ -94,8 +93,7 @@ pub fn multi_polygon_areas<M: AreaMetric>(
     metric: &M,
     array: &Untrimmed<MultiPolygonArray>,
 ) -> Result<PrimitiveArray<f64>, M::Error> {
-    let array = array.rows_only();
-    per_row(&array.rows, |i| {
+    per_row(array.rows(), |i| {
         array
             .get(i)
             .polygons()

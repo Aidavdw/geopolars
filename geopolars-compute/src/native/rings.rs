@@ -43,10 +43,10 @@ fn interior_of(rings: Range<usize>) -> Range<usize> {
 /// The rings every row of `array` keeps, none for a null row.
 #[inline(always)]
 fn kept_rings_of_polygons<const ALL_VALID: bool>(
-    array: &PolygonArray,
+    array: &Untrimmed<PolygonArray>,
     keep: Keep,
 ) -> impl Iterator<Item = Range<usize>> + Clone + '_ {
-    let rows = &array.rows;
+    let rows = array.rows();
     // A null row's offsets point anywhere, so it keeps nothing.
     (0..rows.len()).map(move |i| {
         if ALL_VALID || rows.is_valid(i) {
@@ -60,13 +60,13 @@ fn kept_rings_of_polygons<const ALL_VALID: bool>(
 /// The rings every polygon of the rows of `array` keeps.
 #[inline(always)]
 fn kept_rings_of_multi_polygons(
-    array: &MultiPolygonArray,
+    array: &Untrimmed<MultiPolygonArray>,
     keep: Keep,
 ) -> impl Iterator<Item = Range<usize>> + Clone + '_ {
-    let polygons = &array.polygons;
+    let polygons = array.polygons();
     array
-        .rows
-        .span(0..array.rows.len())
+        .rows()
+        .span(0..array.rows().len())
         .map(move |j| keep(polygons.range(j)))
 }
 
@@ -128,13 +128,12 @@ fn per_multi_polygon(rows: &List, parts: ListArray<i64>) -> ListArray<i64> {
 }
 
 pub fn polygon_exteriors(array: &Untrimmed<PolygonArray>) -> LineStringArray {
-    let array = array.rows_only();
-    let validity = array.rows.validity().cloned();
+    let validity = array.rows().validity().cloned();
     with_const_flags!(
-        ALL_VALID = array.rows.is_all_valid();
+        ALL_VALID = array.rows().is_all_valid();
         exteriors(
-            &array.rings,
-            &array.coords,
+            array.rings(),
+            array.coords(),
             kept_rings_of_polygons::<ALL_VALID>(array, exterior_of),
             validity,
         )
@@ -142,13 +141,12 @@ pub fn polygon_exteriors(array: &Untrimmed<PolygonArray>) -> LineStringArray {
 }
 
 pub fn polygon_interiors(array: &Untrimmed<PolygonArray>) -> MultiLineStringArray {
-    let array = array.rows_only();
-    let validity = array.rows.validity().cloned();
+    let validity = array.rows().validity().cloned();
     with_const_flags!(
-        ALL_VALID = array.rows.is_all_valid();
+        ALL_VALID = array.rows().is_all_valid();
         interiors(
-            &array.rings,
-            &array.coords,
+            array.rings(),
+            array.coords(),
             kept_rings_of_polygons::<ALL_VALID>(array, interior_of),
             validity,
         )
@@ -157,18 +155,16 @@ pub fn polygon_interiors(array: &Untrimmed<PolygonArray>) -> MultiLineStringArra
 
 /// A list of linestrings per row, one per polygon.
 pub fn multi_polygon_exteriors(array: &Untrimmed<MultiPolygonArray>) -> ListArray<i64> {
-    let array = array.rows_only();
     let kept = kept_rings_of_multi_polygons(array, exterior_of);
-    let parts = exteriors(&array.rings, &array.coords, kept, None);
-    per_multi_polygon(&array.rows, parts.into_list_array())
+    let parts = exteriors(array.rings(), array.coords(), kept, None);
+    per_multi_polygon(array.rows(), parts.into_list_array())
 }
 
 /// A list of multilinestrings per row, one per polygon.
 pub fn multi_polygon_interiors(array: &Untrimmed<MultiPolygonArray>) -> ListArray<i64> {
-    let array = array.rows_only();
     let kept = kept_rings_of_multi_polygons(array, interior_of);
-    let parts = interiors(&array.rings, &array.coords, kept, None);
-    per_multi_polygon(&array.rows, parts.into_list_array())
+    let parts = interiors(array.rings(), array.coords(), kept, None);
+    per_multi_polygon(array.rows(), parts.into_list_array())
 }
 
 /// What [close_open_rings] does with one ring.
