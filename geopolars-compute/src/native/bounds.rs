@@ -29,7 +29,7 @@ use std::ops::Range;
 use geopolars_core::output::{box_struct, list_array};
 use geopolars_core::{
     GeoDimension, LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PointArray, PolygonArray, ValidCoords,
+    PointArray, PolygonArray, Untrimmed, ValidCoords,
 };
 use polars_arrow::array::{ListArray, StructArray};
 use polars_arrow::bitmap::Bitmap;
@@ -210,16 +210,18 @@ pub fn point_bounds<const Z: bool, const M: bool>(
 }
 
 pub fn line_string_bounds<const Z: bool, const M: bool>(
-    array: &LineStringArray,
+    array: &Untrimmed<LineStringArray>,
     options: &BoxOptions,
 ) -> StructArray {
+    let array = array.rows_only();
     row_boxes::<Z, M>(&array.rows, &array.coords, options, |i| array.rows.range(i))
 }
 
 pub fn polygon_bounds<const Z: bool, const M: bool>(
-    array: &PolygonArray,
+    array: &Untrimmed<PolygonArray>,
     options: &BoxOptions,
 ) -> StructArray {
+    let array = array.rows_only();
     row_boxes::<Z, M>(&array.rows, &array.coords, options, |i| {
         array.rings.span(array.rows.range(i))
     })
@@ -227,17 +229,19 @@ pub fn polygon_bounds<const Z: bool, const M: bool>(
 
 /// One box per row, around all of its points.
 pub fn multi_point_bounds<const Z: bool, const M: bool>(
-    array: &MultiPointArray,
+    array: &Untrimmed<MultiPointArray>,
     options: &BoxOptions,
 ) -> StructArray {
+    let array = array.rows_only();
     row_boxes::<Z, M>(&array.rows, &array.coords, options, |i| array.rows.range(i))
 }
 
 /// One box per row, around all of its linestrings.
 pub fn multi_line_string_bounds<const Z: bool, const M: bool>(
-    array: &MultiLineStringArray,
+    array: &Untrimmed<MultiLineStringArray>,
     options: &BoxOptions,
 ) -> StructArray {
+    let array = array.rows_only();
     row_boxes::<Z, M>(&array.rows, &array.coords, options, |i| {
         array.lines.span(array.rows.range(i))
     })
@@ -245,9 +249,10 @@ pub fn multi_line_string_bounds<const Z: bool, const M: bool>(
 
 /// One box per row, around all of its polygons.
 pub fn multi_polygon_bounds<const Z: bool, const M: bool>(
-    array: &MultiPolygonArray,
+    array: &Untrimmed<MultiPolygonArray>,
     options: &BoxOptions,
 ) -> StructArray {
+    let array = array.rows_only();
     row_boxes::<Z, M>(&array.rows, &array.coords, options, |i| {
         array.rings.span(array.polygons.span(array.rows.range(i)))
     })
@@ -255,17 +260,19 @@ pub fn multi_polygon_bounds<const Z: bool, const M: bool>(
 
 /// A list of boxes per row, one per point.
 pub fn multi_point_part_bounds<const Z: bool, const M: bool>(
-    array: &MultiPointArray,
+    array: &Untrimmed<MultiPointArray>,
     options: &BoxOptions,
 ) -> ListArray<i64> {
+    let array = array.rows_only();
     part_boxes::<Z, M>(&array.rows, &array.coords, options, |j| j..j + 1)
 }
 
 /// A list of boxes per row, one per linestring.
 pub fn multi_line_string_part_bounds<const Z: bool, const M: bool>(
-    array: &MultiLineStringArray,
+    array: &Untrimmed<MultiLineStringArray>,
     options: &BoxOptions,
 ) -> ListArray<i64> {
+    let array = array.rows_only();
     part_boxes::<Z, M>(&array.rows, &array.coords, options, |j| {
         array.lines.range(j)
     })
@@ -273,9 +280,10 @@ pub fn multi_line_string_part_bounds<const Z: bool, const M: bool>(
 
 /// A list of boxes per row, one per polygon.
 pub fn multi_polygon_part_bounds<const Z: bool, const M: bool>(
-    array: &MultiPolygonArray,
+    array: &Untrimmed<MultiPolygonArray>,
     options: &BoxOptions,
 ) -> ListArray<i64> {
+    let array = array.rows_only();
     part_boxes::<Z, M>(&array.rows, &array.coords, options, |j| {
         array.rings.span(array.polygons.range(j))
     })

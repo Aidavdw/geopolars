@@ -23,7 +23,7 @@ use std::convert::Infallible;
 
 use geopolars_core::{
     Coords, LineStringArray, List, MultiLineStringArray, MultiPolygonArray, PointArray,
-    PolygonArray, ScalarLineString, ScalarPolygon, ValidCoords,
+    PolygonArray, ScalarLineString, ScalarPolygon, Untrimmed, ValidCoords,
 };
 use polars_arrow::bitmap::Bitmap;
 
@@ -178,13 +178,17 @@ fn centroids<const Z: bool, const M: bool>(
     ))
 }
 
-pub fn line_string_centroids<const Z: bool, const M: bool>(array: &LineStringArray) -> PointArray {
+pub fn line_string_centroids<const Z: bool, const M: bool>(
+    array: &Untrimmed<LineStringArray>,
+) -> PointArray {
+    let array = array.rows_only();
     centroids::<Z, M>(&array.rows, |moment, i| add_line(moment, &array.get(i)))
 }
 
 pub fn multi_line_string_centroids<const Z: bool, const M: bool>(
-    array: &MultiLineStringArray,
+    array: &Untrimmed<MultiLineStringArray>,
 ) -> PointArray {
+    let array = array.rows_only();
     centroids::<Z, M>(&array.rows, |moment, i| {
         for line in array.get(i).line_strings() {
             add_line(moment, &line);
@@ -192,13 +196,17 @@ pub fn multi_line_string_centroids<const Z: bool, const M: bool>(
     })
 }
 
-pub fn polygon_centroids<const Z: bool, const M: bool>(array: &PolygonArray) -> PointArray {
+pub fn polygon_centroids<const Z: bool, const M: bool>(
+    array: &Untrimmed<PolygonArray>,
+) -> PointArray {
+    let array = array.rows_only();
     centroids::<Z, M>(&array.rows, |moment, i| add_polygon(moment, &array.get(i)))
 }
 
 pub fn multi_polygon_centroids<const Z: bool, const M: bool>(
-    array: &MultiPolygonArray,
+    array: &Untrimmed<MultiPolygonArray>,
 ) -> PointArray {
+    let array = array.rows_only();
     centroids::<Z, M>(&array.rows, |moment, i| {
         for polygon in array.get(i).polygons() {
             add_polygon(moment, &polygon);

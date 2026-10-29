@@ -80,9 +80,29 @@ KERNELS: dict[str, tuple[Kernel, set[type[GeoArrowType]]]] = {
     ),
     "is_valid_ogc": (lambda g: geo.is_valid_ogc(g), set()),
     "to_crs": (lambda g: geo.to_crs(g, "EPSG:3857"), set()),
-    # These two read untrimmed views.
+    # These read untrimmed views.
     "is_empty": (lambda g: geo.is_empty(g, check_nested=True), set()),
     "count_coordinates": (lambda g: geo.count_coordinates(g), set()),
+    "area_planar": (
+        lambda g: geo.area_planar(g),
+        {LineStringXY, MultiPointXY, MultiLineStringXY},
+    ),
+    "is_ccw": (lambda g: geo.is_ccw(g), {MultiPointXY}),
+    "is_close": (lambda g: geo.is_close(g, g), set()),
+    "exterior": (
+        lambda g: geo.exterior(g),
+        {LineStringXY, MultiPointXY, MultiLineStringXY},
+    ),
+    "interior": (
+        lambda g: geo.interior(g),
+        {LineStringXY, MultiPointXY, MultiLineStringXY},
+    ),
+    "is_ring": (
+        lambda g: geo.is_ring(g),
+        {MultiPointXY, PolygonXY, MultiPolygonXY},
+    ),
+    "centroid": (lambda g: geo.centroid(g), {MultiPointXY}),
+    "bounds": (lambda g: geo.bounds(g), set()),
 }
 
 

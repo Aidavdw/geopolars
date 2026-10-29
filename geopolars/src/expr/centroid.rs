@@ -45,22 +45,22 @@ fn centroid(inputs: &[Series]) -> PolarsResult<Series> {
         .map(|rows| {
             let points = match kind {
                 Kind::LineString => {
-                    let array = LineStringArray::new(rows)?;
+                    let array = LineStringArray::new_untrimmed(rows)?;
                     with_const_flags!(Z = has_z, M = has_m; line_string_centroids::<Z, M>(&array))
                 }
                 Kind::Polygon => {
-                    let array = PolygonArray::new(rows)?;
+                    let array = PolygonArray::new_untrimmed(rows)?;
                     with_const_flags!(Z = has_z, M = has_m; polygon_centroids::<Z, M>(&array))
                 }
                 Kind::MultiLineString => {
-                    let array = MultiLineStringArray::new(rows)?;
+                    let array = MultiLineStringArray::new_untrimmed(rows)?;
                     with_const_flags!(
                         Z = has_z, M = has_m;
                         multi_line_string_centroids::<Z, M>(&array)
                     )
                 }
                 Kind::MultiPolygon => {
-                    let array = MultiPolygonArray::new(rows)?;
+                    let array = MultiPolygonArray::new_untrimmed(rows)?;
                     with_const_flags!(Z = has_z, M = has_m; multi_polygon_centroids::<Z, M>(&array))
                 }
                 Kind::Point | Kind::MultiPoint => unreachable!("refused by `centroid_of`"),

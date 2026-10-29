@@ -3,7 +3,7 @@
 use geopolars_compute::native::{
     multi_polygon_exteriors, multi_polygon_interiors, polygon_exteriors, polygon_interiors,
 };
-use geopolars_core::{MultiPolygonArray, PolygonArray};
+use geopolars_core::{MultiPolygonArray, PolygonArray, Untrimmed};
 use polars::prelude::*;
 use polars_arrow::array::Array;
 use pyo3_polars::derive::polars_expr;
@@ -49,15 +49,15 @@ fn per_chunk(
     inputs: &[Series],
     dtype: &DataType,
     multi: bool,
-    polygons: impl Fn(&PolygonArray) -> Box<dyn Array>,
-    multi_polygons: impl Fn(&MultiPolygonArray) -> Box<dyn Array>,
+    polygons: impl Fn(&Untrimmed<PolygonArray>) -> Box<dyn Array>,
+    multi_polygons: impl Fn(&Untrimmed<MultiPolygonArray>) -> Box<dyn Array>,
 ) -> PolarsResult<Series> {
     let storage = inputs[0].ext()?.storage();
     let chunks = storage.list()?.downcast_iter().map(|rows| {
         PolarsResult::Ok(if multi {
-            multi_polygons(&MultiPolygonArray::new(rows)?)
+            multi_polygons(&MultiPolygonArray::new_untrimmed(rows)?)
         } else {
-            polygons(&PolygonArray::new(rows)?)
+            polygons(&PolygonArray::new_untrimmed(rows)?)
         })
     });
     let chunks = chunks.collect::<PolarsResult<Vec<_>>>()?;

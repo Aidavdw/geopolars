@@ -3,7 +3,7 @@
 use std::convert::Infallible;
 
 use geographiclib_rs::{PolygonArea, Winding};
-use geopolars_core::{MultiPolygonArray, PolygonArray, ScalarLineString, ScalarPolygon};
+use geopolars_core::{MultiPolygonArray, PolygonArray, ScalarLineString, ScalarPolygon, Untrimmed};
 use polars_arrow::array::PrimitiveArray;
 
 use crate::per_row::per_row;
@@ -83,16 +83,18 @@ fn polygon_area<M: AreaMetric>(metric: &M, polygon: &ScalarPolygon) -> Result<f6
 /// The area of every polygon of a chunk.
 pub fn polygon_areas<M: AreaMetric>(
     metric: &M,
-    array: &PolygonArray,
+    array: &Untrimmed<PolygonArray>,
 ) -> Result<PrimitiveArray<f64>, M::Error> {
+    let array = array.rows_only();
     per_row(&array.rows, |i| polygon_area(metric, &array.get(i)))
 }
 
 /// The area of every multipolygon of a chunk, as the sum of its parts.
 pub fn multi_polygon_areas<M: AreaMetric>(
     metric: &M,
-    array: &MultiPolygonArray,
+    array: &Untrimmed<MultiPolygonArray>,
 ) -> Result<PrimitiveArray<f64>, M::Error> {
+    let array = array.rows_only();
     per_row(&array.rows, |i| {
         array
             .get(i)

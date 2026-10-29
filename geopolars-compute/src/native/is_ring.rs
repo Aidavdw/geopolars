@@ -10,13 +10,14 @@
 
 use geopolars_core::{
     is_ring, same_place, LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray,
-    ScalarMultiLineString, ScalarPolygon, MIN_RING_VERTICES,
+    ScalarMultiLineString, ScalarPolygon, Untrimmed, MIN_RING_VERTICES,
 };
 use polars_arrow::array::BooleanArray;
 
 use crate::per_row::per_row_bool;
 
-pub fn line_strings_are_rings<const Z: bool>(array: &LineStringArray) -> BooleanArray {
+pub fn line_strings_are_rings<const Z: bool>(array: &Untrimmed<LineStringArray>) -> BooleanArray {
+    let array = array.rows_only();
     per_row_bool(&array.rows, |i| {
         is_ring::<Z>(&array.coords, array.rows.range(i))
     })
@@ -48,7 +49,10 @@ fn parts_form_ring<const Z: bool>(multi: &ScalarMultiLineString) -> bool {
 }
 
 /// See [parts_form_ring] for what makes a ring.
-pub fn multi_line_strings_are_rings<const Z: bool>(array: &MultiLineStringArray) -> BooleanArray {
+pub fn multi_line_strings_are_rings<const Z: bool>(
+    array: &Untrimmed<MultiLineStringArray>,
+) -> BooleanArray {
+    let array = array.rows_only();
     per_row_bool(&array.rows, |i| parts_form_ring::<Z>(&array.get(i)))
 }
 

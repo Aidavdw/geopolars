@@ -65,10 +65,10 @@ fn measure(metric: &impl AreaMetric<Error: Display>, geometries: &Series) -> Pol
     let storage = geometries.ext()?.storage();
     let chunks = storage.list()?.downcast_iter().map(|rows| {
         let areas = if multi {
-            let array = MultiPolygonArray::new(rows)?;
+            let array = MultiPolygonArray::new_untrimmed(rows)?;
             geopolars_compute::native::multi_polygon_areas(metric, &array)
         } else {
-            let array = PolygonArray::new(rows)?;
+            let array = PolygonArray::new_untrimmed(rows)?;
             geopolars_compute::native::polygon_areas(metric, &array)
         }
         .map_err(|e| polars_err!(ComputeError: "{e}"))?;

@@ -38,15 +38,15 @@ fn is_ring(inputs: &[Series]) -> PolarsResult<Series> {
     let chunks = storage.list()?.downcast_iter();
     if kind == Kind::LineString {
         let chunks = chunks.map(|rows| {
-            let array = LineStringArray::new(rows)?;
-            let z = array.coords.dim().has_z();
+            let array = LineStringArray::new_untrimmed(rows)?;
+            let z = array.rows_only().coords.dim().has_z();
             PolarsResult::Ok(with_const_flags!(Z = z; line_strings_are_rings::<Z>(&array)))
         });
         return Ok(BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series());
     }
     let chunks = chunks.map(|rows| {
-        let array = MultiLineStringArray::new(rows)?;
-        let z = array.coords.dim().has_z();
+        let array = MultiLineStringArray::new_untrimmed(rows)?;
+        let z = array.rows_only().coords.dim().has_z();
         PolarsResult::Ok(with_const_flags!(Z = z; multi_line_strings_are_rings::<Z>(&array)))
     });
     Ok(BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series())

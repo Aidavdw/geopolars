@@ -73,7 +73,7 @@ fn chunk_bounds(
             with_const_flags!(Z = has_z, M = has_m; point_bounds::<Z, M>(&array, options)).boxed()
         }
         Kind::LineString => {
-            let array = LineStringArray::new(downcast(chunk, "a list of coordinates")?)?;
+            let array = LineStringArray::new_untrimmed(downcast(chunk, "a list of coordinates")?)?;
             with_const_flags!(
                 Z = has_z, M = has_m;
                 line_string_bounds::<Z, M>(&array, options)
@@ -81,11 +81,11 @@ fn chunk_bounds(
             .boxed()
         }
         Kind::Polygon => {
-            let array = PolygonArray::new(downcast(chunk, "a list of rings")?)?;
+            let array = PolygonArray::new_untrimmed(downcast(chunk, "a list of rings")?)?;
             with_const_flags!(Z = has_z, M = has_m; polygon_bounds::<Z, M>(&array, options)).boxed()
         }
         Kind::MultiPoint => {
-            let array = MultiPointArray::new(downcast(chunk, "a list of coordinates")?)?;
+            let array = MultiPointArray::new_untrimmed(downcast(chunk, "a list of coordinates")?)?;
             if per_part {
                 with_const_flags!(
                     Z = has_z, M = has_m;
@@ -101,7 +101,8 @@ fn chunk_bounds(
             }
         }
         Kind::MultiLineString => {
-            let array = MultiLineStringArray::new(downcast(chunk, "a list of linestrings")?)?;
+            let array =
+                MultiLineStringArray::new_untrimmed(downcast(chunk, "a list of linestrings")?)?;
             if per_part {
                 with_const_flags!(
                     Z = has_z, M = has_m;
@@ -117,7 +118,7 @@ fn chunk_bounds(
             }
         }
         Kind::MultiPolygon => {
-            let array = MultiPolygonArray::new(downcast(chunk, "a list of polygons")?)?;
+            let array = MultiPolygonArray::new_untrimmed(downcast(chunk, "a list of polygons")?)?;
             if per_part {
                 with_const_flags!(
                     Z = has_z, M = has_m;

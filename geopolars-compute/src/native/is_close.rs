@@ -33,7 +33,7 @@ use std::ops::Range;
 
 use geopolars_core::{
     is_close, LineStringArray, List, MultiLineStringArray, MultiPointArray, MultiPolygonArray,
-    PointArray, PolygonArray, Tolerance, ValidCoords, ValidList,
+    PointArray, PolygonArray, Tolerance, Untrimmed, ValidCoords, ValidList,
 };
 use polars_arrow::array::BooleanArray;
 use polars_arrow::bitmap::Bitmap;
@@ -289,13 +289,14 @@ pub fn points_are_close(
 }
 
 pub fn multi_points_are_close(
-    a: &MultiPointArray,
-    b: &MultiPointArray,
+    a: &Untrimmed<MultiPointArray>,
+    b: &Untrimmed<MultiPointArray>,
     tolerance: Tolerance,
     unique_z: bool,
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
+    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         multi_points_are_close_with,
         a,
@@ -308,13 +309,14 @@ pub fn multi_points_are_close(
 }
 
 pub fn line_strings_are_close(
-    a: &LineStringArray,
-    b: &LineStringArray,
+    a: &Untrimmed<LineStringArray>,
+    b: &Untrimmed<LineStringArray>,
     tolerance: Tolerance,
     unique_z: bool,
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
+    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         line_strings_are_close_with,
         a,
@@ -328,13 +330,14 @@ pub fn line_strings_are_close(
 
 /// The parts also have to be as many, and as long.
 pub fn multi_line_strings_are_close(
-    a: &MultiLineStringArray,
-    b: &MultiLineStringArray,
+    a: &Untrimmed<MultiLineStringArray>,
+    b: &Untrimmed<MultiLineStringArray>,
     tolerance: Tolerance,
     unique_z: bool,
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
+    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         multi_line_strings_are_close_with,
         a,
@@ -348,13 +351,14 @@ pub fn multi_line_strings_are_close(
 
 /// The rings also have to be as many, and as long.
 pub fn polygons_are_close(
-    a: &PolygonArray,
-    b: &PolygonArray,
+    a: &Untrimmed<PolygonArray>,
+    b: &Untrimmed<PolygonArray>,
     tolerance: Tolerance,
     unique_z: bool,
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
+    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         polygons_are_close_with,
         a,
@@ -368,13 +372,14 @@ pub fn polygons_are_close(
 
 /// The polygons, and their rings, also have to be as many, and as long.
 pub fn multi_polygons_are_close(
-    a: &MultiPolygonArray,
-    b: &MultiPolygonArray,
+    a: &Untrimmed<MultiPolygonArray>,
+    b: &Untrimmed<MultiPolygonArray>,
     tolerance: Tolerance,
     unique_z: bool,
     unique_m: bool,
     nans_equal: bool,
 ) -> BooleanArray {
+    let (a, b) = (a.rows_only(), b.rows_only());
     are_close!(
         multi_polygons_are_close_with,
         a,

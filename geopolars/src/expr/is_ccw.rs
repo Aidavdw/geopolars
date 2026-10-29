@@ -45,14 +45,14 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
     let out = match kind {
         Kind::LineString => {
             let chunks = chunks.map(|rows| {
-                let array = LineStringArray::new(rows)?;
+                let array = LineStringArray::new_untrimmed(rows)?;
                 PolarsResult::Ok(line_strings_are_ccw(&array))
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
         Kind::Polygon => {
             let chunks = chunks.map(|rows| {
-                let array = PolygonArray::new(rows)?;
+                let array = PolygonArray::new_untrimmed(rows)?;
                 PolarsResult::Ok(with_const_flags!(
                     HOLES_CW = holes_cw;
                     polygons_are_ccw::<HOLES_CW>(&array)
@@ -62,14 +62,14 @@ fn is_ccw(inputs: &[Series], kwargs: IsCcwKwargs) -> PolarsResult<Series> {
         }
         Kind::MultiLineString => {
             let chunks = chunks.map(|rows| {
-                let array = MultiLineStringArray::new(rows)?;
+                let array = MultiLineStringArray::new_untrimmed(rows)?;
                 PolarsResult::Ok(multi_line_strings_are_ccw(&array))
             });
             BooleanChunked::try_from_chunk_iter(name, chunks)?.into_series()
         }
         Kind::MultiPolygon => {
             let chunks = chunks.map(|rows| {
-                let array = MultiPolygonArray::new(rows)?;
+                let array = MultiPolygonArray::new_untrimmed(rows)?;
                 PolarsResult::Ok(with_const_flags!(
                     HOLES_CW = holes_cw;
                     multi_polygons_are_ccw::<HOLES_CW>(&array)

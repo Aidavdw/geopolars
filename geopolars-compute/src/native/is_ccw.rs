@@ -18,7 +18,7 @@ use std::ops::Range;
 
 use geopolars_core::{
     LineStringArray, MultiLineStringArray, MultiPolygonArray, PolygonArray, ScalarLineString,
-    ScalarPolygon, ValidCoords, ValidList,
+    ScalarPolygon, Untrimmed, ValidCoords, ValidList,
 };
 use polars_arrow::array::BooleanArray;
 
@@ -52,17 +52,20 @@ fn polygon_is_ccw<const HOLES_CW: bool>(polygon: &ScalarPolygon) -> bool {
     ring_runs::<false>(&exterior) && rings.all(|hole| ring_runs::<HOLES_CW>(&hole))
 }
 
-pub fn line_strings_are_ccw(array: &LineStringArray) -> BooleanArray {
+pub fn line_strings_are_ccw(array: &Untrimmed<LineStringArray>) -> BooleanArray {
+    let array = array.rows_only();
     per_row_bool(&array.rows, |i| ring_runs::<false>(&array.get(i)))
 }
 
-pub fn polygons_are_ccw<const HOLES_CW: bool>(array: &PolygonArray) -> BooleanArray {
+pub fn polygons_are_ccw<const HOLES_CW: bool>(array: &Untrimmed<PolygonArray>) -> BooleanArray {
+    let array = array.rows_only();
     per_row_bool(&array.rows, |i| polygon_is_ccw::<HOLES_CW>(&array.get(i)))
 }
 
 /// Whether every linestring of a multilinestring runs counter-clockwise, for every row of a chunk.
 /// No linestrings at all runs either way.
-pub fn multi_line_strings_are_ccw(array: &MultiLineStringArray) -> BooleanArray {
+pub fn multi_line_strings_are_ccw(array: &Untrimmed<MultiLineStringArray>) -> BooleanArray {
+    let array = array.rows_only();
     per_row_bool(&array.rows, |i| {
         array
             .get(i)
@@ -73,7 +76,10 @@ pub fn multi_line_strings_are_ccw(array: &MultiLineStringArray) -> BooleanArray 
 
 /// Whether every polygon of a multipolygon [is CCW](polygon_is_ccw), for every row of a chunk.
 /// No polygons at all runs either way.
-pub fn multi_polygons_are_ccw<const HOLES_CW: bool>(array: &MultiPolygonArray) -> BooleanArray {
+pub fn multi_polygons_are_ccw<const HOLES_CW: bool>(
+    array: &Untrimmed<MultiPolygonArray>,
+) -> BooleanArray {
+    let array = array.rows_only();
     per_row_bool(&array.rows, |i| {
         array
             .get(i)

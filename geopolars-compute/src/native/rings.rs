@@ -21,7 +21,7 @@ use std::ops::Range;
 use geopolars_core::output::list_array;
 use geopolars_core::{
     same_place, LineStringArray, List, MultiLineStringArray, MultiPolygonArray, PolygonArray,
-    ValidCoords, ValidList,
+    Untrimmed, ValidCoords, ValidList,
 };
 use polars_arrow::array::ListArray;
 use polars_arrow::bitmap::Bitmap;
@@ -127,7 +127,8 @@ fn per_multi_polygon(rows: &List, parts: ListArray<i64>) -> ListArray<i64> {
     list_array(parts.boxed(), offsets_of(lengths), rows.validity().cloned())
 }
 
-pub fn polygon_exteriors(array: &PolygonArray) -> LineStringArray {
+pub fn polygon_exteriors(array: &Untrimmed<PolygonArray>) -> LineStringArray {
+    let array = array.rows_only();
     let validity = array.rows.validity().cloned();
     with_const_flags!(
         ALL_VALID = array.rows.is_all_valid();
@@ -140,7 +141,8 @@ pub fn polygon_exteriors(array: &PolygonArray) -> LineStringArray {
     )
 }
 
-pub fn polygon_interiors(array: &PolygonArray) -> MultiLineStringArray {
+pub fn polygon_interiors(array: &Untrimmed<PolygonArray>) -> MultiLineStringArray {
+    let array = array.rows_only();
     let validity = array.rows.validity().cloned();
     with_const_flags!(
         ALL_VALID = array.rows.is_all_valid();
@@ -154,14 +156,16 @@ pub fn polygon_interiors(array: &PolygonArray) -> MultiLineStringArray {
 }
 
 /// A list of linestrings per row, one per polygon.
-pub fn multi_polygon_exteriors(array: &MultiPolygonArray) -> ListArray<i64> {
+pub fn multi_polygon_exteriors(array: &Untrimmed<MultiPolygonArray>) -> ListArray<i64> {
+    let array = array.rows_only();
     let kept = kept_rings_of_multi_polygons(array, exterior_of);
     let parts = exteriors(&array.rings, &array.coords, kept, None);
     per_multi_polygon(&array.rows, parts.into_list_array())
 }
 
 /// A list of multilinestrings per row, one per polygon.
-pub fn multi_polygon_interiors(array: &MultiPolygonArray) -> ListArray<i64> {
+pub fn multi_polygon_interiors(array: &Untrimmed<MultiPolygonArray>) -> ListArray<i64> {
+    let array = array.rows_only();
     let kept = kept_rings_of_multi_polygons(array, interior_of);
     let parts = interiors(&array.rings, &array.coords, kept, None);
     per_multi_polygon(&array.rows, parts.into_list_array())
